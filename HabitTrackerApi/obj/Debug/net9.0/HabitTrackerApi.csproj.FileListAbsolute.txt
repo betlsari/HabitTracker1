@@ -263,3 +263,8 @@ C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\HabitTrackerApi.pdb
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\HabitTrackerApi.genruntimeconfig.cache
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\ref\HabitTrackerApi.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.AspNetCore.Cryptography.Internal.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.AspNetCore.Cryptography.KeyDerivation.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Identity.Core.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Identity.Stores.dll

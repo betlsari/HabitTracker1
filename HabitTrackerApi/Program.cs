@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Data;
-
+using Models;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,15 +11,19 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>();
 
 
 
 var app = builder.Build();
 
 app.UseSwagger();
-  app.UseSwaggerUI();
-
+app.UseSwaggerUI();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
 
 
