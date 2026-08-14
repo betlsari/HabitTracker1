@@ -1,5 +1,5 @@
 namespace Dtos;
-public class RegisterDto
+public class LoginDto
 {
    
     public required string Email { get; set; }

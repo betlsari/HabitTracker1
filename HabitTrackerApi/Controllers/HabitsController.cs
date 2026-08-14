@@ -3,10 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Data;
 using Models;
 using Dtos;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Controllers;
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class HabitsController : ControllerBase
 {
 private readonly AppDbContext _context;
@@ -21,7 +24,8 @@ public HabitsController(AppDbContext context)
 [HttpGet]
 public async Task<ActionResult<IEnumerable<HabitDto>>> GetHabits()
 {
-     return await _context.Habits.Select(h => new HabitDto
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+     return await _context.Habits.Where(h => h.UserId == userId).Select(h => new HabitDto
      {
          Id = h.Id,
          Name = h.Name,
@@ -33,9 +37,17 @@ public async Task<ActionResult<IEnumerable<HabitDto>>> GetHabits()
 }
 
 [HttpPost]
-public async Task<ActionResult<HabitDto>> CreateHabit(Habit habit)
+public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
+        var userId= User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         
+        var habit = new Habit
+        {
+            Name = dto.Name,
+            Category = dto.Category,
+            DailyGoal = dto.DailyGoal,
+        };
+        habit.UserId = userId;
         habit.CreatedAt = DateTime.UtcNow;
         _context.Habits.Add(habit);
         await _context.SaveChangesAsync();
@@ -53,16 +65,21 @@ public async Task<ActionResult<HabitDto>> CreateHabit(Habit habit)
 
 [HttpPut("{id}")]
 
-public async Task<ActionResult<HabitDto>> UpdateHabit(int id, Habit updatedHabit)
+public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
     {
         var habit = await _context.Habits.FindAsync(id);
-        if (habit == null)
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if(habit == null || habit.UserId != userId)
         {
             return NotFound();
         }
-        updatedHabit.Id = id;
-        _context.Entry(habit).CurrentValues.SetValues(updatedHabit);
+        
+        habit.Name = dto.Name;
+        habit.Category = dto.Category;
+        habit.DailyGoal = dto.DailyGoal;
+
         await _context.SaveChangesAsync();
+
         var habitDto = new HabitDto
         {
             Id = habit.Id,
@@ -79,7 +96,8 @@ public async Task<ActionResult<HabitDto>> UpdateHabit(int id, Habit updatedHabit
 public  async Task<ActionResult> DeleteHabit(int id)
     {
         var habit = await _context.Habits.FindAsync(id);
-        if(habit == null)
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if(habit == null || habit.UserId != userId)
         {
             return NotFound();
         }
@@ -93,7 +111,8 @@ public  async Task<ActionResult> DeleteHabit(int id)
 public async Task<ActionResult<HabitProgressDto>> GetProgress(int habitId)
     {
         var habit = await _context.Habits.FindAsync(habitId);
-        if (habit == null)
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (habit == null || habit.UserId != userId)
         {
             return NotFound();
         }

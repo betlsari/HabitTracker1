@@ -4,11 +4,14 @@ using Data;
 using Models;
 using Dtos;
 namespace Controllers;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 
 
 [ApiController]
 [Route("api/habits/{habitId}/[controller]")]
+[Authorize]
 
 public class HabitCompletionsController : ControllerBase
 {
@@ -20,23 +23,24 @@ public class HabitCompletionsController : ControllerBase
     }
 
 [HttpPost]
-public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, HabitCompletion completion)
+public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, CreateCompletionDto dto)
 
     {
         var habit = await _context.Habits.FindAsync(habitId);
-        if (habit == null)
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (habit == null || habit.UserId != userId)
         {
             return NotFound();
         }
         var newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
 {
     HabitId = habitId,
-    CompletionDate = completion.CompletionDate,
-    Amount = completion.Amount
+    CompletionDate = dto.CompletionDate,
+    Amount = dto.Amount
 });
 
          await _context.SaveChangesAsync();
-var dto = new HabitCompletionDto
+var completionDto = new HabitCompletionDto
 {
     Id = newHabitCompletion.Entity.Id,
     HabitId = newHabitCompletion.Entity.HabitId,
@@ -44,7 +48,7 @@ var dto = new HabitCompletionDto
     Amount = newHabitCompletion.Entity.Amount
 };
 
-        return dto;
+        return completionDto;
 
 
 }
@@ -53,7 +57,9 @@ var dto = new HabitCompletionDto
 public async  Task<ActionResult<IEnumerable<HabitCompletionDto>>>  GetHabitCompletions(int habitId)
     {
     var habit = await _context.Habits.FindAsync(habitId);
-    if(habit == null)
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    
+    if(habit == null || habit.UserId != userId)
         {
             return NotFound();
         }
@@ -75,7 +81,13 @@ public async  Task<ActionResult<IEnumerable<HabitCompletionDto>>>  GetHabitCompl
 public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId,int id,HabitCompletionDto updatedCompletion)
     {
         var completion = await _context.HabitCompletions.FindAsync(id);
-        if (completion == null)
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (completion == null )
+        {
+            return NotFound();
+        }
+        var habit = await _context.Habits.FindAsync(completion.HabitId);
+        if(habit == null || habit.UserId != userId)
         {
             return NotFound();
         }
@@ -100,7 +112,13 @@ public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId
 public async  Task<ActionResult> DeleteCompletion(int id) 
     {
         var completion = await _context.HabitCompletions.FindAsync(id);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (completion == null)
+        {
+            return NotFound();
+        }
+        var habit = await _context.Habits.FindAsync(completion.HabitId);
+        if(habit == null || habit.UserId != userId)
         {
             return NotFound();
         }
