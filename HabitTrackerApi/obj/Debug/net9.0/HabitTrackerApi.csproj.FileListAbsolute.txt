@@ -248,7 +248,6 @@ C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\HabitTrackerApi.csproj.CoreCompileInputs.cache
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\HabitTrackerApi.MvcApplicationPartsAssemblyInfo.cs
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\HabitTrackerApi.MvcApplicationPartsAssemblyInfo.cache
-C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\HabitTrackerApi.sourcelink.json
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\rjimswa.dswa.cache.json
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\rjsmrazor.dswa.cache.json
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\obj\Debug\net9.0\rjsmcshtml.dswa.cache.json

@@ -24,6 +24,7 @@ public HabitsController(AppDbContext context)
 [HttpGet]
 public async Task<ActionResult<IEnumerable<HabitDto>>> GetHabits()
 {
+    
     var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
      return await _context.Habits.Where(h => h.UserId == userId).Select(h => new HabitDto
      {
@@ -121,17 +122,63 @@ public async Task<ActionResult<HabitProgressDto>> GetProgress(int habitId)
     .SumAsync(c => c.Amount);
     double percentage = (double)totalToday / habit.DailyGoal * 100;
        bool isCompleted = totalToday >= habit.DailyGoal;
+
+       int streak =0;
+       var currentDate = DateTime.UtcNow.Date;
+       while (currentDate >= habit.CreatedAt.Date)
+        {
+            var dailyTotal = await _context.HabitCompletions
+            .Where(c => c.HabitId== habitId && c.CompletionDate.Date == currentDate)
+            .SumAsync(c => c.Amount);
+
+            if(dailyTotal <habit.DailyGoal)
+            {
+                break;
+            }
+            streak++;
+            currentDate = currentDate.AddDays(-1);
+        }
         var dto = new HabitProgressDto
         {
             HabitId = habitId,
             DailyGoal = habit.DailyGoal,
             TotalToday = totalToday,
             PercentageCompleted = percentage,
-            IsCompleted = isCompleted
+            IsCompleted = isCompleted,
+            CurrentStreak = streak
         };
 
         return dto;
     }
+
+    [HttpGet("{habitId}/stats")]
+    public async Task<ActionResult<IEnumerable<DailyStatDto>>> GetStats(int habitId,int days = 7)
+    {
+        var habit = await _context.Habits.FindAsync(habitId);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if(habit == null || habit.UserId != userId)
+        {
+            return NotFound();
+        }
+
+        var stats = new List<DailyStatDto>();
+        var currentDate = DateTime.UtcNow.Date;
+        for(int i = 0; i < days; i++)
+        {
+            var dailyTotal = await _context.HabitCompletions
+                .Where(c => c.HabitId == habitId && c.CompletionDate.Date == currentDate)
+                .SumAsync(c => c.Amount);
+            stats.Add(new DailyStatDto
+            {
+                Date = currentDate,
+                TotalAmount = dailyTotal,
+                GoalReached = dailyTotal >= habit.DailyGoal
+            });
+            currentDate = currentDate.AddDays(-1);
+        }
+        return stats;
+    }
+
 
 
 

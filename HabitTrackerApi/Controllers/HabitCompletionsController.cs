@@ -35,7 +35,7 @@ public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, C
         var newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
 {
     HabitId = habitId,
-    CompletionDate = dto.CompletionDate,
+    CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc),
     Amount = dto.Amount
 });
 

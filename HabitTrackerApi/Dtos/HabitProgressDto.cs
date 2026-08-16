@@ -12,4 +12,6 @@ public class HabitProgressDto
     public bool IsCompleted  { get; set; }
 
 public double PercentageCompleted  { get; set; }
+
+public int CurrentStreak  { get; set; }
 }

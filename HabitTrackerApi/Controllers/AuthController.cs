@@ -13,12 +13,14 @@ public class AuthController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
     private readonly TokenService _tokenService;
+    private readonly EmailService _emailService;
 
-    public AuthController(UserManager<User> userManager, SignInManager<User> signInManager, TokenService tokenService)
+    public AuthController(UserManager<User> userManager, SignInManager<User> signInManager, TokenService tokenService, EmailService emailService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _tokenService = tokenService;
+        _emailService = emailService;
     }
 
 
@@ -36,6 +38,8 @@ public class AuthController : ControllerBase
         {
             return BadRequest(result.Errors);
         }
+        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        await _emailService.SendEmailAsync(user.Email, "Email Doğrulama", $"Doğrulama kodunuz: {token}");
         return Ok(result);
     }
 
@@ -54,6 +58,52 @@ public class AuthController : ControllerBase
         }
         var token = _tokenService.GenerateToken(user);
         return Ok(new { Token = token });
+    }
+
+    [HttpGet("confirm-email")]
+    public async  Task<IActionResult> ConfirmEmail(string email, string token)
+    {
+        var user = await _userManager.FindByIdAsync(email);
+        if (user == null)
+        {
+            return NotFound();
+        }
+        var result = await _userManager.ConfirmEmailAsync(user,token);
+        if (!result.Succeeded)
+        {
+            return BadRequest(result.Errors);
+        }
+        return Ok("Email doğrulandı.");
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
+    {
+       var user = await _userManager.FindByEmailAsync(dto.Email);
+       if (user == null)
+        {
+            return Ok("Eğer bu email adresi kayıtlıysa, şifre sıfırlama linki gönderilecektir.");
+        }
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        await _emailService.SendEmailAsync(user.Email,"Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}");
+
+         return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
+    {
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+        if(user== null)
+        {
+            return BadRequest("Kullanıcı bulunamadı.");
+        }
+        var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
+        if(!result.Succeeded)
+        {
+            return BadRequest(result.Errors);
+        }
+        return Ok("Şifre başarıyla sıfırlandı.");
     }
 
 
