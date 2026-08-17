@@ -14,4 +14,6 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<HabitCompletion> HabitCompletions { get; set; }
 
+    public DbSet<Pet> Pets { get; set; }
+
 }

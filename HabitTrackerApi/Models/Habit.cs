@@ -18,7 +18,10 @@ public class Habit
 
     public string UserId { get; set; } = string.Empty;
 
-    public User? User { get; set; } 
+    public User? User { get; set; }
+    public int XpPerUnit { get; set; }
+
+    public int XpBonusForGoal { get; set; }
 
 
 }

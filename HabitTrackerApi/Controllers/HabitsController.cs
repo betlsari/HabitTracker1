@@ -5,6 +5,7 @@ using Models;
 using Dtos;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Identity;
 
 namespace Controllers;
 [ApiController]
@@ -13,10 +14,12 @@ namespace Controllers;
 public class HabitsController : ControllerBase
 {
 private readonly AppDbContext _context;
+private readonly UserManager<User> _userManager;
 
-public HabitsController(AppDbContext context)
+public HabitsController(AppDbContext context, UserManager<User> userManager)
 {
     _context = context;
+    _userManager = userManager;
 
 }
 
@@ -44,6 +47,8 @@ public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
         
         var habit = new Habit
         {
+            XpPerUnit = 1,
+            XpBonusForGoal = 10,
             Name = dto.Name,
             Category = dto.Category,
             DailyGoal = dto.DailyGoal,
@@ -52,6 +57,12 @@ public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
         habit.CreatedAt = DateTime.UtcNow;
         _context.Habits.Add(habit);
         await _context.SaveChangesAsync();
+        var user = await _userManager.FindByIdAsync(userId);
+        if(user != null)
+        {
+            user.TotalXp +=5;
+            await _userManager.UpdateAsync(user);
+        }
 
         var habitDto = new HabitDto
         {

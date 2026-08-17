@@ -3,6 +3,8 @@ using Models;
 using Dtos;
 using Microsoft.AspNetCore.Mvc;
 using Services;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Controllers;
 
@@ -105,6 +107,19 @@ public class AuthController : ControllerBase
         }
         return Ok("Şifre başarıyla sıfırlandı.");
     }
+
+    [HttpGet("me")]
+[Authorize]
+public async Task<IActionResult> Me()
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var user = await _userManager.FindByIdAsync(userId!);
+    if (user == null)
+    {
+        return NotFound();
+    }
+    return Ok(new { user.Email, user.TotalXp });
+}
 
 
 
