@@ -46,6 +46,11 @@ public async Task<ActionResult<IEnumerable<HabitDto>>> GetHabits()
 public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
         var userId= User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var habitExist = await _context.Habits.AnyAsync(h => h.UserId == userId && h.Name == dto.Name);
+        if(habitExist)
+        {
+            return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
+        }
         
         var habit = new Habit
         {
@@ -57,6 +62,7 @@ public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
         };
         habit.UserId = userId;
         habit.CreatedAt = DateTime.UtcNow;
+        
         _context.Habits.Add(habit);
         await _context.SaveChangesAsync();
         var user = await _userManager.FindByIdAsync(userId);

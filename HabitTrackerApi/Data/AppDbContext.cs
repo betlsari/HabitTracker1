@@ -16,4 +16,6 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<Pet> Pets { get; set; }
 
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+
 }

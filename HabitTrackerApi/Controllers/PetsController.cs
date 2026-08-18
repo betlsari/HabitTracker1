@@ -120,8 +120,44 @@ public async Task<ActionResult<PetDto>> FeedPet(int id)
         };
 
         return petDto;
-        
-        
     }
+[HttpGet("{id}")]
+public async Task<ActionResult<PetDto>> GetPet(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var pet = await _context.Pets.FindAsync(id);
+        if (pet == null || pet.UserId != userId)
+        {
+            return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
+        }
+        var petDto = new PetDto
+        {
+            Id = pet.Id,
+            Type = pet.Type,
+            Level = pet.Level,
+            Xp = pet.Xp,
+            Mood= pet.Mood,
+            CreatedAt = pet.CreatedAt
+        };
+        return petDto;
+
     }
+
+[HttpDelete("{id}")]
+public async Task<ActionResult> DeletePet(int id)
+    {
+        
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var pet = await _context.Pets.FindAsync(id);
+
+        if(pet== null || pet.UserId != userId)
+        {
+            return NotFound();
+        }
+        _context.Pets.Remove(pet);
+        await _context.SaveChangesAsync();
+        return NoContent();
+
+    }
+}
 

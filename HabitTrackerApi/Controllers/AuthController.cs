@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Services;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Controllers;
 
@@ -17,12 +19,15 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokenService;
     private readonly EmailService _emailService;
 
-    public AuthController(UserManager<User> userManager, SignInManager<User> signInManager, TokenService tokenService, EmailService emailService)
+    private readonly AppDbContext _context;
+
+    public AuthController(UserManager<User> userManager, SignInManager<User> signInManager, TokenService tokenService, EmailService emailService, AppDbContext context)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _tokenService = tokenService;
         _emailService = emailService;
+        _context = context;
     }
 
 
@@ -45,23 +50,63 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("login")]
-    public async Task<IActionResult> Login(LoginDto loginDto)
+  [HttpPost("login")]
+public async Task<IActionResult> Login(LoginDto loginDto)
+{
+    var user = await _userManager.FindByEmailAsync(loginDto.Email);
+    if (user == null)
     {
-        var user = await _userManager.FindByEmailAsync(loginDto.Email);
-        if(user == null )
+        return Unauthorized();
+    }
+    var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
+    if (!result.Succeeded)
+    {
+        if (result.IsNotAllowed)
         {
-            return Unauthorized();
+            return BadRequest("Email adresiniz doğrulanmamış. Lütfen email adresinizi doğrulayın.");
         }
-        var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
-        if (!result.Succeeded)
-        {
-            return Unauthorized();
-        }
-        var token = _tokenService.GenerateToken(user);
-        return Ok(new { Token = token });
+        return Unauthorized();
     }
 
+    var token = _tokenService.GenerateToken(user);
+    var refreshToken = _tokenService.GenerateRefreshToken();
+    _context.RefreshTokens.Add(new RefreshToken
+    {
+        Token = refreshToken,
+        UserId = user.Id,
+        CreatedAt = DateTime.UtcNow,
+        ExpiresAt = DateTime.UtcNow.AddDays(7),
+        RevokedAt = null
+        
+    });
+    await _context.SaveChangesAsync();
+    return Ok(new { Token = token, RefreshToken = refreshToken });
+}
+
+[HttpPost("refresh")]
+public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
+    {
+        var storedToken = await _context.RefreshTokens
+        .Include(rt => rt.User)
+        .FirstOrDefaultAsync(rt => rt.Token == refreshTokenDto.RefreshToken);
+        if(storedToken == null || storedToken.ExpiresAt < DateTime.UtcNow || storedToken.RevokedAt != null)
+        {
+            return Unauthorized();
+        }
+        var newToken = _tokenService.GenerateToken(storedToken.User!);
+        var newRefreshToken = _tokenService.GenerateRefreshToken();
+        storedToken.RevokedAt = DateTime.UtcNow;
+        _context.RefreshTokens.Add(new RefreshToken
+        {
+            Token = newRefreshToken,
+            UserId = storedToken.UserId,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            RevokedAt = null
+        });
+        await _context.SaveChangesAsync();
+        return Ok(new { Token = newToken, RefreshToken = newRefreshToken });
+    }
     [HttpGet("confirm-email")]
     public async  Task<IActionResult> ConfirmEmail(string email, string token)
     {
