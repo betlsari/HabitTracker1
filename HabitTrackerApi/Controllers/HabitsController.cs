@@ -35,7 +35,9 @@ public async Task<ActionResult<IEnumerable<HabitDto>>> GetHabits()
          Name = h.Name,
          Category = h.Category,
          DailyGoal = h.DailyGoal,
-         CreatedAt = h.CreatedAt
+         CreatedAt = h.CreatedAt,
+         XpPerUnit = h.XpPerUnit,
+        XpBonusForGoal = h.XpBonusForGoal
      }).ToListAsync();
     
 }
@@ -70,7 +72,9 @@ public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
             Name = habit.Name,
             Category = habit.Category,
             DailyGoal = habit.DailyGoal,
-            CreatedAt = habit.CreatedAt
+            CreatedAt = habit.CreatedAt,
+            XpPerUnit = habit.XpPerUnit,
+            XpBonusForGoal = habit.XpBonusForGoal
         };
         return habitDto;
     }
@@ -98,7 +102,9 @@ public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto
             Name = habit.Name,
             Category = habit.Category,
             DailyGoal = habit.DailyGoal,
-            CreatedAt = habit.CreatedAt
+            CreatedAt = habit.CreatedAt,
+            XpPerUnit = habit.XpPerUnit,
+            XpBonusForGoal = habit.XpBonusForGoal
         };
         return habitDto;
     }

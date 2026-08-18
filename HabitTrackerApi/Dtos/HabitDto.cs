@@ -11,4 +11,8 @@ public class HabitDto
     public int DailyGoal { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public int XpPerUnit { get; set; }
+
+    public int XpBonusForGoal { get; set; }
 }

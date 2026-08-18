@@ -99,7 +99,7 @@ public async  Task<ActionResult<IEnumerable<HabitCompletionDto>>>  GetHabitCompl
 
 
 [HttpPut("{id}")]
-public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId,int id,HabitCompletionDto updatedCompletion)
+public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId,int id,CreateCompletionDto dto)
     {
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -112,19 +112,19 @@ public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId
         {
             return NotFound();
         }
-        completion.Amount = updatedCompletion.Amount;
-        completion.CompletionDate=updatedCompletion.CompletionDate;
+        completion.Amount = dto.Amount;
+        completion.CompletionDate=DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
 
         await _context.SaveChangesAsync();
 
-        var dto = new HabitCompletionDto()
+        var completionDto = new HabitCompletionDto()
         {
             Id = completion.Id,
     HabitId = completion.HabitId,
             Amount=completion.Amount,
             CompletionDate= completion.CompletionDate
         };
-        return dto;
+        return completionDto;
 
 
     }
