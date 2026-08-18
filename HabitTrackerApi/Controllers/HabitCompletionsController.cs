@@ -58,6 +58,7 @@ public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, C
          if(user != null)
          {
             user.TotalXp += xpEarned;
+            
             await _userManager.UpdateAsync(user);
          }
           

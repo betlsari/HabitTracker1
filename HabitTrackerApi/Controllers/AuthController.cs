@@ -110,7 +110,7 @@ public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
     [HttpGet("confirm-email")]
     public async  Task<IActionResult> ConfirmEmail(string email, string token)
     {
-        var user = await _userManager.FindByIdAsync(email);
+        var user = await _userManager.FindByEmailAsync(email);
         if (user == null)
         {
             return NotFound();

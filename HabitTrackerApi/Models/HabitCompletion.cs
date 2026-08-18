@@ -20,5 +20,7 @@ namespace Models;
         }
     }
 
-        public Habit? Habit { get; set; } // Navigation property to the Habit entity
+        public Habit? Habit { get; set; } 
+
+        public int XpEarned {get; set;}
     }
