@@ -36,6 +36,64 @@ public class PetGrowthService
         }
 
         var xpGain = minutes * XpPerFocusMinute;
+        return await ApplyXpGainAsync(userId, pets, xpGain, cancellationToken);
+    }
+
+    
+    public async Task RemoveFocusXpAsync(string userId, int minutes, CancellationToken cancellationToken = default)
+    {
+        if (minutes <= 0)
+        {
+            return;
+        }
+
+        var xpLoss = minutes * XpPerFocusMinute;
+        await RemoveXpAsync(userId, xpLoss, cancellationToken);
+    }
+
+    /// <summary>
+    /// YENİ: Bir alışkanlığın dönemsel serisi (streak) korunduğunda, kategorisi ne
+    /// olursa olsun (sadece Focus/Odaklanma değil), kullanıcının TÜM pet'lerine
+    /// düz bir bonus XP verir. Böylece "günlük seri bozulmazsa ekstra XP kazanma"
+    /// (dokümandaki 🔥 maddesi) artık pet büyütme sistemine de genel olarak
+    /// bağlanmış olur.
+    /// </summary>
+    public async Task<List<Pet>> AddStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
+    {
+        if (bonusXp <= 0)
+        {
+            return new List<Pet>();
+        }
+
+        var pets = await _context.Pets
+            .Where(p => p.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        if (pets.Count == 0)
+        {
+            return pets;
+        }
+
+        return await ApplyXpGainAsync(userId, pets, bonusXp, cancellationToken);
+    }
+
+    /// <summary>
+    /// YENİ: AddStreakBonusXpAsync ile verilmiş bir bonusun geri alınması
+    /// (örn. ilgili HabitCompletion güncellenip artık streak korunmuyorsa,
+    /// ya da tamamen silinmişse).
+    /// </summary>
+    public async Task RemoveStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
+    {
+        if (bonusXp <= 0)
+        {
+            return;
+        }
+
+        await RemoveXpAsync(userId, bonusXp, cancellationToken);
+    }
+
+    private async Task<List<Pet>> ApplyXpGainAsync(string userId, List<Pet> pets, int xpGain, CancellationToken cancellationToken)
+    {
         var justHatched = new List<Pet>();
 
         foreach (var pet in pets)
@@ -70,14 +128,8 @@ public class PetGrowthService
         return pets;
     }
 
-    
-    public async Task RemoveFocusXpAsync(string userId, int minutes, CancellationToken cancellationToken = default)
+    private async Task RemoveXpAsync(string userId, int xpLoss, CancellationToken cancellationToken)
     {
-        if (minutes <= 0)
-        {
-            return;
-        }
-
         var pets = await _context.Pets
             .Where(p => p.UserId == userId)
             .ToListAsync(cancellationToken);
@@ -86,8 +138,6 @@ public class PetGrowthService
         {
             return;
         }
-
-        var xpLoss = minutes * XpPerFocusMinute;
 
         foreach (var pet in pets)
         {

@@ -72,6 +72,23 @@ public class BadgeService
         }
     }
 
+    /// <summary>
+    /// YENİ: Book/BookReadingLog akışı için rozet değerlendirmesi. Böylece
+    /// "Kitap kurdu" (READING_STREAK_7) rozeti artık sadece Habit tabanlı
+    /// "Okuma" kategorisine değil, gerçek kitap okuma günlük hedefine bağlı
+    /// olarak da kazanılabiliyor.
+    /// </summary>
+    public async Task EvaluateAfterBookLogAsync(
+        string userId,
+        int streakAfterDays,
+        CancellationToken cancellationToken = default)
+    {
+        if (streakAfterDays >= 7)
+        {
+            await AwardAsync(userId, ReadingStreak7, cancellationToken);
+        }
+    }
+
     private async Task AwardAsync(string userId, string code, CancellationToken cancellationToken)
     {
         var badge = await _context.Badges.FirstOrDefaultAsync(b => b.Code == code, cancellationToken);

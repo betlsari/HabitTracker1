@@ -9,9 +9,10 @@ public class BookReadingLog
 
     public DateTime ReadDate { get; set; }
 
-   
     public int Amount { get; set; }
 
-    
     public int? PageReachedAt { get; set; }
+
+    
+    public int XpEarned { get; set; }
 }

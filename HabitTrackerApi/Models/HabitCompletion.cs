@@ -23,4 +23,7 @@ namespace Models;
         public Habit? Habit { get; set; } 
 
         public int XpEarned {get; set;}
+
+        
+        public int PetStreakBonusXp { get; set; }
     }

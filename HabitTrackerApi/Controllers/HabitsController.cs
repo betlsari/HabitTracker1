@@ -61,7 +61,14 @@ public class HabitsController : ControllerBase
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var habitExist = await _context.Habits.AnyAsync(h => h.UserId == userId && h.Name == dto.Name);
+
+        // DÜZELTİLDİ: Benzersizlik kontrolü artık case-insensitive (ve baştaki/sondaki
+        // boşluklara duyarsız). Önceden "Su" ile "su" farklı habit sayılıyordu; oysa
+        // HabitCategories (IsWater/IsReading/IsFocus) kategori eşleştirmelerini zaten
+        // case-insensitive yapıyordu — bu tutarsızlık kafa karıştırıyordu.
+        var normalizedName = dto.Name.Trim();
+        var habitExist = await _context.Habits.AnyAsync(h =>
+            h.UserId == userId && h.Name.ToLower() == normalizedName.ToLower());
         if (habitExist)
         {
             return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
@@ -71,7 +78,7 @@ public class HabitsController : ControllerBase
         {
             XpPerUnit = 1,
             XpBonusForGoal = 10,
-            Name = dto.Name,
+            Name = normalizedName,
             Category = dto.Category,
             DailyGoal = dto.DailyGoal,
             Period = dto.Period,
@@ -103,7 +110,17 @@ public class HabitsController : ControllerBase
             return NotFound();
         }
 
-        habit.Name = dto.Name;
+        // YENİ: Güncellemede de aynı case-insensitive benzersizlik kontrolü
+        // uygulanıyor (kendi kaydı hariç), Create ile tutarlı olsun diye.
+        var normalizedName = dto.Name.Trim();
+        var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
+            h.UserId == userId && h.Id != id && h.Name.ToLower() == normalizedName.ToLower());
+        if (nameTakenByAnother)
+        {
+            return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
+        }
+
+        habit.Name = normalizedName;
         habit.Category = dto.Category;
         habit.DailyGoal = dto.DailyGoal;
         habit.Period = dto.Period;

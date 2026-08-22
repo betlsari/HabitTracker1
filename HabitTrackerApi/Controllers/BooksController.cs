@@ -18,12 +18,21 @@ public class BooksController : ControllerBase
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly BookService _bookService;
+    private readonly BadgeService _badgeService;
+    private readonly NotificationService _notificationService;
 
-    public BooksController(AppDbContext context, UserManager<User> userManager, BookService bookService)
+    public BooksController(
+        AppDbContext context,
+        UserManager<User> userManager,
+        BookService bookService,
+        BadgeService badgeService,
+        NotificationService notificationService)
     {
         _context = context;
         _userManager = userManager;
         _bookService = bookService;
+        _badgeService = badgeService;
+        _notificationService = notificationService;
     }
 
     [HttpGet]
@@ -92,6 +101,14 @@ public class BooksController : ControllerBase
         book.DailyGoalAmount = dto.DailyGoalAmount;
 
         await _context.SaveChangesAsync();
+
+        // GoalType/TotalPages değişmiş olabileceğinden ilerlemeyi yeniden hesapla.
+        var xpDelta = await _bookService.RecalculateBookAsync(book);
+        if (xpDelta != 0)
+        {
+            await ApplyXpDeltaAsync(userId, xpDelta);
+        }
+
         return BookService.ToDto(book);
     }
 
@@ -105,8 +122,19 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
+        // Silmeden önce bu kitaba ait kayıtların toplam XP'sini kullanıcıdan geri al.
+        var totalXpFromLogs = await _context.BookReadingLogs
+            .Where(l => l.BookId == id)
+            .SumAsync(l => (int?)l.XpEarned) ?? 0;
+
         _context.Books.Remove(book);
         await _context.SaveChangesAsync();
+
+        if (totalXpFromLogs != 0)
+        {
+            await ApplyXpDeltaAsync(userId, -totalXpFromLogs);
+        }
+
         return NoContent();
     }
 
@@ -120,16 +148,43 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        var (log, xpEarned) = await _bookService.AddReadingLogAsync(book, dto);
-
         var user = await _userManager.FindByIdAsync(userId);
-        if (user != null)
+        var result = await _bookService.AddReadingLogAsync(book, dto, user?.TimeZoneId);
+
+        if (user != null && result.XpEarned != 0)
         {
-            user.TotalXp += xpEarned;
+            user.TotalXp += result.XpEarned;
             await _userManager.UpdateAsync(user);
         }
 
-        return BookService.ToLogDto(log);
+        // YENİ: Rozet değerlendirmesi (Book akışından da READING_STREAK_7 kazanılabilir).
+        await _badgeService.EvaluateAfterBookLogAsync(userId, result.StreakAfterDays);
+
+        // YENİ: Günlük hedef / kitap tamamlama bildirimleri.
+        if (result.GoalJustReachedToday)
+        {
+            var localDateKey = result.Log.ReadDate.ToString("yyyy-MM-dd");
+            await _notificationService.TryEnqueueAsync(
+                userId,
+                NotificationTypes.BookGoalReached,
+                "Okuma hedefi tamamlandı",
+                $"{book.Title} için bugünkü okuma hedefini tutturdun. Tebrikler!",
+                habitId: null,
+                dedupKey: $"bookgoal:{book.Id}:{localDateKey}");
+        }
+
+        if (result.BookJustCompleted)
+        {
+            await _notificationService.TryEnqueueAsync(
+                userId,
+                NotificationTypes.BookCompleted,
+                "Kitap tamamlandı",
+                $"{book.Title} kitabını bitirdin. Tebrikler!",
+                habitId: null,
+                dedupKey: $"bookcompleted:{book.Id}");
+        }
+
+        return BookService.ToLogDto(result.Log);
     }
 
     [HttpGet("{id:int}/reading-logs")]
@@ -153,8 +208,142 @@ public class BooksController : ControllerBase
                 BookId = l.BookId,
                 ReadDate = l.ReadDate,
                 Amount = l.Amount,
-                PageReachedAt = l.PageReachedAt
+                PageReachedAt = l.PageReachedAt,
+                XpEarned = l.XpEarned
             })
             .ToListAsync();
+    }
+
+    // YENİ: Yanlış girilen bir okuma kaydını düzeltme.
+    [HttpPut("{id:int}/reading-logs/{logId:int}")]
+    public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
+        if (log == null)
+        {
+            return NotFound();
+        }
+
+        log.ReadDate = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
+        log.Amount = dto.Amount;
+        log.PageReachedAt = dto.PageReachedAt;
+        await _context.SaveChangesAsync();
+
+        var xpDelta = await _bookService.RecalculateBookAsync(book);
+        if (xpDelta != 0)
+        {
+            await ApplyXpDeltaAsync(userId, xpDelta);
+        }
+
+        return BookService.ToLogDto(log);
+    }
+
+    // YENİ: Yanlış girilen bir okuma kaydını silme.
+    [HttpDelete("{id:int}/reading-logs/{logId:int}")]
+    public async Task<ActionResult> DeleteReadingLog(int id, int logId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
+        if (log == null)
+        {
+            return NotFound();
+        }
+
+        _context.BookReadingLogs.Remove(log);
+        await _context.SaveChangesAsync();
+
+        var xpDelta = await _bookService.RecalculateBookAsync(book);
+        if (xpDelta != 0)
+        {
+            await ApplyXpDeltaAsync(userId, xpDelta);
+        }
+
+        return NoContent();
+    }
+
+    // YENİ: Bugünkü ilerleme + streak (DailyGoalAmount artık burada gerçekten kullanılıyor).
+    [HttpGet("{id:int}/progress")]
+    public async Task<ActionResult<BookProgressDto>> GetProgress(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        return await _bookService.GetProgressAsync(book, user?.TimeZoneId);
+    }
+
+    // YENİ: Habit'teki GetStats'e paralel: son N günün günlük okuma toplamları.
+    [HttpGet("{id:int}/stats")]
+    public async Task<ActionResult<IEnumerable<BookDailyStatDto>>> GetStats(int id, int days = 7)
+    {
+        if (days <= 0)
+        {
+            return BadRequest("days parametresi 1 veya daha büyük olmalıdır.");
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        return await _bookService.GetStatsAsync(book, user?.TimeZoneId, days);
+    }
+
+    // YENİ: Habit'teki GetComparison'a paralel: kitaplar arası karşılaştırma/sıralama.
+    [HttpGet("comparison")]
+    public async Task<ActionResult<IEnumerable<BookComparisonDto>>> GetComparison(int lookbackDays = 30)
+    {
+        if (lookbackDays <= 0)
+        {
+            return BadRequest("lookbackDays parametresi 1 veya daha büyük olmalıdır.");
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var books = await _context.Books.AsNoTracking()
+            .Where(b => b.UserId == userId)
+            .ToListAsync();
+
+        if (books.Count == 0)
+        {
+            return Ok(new List<BookComparisonDto>());
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        var result = await _bookService.GetComparisonAsync(books, user?.TimeZoneId, lookbackDays);
+        return Ok(result);
+    }
+
+    private async Task ApplyXpDeltaAsync(string userId, int xpDelta)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return;
+        }
+
+        user.TotalXp = Math.Max(0, user.TotalXp + xpDelta);
+        await _userManager.UpdateAsync(user);
     }
 }
