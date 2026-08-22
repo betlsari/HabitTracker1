@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Data;
-using Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -9,6 +8,7 @@ using Services;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,7 +40,11 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -48,8 +52,6 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
 {
     options.SignIn.RequireConfirmedEmail = true;
 
-    // YENİ: brute-force koruması için lockout politikası açıkça tanımlandı
-    // (önceden ASP.NET Identity varsayılanlarına bırakılmıştı, kontrol edilmemişti).
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.AllowedForNewUsers = true;
@@ -77,8 +79,6 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// YENİ: mobil uygulama farklı bir origin'den (örn. web paneli, test ortamı)
-// çağrı yapacaksa appsettings'teki Cors:AllowedOrigins listesine origin ekleyin.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultCorsPolicy", policy =>
@@ -95,8 +95,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// YENİ: login/register/forgot-password gibi endpoint'lere brute-force /
-// spam koruması için fixed-window rate limiter.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -110,14 +108,20 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+builder.Services.AddHttpClient(nameof(FcmPushNotificationSender));
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<XpService>();
+builder.Services.AddScoped<HabitProgressService>();
+builder.Services.AddScoped<FlowerService>();
+builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<BadgeService>();
 builder.Services.AddScoped<PetMoodService>();
 builder.Services.AddHostedService<PetMoodBackgroundService>();
+builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
-
 
 
 var app = builder.Build();

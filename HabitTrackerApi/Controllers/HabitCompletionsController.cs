@@ -3,29 +3,42 @@ using Microsoft.EntityFrameworkCore;
 using Data;
 using Models;
 using Dtos;
-namespace Controllers;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Services;
 
-
+namespace Controllers;
 
 [ApiController]
 [Route("api/habits/{habitId}/[controller]")]
 [Authorize]
-
 public class HabitCompletionsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly XpService _xpService;
+    private readonly HabitProgressService _progressService;
+    private readonly FlowerService _flowerService;
+    private readonly BadgeService _badgeService;
+    private readonly NotificationService _notificationService;
 
-    public HabitCompletionsController(AppDbContext context, UserManager<User> userManager, XpService xpService)
+    public HabitCompletionsController(
+        AppDbContext context,
+        UserManager<User> userManager,
+        XpService xpService,
+        HabitProgressService progressService,
+        FlowerService flowerService,
+        BadgeService badgeService,
+        NotificationService notificationService)
     {
         _context = context;
         _userManager = userManager;
         _xpService = xpService;
+        _progressService = progressService;
+        _flowerService = flowerService;
+        _badgeService = badgeService;
+        _notificationService = notificationService;
     }
 
     [HttpPost]
@@ -38,24 +51,22 @@ public class HabitCompletionsController : ControllerBase
             return NotFound();
         }
 
-        var totalBeforeThisCompletion = await _context.HabitCompletions
-            .Where(c => c.HabitId == habitId && c.CompletionDate.Date == dto.CompletionDate.Date)
-            .SumAsync(c => c.Amount);
+        var user = await _userManager.FindByIdAsync(userId!);
+        var completionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
+        var snapshot = await _progressService.GetCompletionSnapshotAsync(
+            habit, completionUtc, dto.Amount, user?.TimeZoneId);
 
-        // DÜZELTİLDİ: XP artık önceden hesaplanıp doğrudan entity'ye yazılıyor.
-        // Eski kodda XpEarned hiçbir zaman set edilmiyordu; HabitCompletion.XpEarned
-        // alanı DB'de hep 0 olarak kalıyordu.
-        int xpEarned = _xpService.CalculateCompletionXp(habit, dto.Amount, totalBeforeThisCompletion);
+        var streakKept = snapshot.GoalJustReached && snapshot.PreviousPeriodGoalMet;
+        int xpEarned = _xpService.CalculateCompletionXp(habit, dto.Amount, snapshot.TotalBeforeInPeriod, streakKept);
 
         var newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
         {
             HabitId = habitId,
-            CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc),
+            CompletionDate = completionUtc,
             Amount = dto.Amount,
             XpEarned = xpEarned
         });
 
-        var user = await _userManager.FindByIdAsync(userId!);
         if (user != null)
         {
             user.TotalXp += xpEarned;
@@ -64,16 +75,32 @@ public class HabitCompletionsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var completionDto = new HabitCompletionDto
+        Flower? flower = null;
+        if (HabitCategories.IsWater(habit.Category) && dto.Amount > 0)
         {
-            Id = newHabitCompletion.Entity.Id,
-            HabitId = newHabitCompletion.Entity.HabitId,
-            CompletionDate = newHabitCompletion.Entity.CompletionDate,
-            Amount = newHabitCompletion.Entity.Amount,
-            XpEarned = newHabitCompletion.Entity.XpEarned
-        };
+            flower = await _flowerService.AddWaterAsync(userId!, dto.Amount);
+        }
 
-        return completionDto;
+        await _badgeService.EvaluateAfterCompletionAsync(userId!, habit, snapshot, flower);
+
+        if (snapshot.GoalJustReached)
+        {
+            var periodLabel = habit.Period switch
+            {
+                HabitPeriod.Weekly => "haftalık",
+                HabitPeriod.Monthly => "aylık",
+                _ => "günlük"
+            };
+            await _notificationService.TryEnqueueAsync(
+                userId!,
+                NotificationTypes.GoalReached,
+                "Hedef tamamlandı",
+                $"{habit.Name} için {periodLabel} hedefini tutturdun. Tebrikler!",
+                habit.Id,
+                $"goal:{habit.Id}:{snapshot.PeriodStartLocal:yyyy-MM-dd}");
+        }
+
+        return ToDto(newHabitCompletion.Entity);
     }
 
     [HttpGet]
@@ -88,26 +115,25 @@ public class HabitCompletionsController : ControllerBase
         }
 
         return await _context.HabitCompletions
-        .AsNoTracking()
-        .Where(c => c.HabitId == habitId)
-        .Select(c => new HabitCompletionDto
-        {
-            Id = c.Id,
-            HabitId = c.HabitId,
-            CompletionDate = c.CompletionDate,
-            Amount = c.Amount,
-            XpEarned = c.XpEarned
-        })
-        .ToListAsync();
+            .AsNoTracking()
+            .Where(c => c.HabitId == habitId)
+            .Select(c => new HabitCompletionDto
+            {
+                Id = c.Id,
+                HabitId = c.HabitId,
+                CompletionDate = c.CompletionDate,
+                Amount = c.Amount,
+                XpEarned = c.XpEarned
+            })
+            .ToListAsync();
     }
-
 
     [HttpPut("{id}")]
     public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId, int id, CreateCompletionDto dto)
     {
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (completion == null)
+        if (completion == null || completion.HabitId != habitId)
         {
             return NotFound();
         }
@@ -121,24 +147,15 @@ public class HabitCompletionsController : ControllerBase
         completion.CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
 
         await _context.SaveChangesAsync();
-
-        var completionDto = new HabitCompletionDto()
-        {
-            Id = completion.Id,
-            HabitId = completion.HabitId,
-            Amount = completion.Amount,
-            CompletionDate = completion.CompletionDate,
-            XpEarned = completion.XpEarned
-        };
-        return completionDto;
+        return ToDto(completion);
     }
 
     [HttpDelete("{id}")]
-    public async Task<ActionResult> DeleteCompletion(int id)
+    public async Task<ActionResult> DeleteCompletion(int habitId, int id)
     {
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (completion == null)
+        if (completion == null || completion.HabitId != habitId)
         {
             return NotFound();
         }
@@ -147,8 +164,23 @@ public class HabitCompletionsController : ControllerBase
         {
             return NotFound();
         }
+
+        if (HabitCategories.IsWater(habit.Category) && completion.Amount != 0)
+        {
+            await _flowerService.AddWaterAsync(userId!, -completion.Amount);
+        }
+
         _context.HabitCompletions.Remove(completion);
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    private static HabitCompletionDto ToDto(HabitCompletion completion) => new()
+    {
+        Id = completion.Id,
+        HabitId = completion.HabitId,
+        CompletionDate = completion.CompletionDate,
+        Amount = completion.Amount,
+        XpEarned = completion.XpEarned
+    };
 }

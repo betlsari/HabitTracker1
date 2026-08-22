@@ -238,6 +238,27 @@ public class AuthController : ControllerBase
         return Ok("Şifre başarıyla değiştirildi.");
     }
 
+    [HttpPut("timezone")]
+    [Authorize]
+    public async Task<IActionResult> UpdateTimezone(UpdateTimezoneDto dto)
+    {
+        if (!TimeZones.IsValid(dto.TimeZoneId))
+        {
+            return BadRequest("Geçersiz zaman dilimi.");
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        user.TimeZoneId = dto.TimeZoneId;
+        await _userManager.UpdateAsync(user);
+        return Ok(new { user.TimeZoneId });
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<IActionResult> Me()
@@ -248,6 +269,6 @@ public class AuthController : ControllerBase
         {
             return NotFound();
         }
-        return Ok(new { user.Email, user.TotalXp });
+        return Ok(new { user.Email, user.TotalXp, user.TimeZoneId });
     }
 }

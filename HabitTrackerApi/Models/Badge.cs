@@ -1,10 +1,9 @@
 namespace Models;
 
-
 public class Badge
 {
     public int Id { get; set; }
-    public required string Code { get; set; }       // "STREAK_7", "STREAK_30" gibi
+    public required string Code { get; set; }
     public required string Name { get; set; }
     public required string Description { get; set; }
 }

@@ -6,7 +6,7 @@ public class Habit
 {
     public int Id { get; set; }
     [MinLength(1)]
-    public string Name { get; set; } =string.Empty;
+    public string Name { get; set; } = string.Empty;
     [Range(1, int.MaxValue)]
     public int DailyGoal { get; set; }
     [MinLength(1)]
@@ -23,5 +23,9 @@ public class Habit
 
     public int XpBonusForGoal { get; set; }
 
+    public HabitPeriod Period { get; set; } = HabitPeriod.Daily;
 
+    public TimeOnly? TargetTime { get; set; }
+
+    public TimeOnly? ReminderTime { get; set; }
 }

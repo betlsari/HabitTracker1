@@ -2,9 +2,8 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Models;
 
-public class User :IdentityUser // bu sınıf direkt id,username, email gibi alanları IdentityUser sınıfından alır.
+public class User : IdentityUser
 {
-
     public DateTime CreatedAt { get; set; }
 
     public List<Habit> Habits { get; set; } = new List<Habit>();
@@ -12,4 +11,14 @@ public class User :IdentityUser // bu sınıf direkt id,username, email gibi ala
     public int TotalXp { get; set; }
 
     public List<Pet> Pets { get; set; } = new List<Pet>();
+
+    public string TimeZoneId { get; set; } = "Europe/Istanbul";
+
+    public List<UserBadge> UserBadges { get; set; } = new List<UserBadge>();
+
+    public List<UserNotification> Notifications { get; set; } = new List<UserNotification>();
+
+    public List<DeviceToken> DeviceTokens { get; set; } = new List<DeviceToken>();
+
+    public Flower? Flower { get; set; }
 }
