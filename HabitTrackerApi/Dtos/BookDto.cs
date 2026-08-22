@@ -8,6 +8,11 @@ public class BookDto
     public required string Title { get; set; }
     public string? Author { get; set; }
     public BookGoalType GoalType { get; set; }
+
+    // YENİ: Kitabın hedefinin hangi döneme (Daily/Weekly/Monthly) göre
+    // değerlendirildiğini istemciye bildirmek için eklendi.
+    public HabitPeriod Period { get; set; }
+
     public int? TotalPages { get; set; }
     public int DailyGoalAmount { get; set; }
     public int CurrentPage { get; set; }

@@ -94,6 +94,13 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
+    // DÜZELTİLDİ: Önceden dönem sonunda hedef tutturulamadığında her zaman aynı
+    // jenerik "Missed" bildirimi gönderiliyordu — kullanıcının önceden aktif bir
+    // serisi (streak) olup olmadığına hiç bakılmıyordu. Artık bir önceki dönemde
+    // hedef tutturulmuşsa (yani gerçekten bir zincir kırıldıysa) ayrı bir
+    // "StreakBroken" bildirimi, kaç dönemlik zincirin bozulduğunu belirterek
+    // gönderiliyor. Aktif bir seri yoksa (zaten kırılacak bir şey yoksa) eski
+    // jenerik "Missed" bildirimi kullanılmaya devam ediyor.
     private static async Task SendMissedAsync(
         AppDbContext db,
         NotificationService notifications,
@@ -122,14 +129,40 @@ public class ReminderBackgroundService : BackgroundService
             }
 
             var keyDate = periodStart.ToString("yyyy-MM-dd");
-            await notifications.TryEnqueueAsync(
-                habit.UserId,
-                NotificationTypes.Missed,
-                "Kaçırılan alışkanlık",
-                $"{habit.Name} bu dönem tamamlanmadı. Yarın zinciri yeniden kurabilirsin.",
-                habit.Id,
-                $"missed:{habit.Id}:{keyDate}",
-                cancellationToken);
+            var periodLabel = habit.Period switch
+            {
+                HabitPeriod.Weekly => "haftalık",
+                HabitPeriod.Monthly => "aylık",
+                _ => "günlük"
+            };
+
+            // YENİ: Bir önceki dönemde streak var mıydı? Varsa bu, tam olarak
+            // "bozulan bir zincir" demektir.
+            var previousPeriodStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, habit.Period);
+            var lostStreak = HabitProgressService.CountStreak(habit, totals, previousPeriodStart, tz);
+
+            if (lostStreak > 0)
+            {
+                await notifications.TryEnqueueAsync(
+                    habit.UserId,
+                    NotificationTypes.StreakBroken,
+                    "Serin bozuldu",
+                    $"{habit.Name} alışkanlığındaki {lostStreak} {periodLabel} zincirin bozuldu. Bugün yeniden başlayabilirsin.",
+                    habit.Id,
+                    $"streakbroken:{habit.Id}:{keyDate}",
+                    cancellationToken);
+            }
+            else
+            {
+                await notifications.TryEnqueueAsync(
+                    habit.UserId,
+                    NotificationTypes.Missed,
+                    "Kaçırılan alışkanlık",
+                    $"{habit.Name} bu dönem tamamlanmadı. Yarın zinciri yeniden kurabilirsin.",
+                    habit.Id,
+                    $"missed:{habit.Id}:{keyDate}",
+                    cancellationToken);
+            }
         }
     }
 }

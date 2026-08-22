@@ -34,11 +34,6 @@ public class HabitProgressService
         return result;
     }
 
-    /// <summary>
-    /// YENİ: Kullanıcının alışkanlıklarını "en iyi sürdürülenden en kötüye" sıralar.
-    /// Sıralama kriteri: son <paramref name="lookbackPeriods"/> dönemdeki hedef
-    /// tutturma oranı (birincil), ardından mevcut streak (ikincil, eşitlik durumunda).
-    /// </summary>
     public async Task<List<HabitComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Habit> habits,
         string? timeZoneId,
@@ -105,12 +100,24 @@ public class HabitProgressService
         return ranked;
     }
 
-    public async Task<List<DailyStatDto>> GetStatsAsync(Habit habit, string? timeZoneId, int periods, CancellationToken cancellationToken = default)
+    // DÜZELTİLDİ: granularity parametresi eklendi. Verilmezse habit'in kendi
+    // Period'u kullanılır (önceki davranışla tam uyumlu); verilirse (Daily/
+    // Weekly/Monthly) kullanıcı, habit'in kendi periyodundan bağımsız olarak
+    // istediği eksende istatistik görebilir — dokümandaki "günlük, haftalık ve
+    // aylık başarı grafikleri" maddesi artık her habit için sağlanabiliyor.
+    public async Task<List<DailyStatDto>> GetStatsAsync(
+        Habit habit,
+        string? timeZoneId,
+        int periods,
+        HabitPeriod? granularity = null,
+        CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
-        var totals = await LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
+        var effectivePeriod = granularity ?? habit.Period;
+
+        var totals = await LoadPeriodTotalsAsync(habit.Id, effectivePeriod, tz, cancellationToken);
         var now = DateTime.UtcNow;
-        var cursor = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
+        var cursor = HabitSchedule.PeriodStartLocal(now, effectivePeriod, tz);
         var stats = new List<DailyStatDto>();
 
         for (int i = 0; i < periods; i++)
@@ -122,7 +129,7 @@ public class HabitProgressService
                 TotalAmount = total,
                 GoalReached = total >= habit.DailyGoal
             });
-            cursor = HabitSchedule.PreviousPeriodStartLocal(cursor, habit.Period);
+            cursor = HabitSchedule.PreviousPeriodStartLocal(cursor, effectivePeriod);
         }
 
         return stats;

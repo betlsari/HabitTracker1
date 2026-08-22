@@ -35,9 +35,6 @@ public class BooksController : ControllerBase
         _notificationService = notificationService;
     }
 
-    // DÜZELTİLDİ: Sayfalama eklendi. Önceden kullanıcının tüm kitapları tek
-    // seferde dönüyordu; kitap sayısı arttıkça bu ölçeklenmiyordu. page/pageSize
-    // opsiyonel — verilmezse page=1, pageSize=50 kullanılır.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<BookDto>>> GetBooks(int page = 1, int pageSize = 50)
     {
@@ -89,6 +86,9 @@ public class BooksController : ControllerBase
             Title = dto.Title,
             Author = dto.Author,
             GoalType = dto.GoalType,
+            // YENİ: Kitabın hedef dönemi (Daily/Weekly/Monthly) artık oluşturma
+            // sırasında kaydediliyor.
+            Period = dto.Period,
             TotalPages = dto.TotalPages,
             DailyGoalAmount = dto.DailyGoalAmount,
             UserId = userId,
@@ -114,12 +114,15 @@ public class BooksController : ControllerBase
         book.Title = dto.Title;
         book.Author = dto.Author;
         book.GoalType = dto.GoalType;
+        // YENİ: Period de güncellenebiliyor; değişirse RecalculateBookAsync
+        // ilerlemeyi/streak'leri yeni Period'a göre baştan hesaplar.
+        book.Period = dto.Period;
         book.TotalPages = dto.TotalPages;
         book.DailyGoalAmount = dto.DailyGoalAmount;
 
         await _context.SaveChangesAsync();
 
-        // GoalType/TotalPages değişmiş olabileceğinden ilerlemeyi yeniden hesapla.
+        // GoalType/TotalPages/Period değişmiş olabileceğinden ilerlemeyi yeniden hesapla.
         var xpDelta = await _bookService.RecalculateBookAsync(book);
         if (xpDelta != 0)
         {
@@ -129,11 +132,6 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-    // YENİ: Dakika bazlı (Minutes) kitaplarda TotalPages gibi otomatik bir
-    // tamamlanma sinyali yok; kullanıcı kitabı burada elle "bitti" olarak
-    // işaretler. Sayfa bazlı ve TotalPages belirtilmiş kitaplar zaten hedef
-    // sayfaya ulaşıldığında otomatik tamamlandığı için, tutarsızlığı önlemek
-    // amacıyla buradan tekrar tamamlatılmasına izin verilmiyor.
     [HttpPost("{id:int}/complete")]
     public async Task<ActionResult<BookDto>> CompleteBook(int id)
     {
@@ -160,11 +158,13 @@ public class BooksController : ControllerBase
             await ApplyXpDeltaAsync(userId, xpEarned);
         }
 
+        // DÜZELTİLDİ: Sabit tek bir mesaj yerine, çeşitlendirilmiş motivasyon
+        // mesajlarından biri rastgele seçiliyor.
         await _notificationService.TryEnqueueAsync(
             userId,
             NotificationTypes.BookCompleted,
             "Kitap tamamlandı",
-            $"{book.Title} kitabını bitirdin. Tebrikler!",
+            MotivationMessages.BookCompleted(book.Title),
             habitId: null,
             dedupKey: $"bookcompleted:{book.Id}");
 
@@ -181,24 +181,10 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        // Silmeden önce bu kitaba ait kayıtların toplam XP'sini kullanıcıdan geri al.
         var totalXpFromLogs = await _context.BookReadingLogs
             .Where(l => l.BookId == id)
             .SumAsync(l => (int?)l.XpEarned) ?? 0;
 
-        // DÜZELTİLDİ: Önceden burada book.CompletionBonusAwarded kontrol
-        // ediliyordu. Ancak CompletionBonusAwarded hem OTOMATİK tamamlanmada
-        // (BookService.AddReadingLogAsync — sayfa hedefine ulaşınca) hem de
-        // MANUEL tamamlanmada (BookService.CompleteManuallyAsync) true oluyor.
-        // Otomatik tamamlanan kitaplarda bonus XP zaten ilgili BookReadingLog
-        // kaydının XpEarned'ine dahil edilmiş ve yukarıdaki totalXpFromLogs
-        // toplamına dahildi — CompletionBonusAwarded true olduğu için bonus bir
-        // kez daha ekleniyor, kullanıcıdan olması gerekenden FAZLA XP
-        // düşülüyordu. Manuel tamamlanan kitaplarda ise bonus HİÇBİR log'a
-        // bağlı olmadığından (CompleteManuallyAsync doğrudan Book.TotalXp'ye
-        // ekliyor) totalXpFromLogs'a dahil değil ve ayrıca eklenmesi doğruydu.
-        // Ayırt edici olan CompletionBonusAwarded değil, ManuallyCompleted
-        // olmalı — bonus'un log'lara dahil olup olmadığını bu flag belirliyor.
         var manualCompletionXp = book.ManuallyCompleted && book.CompletionBonusAwarded
             ? BookService.CompletionBonusXp
             : 0;
@@ -234,20 +220,23 @@ public class BooksController : ControllerBase
             await _userManager.UpdateAsync(user);
         }
 
-        // YENİ: Rozet değerlendirmesi (Book akışından da READING_STREAK_7 kazanılabilir).
         await _badgeService.EvaluateAfterBookLogAsync(userId, result.StreakAfterDays);
 
-        // YENİ: Günlük hedef / kitap tamamlama bildirimleri.
-        if (result.GoalJustReachedToday)
+        // DÜZELTİLDİ: result.GoalJustReachedToday -> result.GoalJustReachedInPeriod
+        // (artık gün değil, kitabın Period'una göre dönem). Dedup key de log
+        // tarihinin günü yerine dönemin gerçek başlangıcına göre kuruluyor,
+        // aksi halde haftalık/aylık hedefte aynı dönem içinde farklı günlerde
+        // birden fazla "hedef tamamlandı" bildirimi gidebilirdi.
+        if (result.GoalJustReachedInPeriod)
         {
-            var localDateKey = result.Log.ReadDate.ToString("yyyy-MM-dd");
+            var periodKey = result.PeriodStartLocal.ToString("yyyy-MM-dd");
             await _notificationService.TryEnqueueAsync(
                 userId,
                 NotificationTypes.BookGoalReached,
                 "Okuma hedefi tamamlandı",
-                $"{book.Title} için bugünkü okuma hedefini tutturdun. Tebrikler!",
+                MotivationMessages.BookGoalReached(book.Title),
                 habitId: null,
-                dedupKey: $"bookgoal:{book.Id}:{localDateKey}");
+                dedupKey: $"bookgoal:{book.Id}:{periodKey}");
         }
 
         if (result.BookJustCompleted)
@@ -256,7 +245,7 @@ public class BooksController : ControllerBase
                 userId,
                 NotificationTypes.BookCompleted,
                 "Kitap tamamlandı",
-                $"{book.Title} kitabını bitirdin. Tebrikler!",
+                MotivationMessages.BookCompleted(book.Title),
                 habitId: null,
                 dedupKey: $"bookcompleted:{book.Id}");
         }
@@ -291,7 +280,6 @@ public class BooksController : ControllerBase
             .ToListAsync();
     }
 
-    // YENİ: Yanlış girilen bir okuma kaydını düzeltme.
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {
@@ -322,7 +310,6 @@ public class BooksController : ControllerBase
         return BookService.ToLogDto(log);
     }
 
-    // YENİ: Yanlış girilen bir okuma kaydını silme.
     [HttpDelete("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult> DeleteReadingLog(int id, int logId)
     {
@@ -351,7 +338,6 @@ public class BooksController : ControllerBase
         return NoContent();
     }
 
-    // YENİ: Bugünkü ilerleme + streak (DailyGoalAmount artık burada gerçekten kullanılıyor).
     [HttpGet("{id:int}/progress")]
     public async Task<ActionResult<BookProgressDto>> GetProgress(int id)
     {
@@ -367,13 +353,26 @@ public class BooksController : ControllerBase
         return await _bookService.GetProgressAsync(book, user?.TimeZoneId);
     }
 
-    // YENİ: Habit'teki GetStats'e paralel: son N günün günlük okuma toplamları.
+    // DÜZELTİLDİ: granularity (Daily/Weekly/Monthly) parametresi eklendi.
+    // Verilmezse kitabın kendi Period'u kullanılır (önceki davranış); verilirse
+    // kitap haftalık hedefli olsa bile günlük eksende, ya da tam tersi
+    // görüntülenebilir.
     [HttpGet("{id:int}/stats")]
-    public async Task<ActionResult<IEnumerable<BookDailyStatDto>>> GetStats(int id, int days = 7)
+    public async Task<ActionResult<IEnumerable<BookDailyStatDto>>> GetStats(int id, int days = 7, string? granularity = null)
     {
         if (days <= 0)
         {
             return BadRequest("days parametresi 1 veya daha büyük olmalıdır.");
+        }
+
+        HabitPeriod? parsedGranularity = null;
+        if (!string.IsNullOrWhiteSpace(granularity))
+        {
+            if (!Enum.TryParse<HabitPeriod>(granularity, true, out var g))
+            {
+                return BadRequest("granularity parametresi Daily, Weekly veya Monthly olmalıdır.");
+            }
+            parsedGranularity = g;
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -385,10 +384,9 @@ public class BooksController : ControllerBase
         }
 
         var user = await _userManager.FindByIdAsync(userId);
-        return await _bookService.GetStatsAsync(book, user?.TimeZoneId, days);
+        return await _bookService.GetStatsAsync(book, user?.TimeZoneId, days, parsedGranularity);
     }
 
-    // YENİ: Habit'teki GetComparison'a paralel: kitaplar arası karşılaştırma/sıralama.
     [HttpGet("comparison")]
     public async Task<ActionResult<IEnumerable<BookComparisonDto>>> GetComparison(int lookbackDays = 30)
     {

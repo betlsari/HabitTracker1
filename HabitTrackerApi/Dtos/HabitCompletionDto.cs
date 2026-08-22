@@ -9,4 +9,7 @@ public class HabitCompletionDto
     public int Amount { get; set; }
 
     public int XpEarned { get; set; }
+
+    
+    public bool IsOnTime { get; set; }
 }

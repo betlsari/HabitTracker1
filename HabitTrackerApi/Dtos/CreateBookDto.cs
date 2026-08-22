@@ -12,6 +12,10 @@ public class CreateBookDto : IValidatableObject
 
     public BookGoalType GoalType { get; set; } = BookGoalType.Pages;
 
+    // YENİ: Kitabın günlük/haftalık/aylık okuma hedefi seçilebiliyor.
+    // Verilmezse Daily (önceki davranışla tam uyumlu) kullanılır.
+    public HabitPeriod Period { get; set; } = HabitPeriod.Daily;
+
     [Range(1, int.MaxValue)]
     public int DailyGoalAmount { get; set; }
 

@@ -38,10 +38,6 @@ public class HabitsController : ControllerBase
         _petGrowthService = petGrowthService;
     }
 
-    // DÜZELTİLDİ: Sayfalama eklendi. Önceden kullanıcının tüm habit'leri tek
-    // seferde dönüyordu; habit sayısı arttıkça bu ölçeklenmiyordu. page/pageSize
-    // opsiyonel — verilmezse page=1, pageSize=50 (mevcut davranışa yakın, geniş
-    // bir varsayılan) kullanılır.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(int page = 1, int pageSize = 50)
     {
@@ -88,10 +84,6 @@ public class HabitsController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        // DÜZELTİLDİ: Benzersizlik kontrolü artık case-insensitive (ve baştaki/sondaki
-        // boşluklara duyarsız). Önceden "Su" ile "su" farklı habit sayılıyordu; oysa
-        // HabitCategories (IsWater/IsReading/IsFocus) kategori eşleştirmelerini zaten
-        // case-insensitive yapıyordu — bu tutarsızlık kafa karıştırıyordu.
         var normalizedName = dto.Name.Trim();
         var habitExist = await _context.Habits.AnyAsync(h =>
             h.UserId == userId && h.Name.ToLower() == normalizedName.ToLower());
@@ -136,8 +128,6 @@ public class HabitsController : ControllerBase
             return NotFound();
         }
 
-        // YENİ: Güncellemede de aynı case-insensitive benzersizlik kontrolü
-        // uygulanıyor (kendi kaydı hariç), Create ile tutarlı olsun diye.
         var normalizedName = dto.Name.Trim();
         var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
             h.UserId == userId && h.Id != id && h.Name.ToLower() == normalizedName.ToLower());
@@ -157,17 +147,6 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    // DÜZELTİLDİ: Önceden habit silindiğinde bağlı HabitCompletions cascade ile
-    // veritabanından siliniyordu ama:
-    //   1) Habit oluşturma sırasında verilen XpService.GetHabitCreationXp() XP'si
-    //      kullanıcıdan hiç geri alınmıyordu,
-    //   2) Tüm completion'ların kazandırdığı XpEarned toplamı kullanıcıda "hayalet
-    //      XP" olarak kalıyordu,
-    //   3) Streak korunduğu için pet'lere verilmiş PetStreakBonusXp geri alınmıyordu,
-    //   4) Su/Odaklanma kategorisindeki habit'lerde flower/pet XP etkileri de
-    //      (Flower.WaterAmount, Pet.Xp) geri alınmıyordu.
-    // BookService/BooksController.DeleteBook'taki mantığa paralel olarak artık
-    // silmeden önce tüm bu yan etkiler hesaplanıp geri alınıyor.
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteHabit(int id)
     {
@@ -186,19 +165,16 @@ public class HabitsController : ControllerBase
         var totalPetStreakBonus = completions.Sum(c => c.PetStreakBonusXp);
         var totalAmount = completions.Sum(c => c.Amount);
 
-        // Su kategorisi: bu habit'e kayıtlı toplam su miktarı çiçekten geri alınır.
         if (HabitCategories.IsWater(habit.Category) && totalAmount != 0)
         {
             await _flowerService.AddWaterAsync(userId!, -totalAmount);
         }
 
-        // Odaklanma kategorisi: pet'lere verilmiş focus XP'si geri alınır.
         if (HabitCategories.IsFocus(habit.Category) && totalAmount != 0)
         {
             await _petGrowthService.RemoveFocusXpAsync(userId!, totalAmount);
         }
 
-        // Streak korunduğu için pet'lere verilmiş düz bonus XP geri alınır.
         if (totalPetStreakBonus > 0)
         {
             await _petGrowthService.RemoveStreakBonusXpAsync(userId!, totalPetStreakBonus);
@@ -207,7 +183,6 @@ public class HabitsController : ControllerBase
         _context.Habits.Remove(habit);
         await _context.SaveChangesAsync();
 
-        // Habit oluşturma XP'si + tüm completion'lardan kazanılan XP kullanıcıdan düşülür.
         var totalXpToRemove = totalXpFromCompletions + _xpService.GetHabitCreationXp();
         if (totalXpToRemove != 0)
         {
@@ -238,8 +213,12 @@ public class HabitsController : ControllerBase
         return await _progressService.GetProgressAsync(habit, user?.TimeZoneId);
     }
 
+    // DÜZELTİLDİ: granularity (Daily/Weekly/Monthly) parametresi eklendi.
+    // Verilmezse habit'in kendi Period'u kullanılır (önceki davranış). Böylece
+    // örn. haftalık hedefli bir alışkanlık isteğe bağlı olarak günlük veya
+    // aylık eksende de görüntülenebiliyor.
     [HttpGet("{habitId:int}/stats")]
-    public async Task<ActionResult<IEnumerable<DailyStatDto>>> GetStats(int habitId, int days = 7)
+    public async Task<ActionResult<IEnumerable<DailyStatDto>>> GetStats(int habitId, int days = 7, string? granularity = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var habit = await _context.Habits.AsNoTracking()
@@ -255,8 +234,18 @@ public class HabitsController : ControllerBase
             return BadRequest("days parametresi 1 veya daha büyük olmalıdır.");
         }
 
+        HabitPeriod? parsedGranularity = null;
+        if (!string.IsNullOrWhiteSpace(granularity))
+        {
+            if (!Enum.TryParse<HabitPeriod>(granularity, true, out var g))
+            {
+                return BadRequest("granularity parametresi Daily, Weekly veya Monthly olmalıdır.");
+            }
+            parsedGranularity = g;
+        }
+
         var user = await _userManager.FindByIdAsync(userId!);
-        return await _progressService.GetStatsAsync(habit, user?.TimeZoneId, days);
+        return await _progressService.GetStatsAsync(habit, user?.TimeZoneId, days, parsedGranularity);
     }
 
     [HttpGet("summary")]

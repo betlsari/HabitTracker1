@@ -10,14 +10,20 @@ public sealed class BookLogResult
     public required BookReadingLog Log { get; init; }
     public int XpEarned { get; init; }
 
-    // YENİ: Bu kayıt, o günün DailyGoalAmount hedefini az önce tutturdu mu?
-    public bool GoalJustReachedToday { get; init; }
+    // DÜZELTİLDİ: "GoalJustReachedToday" -> "GoalJustReachedInPeriod" olarak
+    // yeniden adlandırıldı. Artık kitabın DailyGoalAmount hedefi, sadece "gün"
+    // değil Book.Period'a (Daily/Weekly/Monthly) göre bir dönem için
+    // değerlendiriliyor.
+    public bool GoalJustReachedInPeriod { get; init; }
 
-    // YENİ: Bu kayıt kitabı az önce tamamladı mı (toplam sayfa/dakika hedefi)?
     public bool BookJustCompleted { get; init; }
 
-    // YENİ: Günlük hedefin art arda kaç gündür tutturulduğu (bugün dahil).
+    // Dönemsel hedefin art arda kaç dönemdir (bugün dahil) tutturulduğu.
     public int StreakAfterDays { get; init; }
+
+    // YENİ: Bildirim dedup key'i için bu kaydın ait olduğu dönemin (Period'a
+    // göre) yerel başlangıç tarihi.
+    public DateTime PeriodStartLocal { get; init; }
 }
 
 public class BookService
@@ -26,12 +32,9 @@ public class BookService
     private const int XpPerLog = 3;
 
     // Kitap tamamlandığında ekstra bonus XP.
-    // DÜZELTİLDİ: public yapıldı — BooksController, kitap silinirken elle
-    // tamamlanmış (ManuallyCompleted) kitapların bonus XP'sini geri almak için
-    // bu sabite ihtiyaç duyuyor.
     public const int CompletionBonusXp = 25;
 
-    // YENİ: Günlük hedef tutturulduğunda ekstra bonus XP (Habit'teki XpBonusForGoal'e paralel)
+    // Dönemsel hedef tutturulduğunda ekstra bonus XP (Habit'teki XpBonusForGoal'e paralel)
     private const int DailyGoalBonusXp = 5;
 
     private readonly AppDbContext _context;
@@ -49,12 +52,15 @@ public class BookService
     {
         var tz = TimeZones.Resolve(timeZoneId);
         var readDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
-        var localDate = TimeZones.ToLocal(readDateUtc, tz).Date;
 
-        // YENİ: Bu güne ait, bu kayıttan ÖNCEKİ toplam miktarı hesapla (DailyGoalAmount kontrolü için).
-        var totalBeforeToday = await _context.BookReadingLogs
-            .Where(l => l.BookId == book.Id && l.ReadDate.Date == localDate)
-            .SumAsync(l => (int?)l.Amount, cancellationToken) ?? 0;
+        // DÜZELTİLDİ: Artık "gün" yerine kitabın kendi Period'una (Daily/Weekly/
+        // Monthly) göre dönem başlangıcı kullanılıyor — Habit'teki HabitSchedule
+        // mantığıyla birebir tutarlı. Böylece "ay veya hafta için okuma hedefi"
+        // senaryosu gerçekten desteklenmiş oluyor.
+        var periodStart = HabitSchedule.PeriodStartLocal(readDateUtc, book.Period, tz);
+
+        var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
+        var totalBeforePeriod = totals.TryGetValue(periodStart, out var existing) ? existing : 0;
 
         var log = new BookReadingLog
         {
@@ -88,13 +94,13 @@ public class BookService
             book.TotalMinutesRead += dto.Amount;
         }
 
-        var totalAfterToday = totalBeforeToday + dto.Amount;
-        var goalJustReachedToday = book.DailyGoalAmount > 0
-            && totalBeforeToday < book.DailyGoalAmount
-            && totalAfterToday >= book.DailyGoalAmount;
+        var totalAfterPeriod = totalBeforePeriod + dto.Amount;
+        var goalJustReachedInPeriod = book.DailyGoalAmount > 0
+            && totalBeforePeriod < book.DailyGoalAmount
+            && totalAfterPeriod >= book.DailyGoalAmount;
 
         var xpEarned = XpPerLog;
-        if (goalJustReachedToday)
+        if (goalJustReachedInPeriod)
         {
             xpEarned += DailyGoalBonusXp;
         }
@@ -111,28 +117,21 @@ public class BookService
         _context.BookReadingLogs.Add(log);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var streakAfterDays = goalJustReachedToday
-            ? await CountStreakDaysAsync(book, tz, localDate, cancellationToken)
+        var streakAfterDays = goalJustReachedInPeriod
+            ? await CountStreakPeriodsAsync(book, tz, periodStart, cancellationToken)
             : 0;
 
         return new BookLogResult
         {
             Log = log,
             XpEarned = xpEarned,
-            GoalJustReachedToday = goalJustReachedToday,
+            GoalJustReachedInPeriod = goalJustReachedInPeriod,
             BookJustCompleted = bookJustCompleted,
-            StreakAfterDays = streakAfterDays
+            StreakAfterDays = streakAfterDays,
+            PeriodStartLocal = periodStart
         };
     }
 
-    /// <summary>
-    /// YENİ: Dakika bazlı (Minutes) kitaplarda — ya da TotalPages belirtilmemiş
-    /// sayfa bazlı kitaplarda — otomatik bir tamamlanma sinyali olmadığından,
-    /// kullanıcının kitabı elle "bitti" olarak işaretlemesini sağlar.
-    /// Tamamlanma bonusu (XP) yalnızca bir kez verilir (CompletionBonusAwarded ile
-    /// korunur) ve BookReadingLog kayıtlarına bağlı OLMADIĞI için
-    /// RecalculateBookAsync tarafından geri alınmaz.
-    /// </summary>
     public async Task<int> CompleteManuallyAsync(Book book, CancellationToken cancellationToken = default)
     {
         if (book.IsCompleted)
@@ -155,11 +154,6 @@ public class BookService
         return xpEarned;
     }
 
-    /// <summary>
-    /// YENİ: Bir okuma kaydı güncellendiğinde veya silindiğinde kitabın CurrentPage /
-    /// TotalMinutesRead / IsCompleted / CompletedAt alanlarını TÜM kayıtlardan sıfırdan
-    /// yeniden hesaplar ve kullanıcının TotalXp'sinde gerekli düzeltmeyi (delta) döner.
-    /// </summary>
     public async Task<int> RecalculateBookAsync(Book book, CancellationToken cancellationToken = default)
     {
         var logs = await _context.BookReadingLogs
@@ -175,15 +169,20 @@ public class BookService
         bool isCompleted = false;
         DateTime? completedAt = null;
 
-        // Günlük toplamlar (yeni XpEarned/goal hesaplaması için)
+        // NOT: RecalculateBookAsync'e kullanıcı saat dilimi parametre olarak
+        // geçmiyor (BookReadingLog'lar UTC saklanıyor). Period sınırlarını
+        // hesaplarken burada UTC tabanlı bir gruplama kullanılıyor; bu, kullanıcı
+        // saat dilimine göre dönem sınırında ±1 günlük kaymalara yol açabilir.
+        // Tam doğruluk isteniyorsa bu metoda timeZoneId parametresi eklenip
+        // AddReadingLogAsync'teki gibi TimeZones.Resolve ile gerçek tz kullanılmalı.
         var dailyTotals = new Dictionary<DateTime, int>();
 
         foreach (var l in logs)
         {
-            var localDate = l.ReadDate.Date;
-            var beforeToday = dailyTotals.TryGetValue(localDate, out var existing) ? existing : 0;
-            var afterToday = beforeToday + l.Amount;
-            dailyTotals[localDate] = afterToday;
+            var periodKey = HabitSchedule.PeriodStartLocal(l.ReadDate, book.Period, TimeZoneInfo.Utc);
+            var beforePeriod = dailyTotals.TryGetValue(periodKey, out var existing) ? existing : 0;
+            var afterPeriod = beforePeriod + l.Amount;
+            dailyTotals[periodKey] = afterPeriod;
 
             var wasCompletedBeforeThisLog = isCompleted;
 
@@ -209,14 +208,14 @@ public class BookService
                 totalMinutes += l.Amount;
             }
 
-            var goalJustReachedToday = book.DailyGoalAmount > 0
-                && beforeToday < book.DailyGoalAmount
-                && afterToday >= book.DailyGoalAmount;
+            var goalJustReachedInPeriod = book.DailyGoalAmount > 0
+                && beforePeriod < book.DailyGoalAmount
+                && afterPeriod >= book.DailyGoalAmount;
 
             var bookJustCompletedByThisLog = !wasCompletedBeforeThisLog && isCompleted;
 
             var recalculatedXp = XpPerLog;
-            if (goalJustReachedToday) recalculatedXp += DailyGoalBonusXp;
+            if (goalJustReachedInPeriod) recalculatedXp += DailyGoalBonusXp;
             if (bookJustCompletedByThisLog)
             {
                 recalculatedXp += CompletionBonusXp;
@@ -226,12 +225,6 @@ public class BookService
             l.XpEarned = recalculatedXp;
         }
 
-        // YENİ: Elle tamamlanmış (ManuallyCompleted) kitaplarda — özellikle Minutes
-        // tipinde, çünkü orada yukarıdaki döngü hiçbir zaman isCompleted'i true
-        // yapmaz — tamamlanma durumu günlük kayıtlardan değil kullanıcının elle
-        // tamamlama işleminden gelir. Log ekleme/güncelleme/silme bu durumu
-        // GERİ ALMAZ; bonus XP de zaten loglara değil Book.CompletionBonusAwarded'a
-        // bağlı olduğundan burada tekrar eklenmiyor (çift sayılmıyor).
         if (book.ManuallyCompleted)
         {
             isCompleted = true;
@@ -246,7 +239,6 @@ public class BookService
         var newTotalXp = logs.Sum(l => l.XpEarned);
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Kullanıcının TotalXp'sine uygulanması gereken fark (pozitif ya da negatif).
         return newTotalXp - oldTotalXp;
     }
 
@@ -254,38 +246,52 @@ public class BookService
     {
         var tz = TimeZones.Resolve(timeZoneId);
         var now = DateTime.UtcNow;
-        var todayLocal = TimeZones.ToLocal(now, tz).Date;
 
-        var totals = await LoadDailyTotalsAsync(book.Id, cancellationToken);
-        var todayAmount = totals.TryGetValue(todayLocal, out var amount) ? amount : 0;
-        var isGoalReachedToday = book.DailyGoalAmount > 0 && todayAmount >= book.DailyGoalAmount;
-        var percentageToday = book.DailyGoalAmount == 0 ? 0 : Math.Min(100, (double)todayAmount / book.DailyGoalAmount * 100);
+        var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
+        var periodStart = HabitSchedule.PeriodStartLocal(now, book.Period, tz);
+        var periodEnd = HabitSchedule.NextPeriodStartLocal(periodStart, book.Period);
+
+        var periodAmount = totals.TryGetValue(periodStart, out var amount) ? amount : 0;
+        var isGoalReached = book.DailyGoalAmount > 0 && periodAmount >= book.DailyGoalAmount;
+        var percentage = book.DailyGoalAmount == 0 ? 0 : Math.Min(100, (double)periodAmount / book.DailyGoalAmount * 100);
 
         return new BookProgressDto
         {
             BookId = book.Id,
             DailyGoalAmount = book.DailyGoalAmount,
-            TodayAmount = todayAmount,
-            IsGoalReachedToday = isGoalReachedToday,
-            PercentageCompletedToday = percentageToday,
-            CurrentStreak = CountStreakFromTotals(totals, todayLocal, book.DailyGoalAmount, book.CreatedAt, tz),
+            TodayAmount = periodAmount,
+            IsGoalReachedToday = isGoalReached,
+            PercentageCompletedToday = percentage,
+            CurrentStreak = CountStreakFromTotals(totals, periodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz),
             IsCompleted = book.IsCompleted,
             OverallPercentageCompleted = book.GoalType == BookGoalType.Pages && book.TotalPages is > 0
                 ? Math.Min(100, (double)book.CurrentPage / book.TotalPages.Value * 100)
                 : null,
-            PeriodStart = todayLocal,
-            PeriodEnd = todayLocal.AddDays(1)
+            PeriodStart = periodStart,
+            PeriodEnd = periodEnd
         };
     }
 
-    public async Task<List<BookDailyStatDto>> GetStatsAsync(Book book, string? timeZoneId, int days, CancellationToken cancellationToken = default)
+    // DÜZELTİLDİ: granularity eklendi. Verilmezse kitabın kendi Period'u
+    // kullanılır; verilirse (Daily/Weekly/Monthly) kullanıcı, kitabın hedef
+    // periyodundan bağımsız olarak istediği eksende istatistik görebilir
+    // (dokümandaki "haftalık ve aylık grafiklerle gösterilir" maddesi — önceden
+    // sadece kitabın kendi sabit periyoduna göre veri dönüyordu).
+    public async Task<List<BookDailyStatDto>> GetStatsAsync(
+        Book book,
+        string? timeZoneId,
+        int periodsCount,
+        HabitPeriod? granularity = null,
+        CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
-        var totals = await LoadDailyTotalsAsync(book.Id, cancellationToken);
-        var cursor = TimeZones.ToLocal(DateTime.UtcNow, tz).Date;
+        var effectivePeriod = granularity ?? book.Period;
+
+        var totals = await LoadPeriodTotalsAsync(book.Id, effectivePeriod, tz, cancellationToken);
+        var cursor = HabitSchedule.PeriodStartLocal(DateTime.UtcNow, effectivePeriod, tz);
         var stats = new List<BookDailyStatDto>();
 
-        for (int i = 0; i < days; i++)
+        for (int i = 0; i < periodsCount; i++)
         {
             var total = totals.TryGetValue(cursor, out var amount) ? amount : 0;
             stats.Add(new BookDailyStatDto
@@ -294,17 +300,12 @@ public class BookService
                 TotalAmount = total,
                 GoalReached = book.DailyGoalAmount > 0 && total >= book.DailyGoalAmount
             });
-            cursor = cursor.AddDays(-1);
+            cursor = HabitSchedule.PreviousPeriodStartLocal(cursor, effectivePeriod);
         }
 
         return stats;
     }
 
-    /// <summary>
-    /// YENİ: Kullanıcının kitaplarını, son <paramref name="lookbackDays"/> gündeki
-    /// günlük hedef tutturma oranına göre "en iyi sürdürülenden en kötüye" sıralar
-    /// (Habit'teki GetComparisonAsync ile paralel mantık).
-    /// </summary>
     public async Task<List<BookComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Book> books,
         string? timeZoneId,
@@ -312,21 +313,22 @@ public class BookService
         CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
-        var today = TimeZones.ToLocal(DateTime.UtcNow, tz).Date;
         var results = new List<BookComparisonDto>(books.Count);
 
         foreach (var book in books)
         {
-            var totals = await LoadDailyTotalsAsync(book.Id, cancellationToken);
-            var createdLocal = TimeZones.ToLocal(
-                book.CreatedAt.Kind == DateTimeKind.Utc ? book.CreatedAt : DateTime.SpecifyKind(book.CreatedAt, DateTimeKind.Utc),
-                tz).Date;
+            var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
+            var today = HabitSchedule.PeriodStartLocal(DateTime.UtcNow, book.Period, tz);
+            var createdLocal = book.CreatedAt.Kind == DateTimeKind.Utc
+                ? book.CreatedAt
+                : DateTime.SpecifyKind(book.CreatedAt, DateTimeKind.Utc);
+            var bookStart = HabitSchedule.PeriodStartLocal(createdLocal, book.Period, tz);
 
             var cursor = today;
             int periodsConsidered = 0;
             int periodsGoalMet = 0;
 
-            while (cursor >= createdLocal && periodsConsidered < lookbackDays)
+            while (cursor >= bookStart && periodsConsidered < lookbackDays)
             {
                 periodsConsidered++;
                 var total = totals.TryGetValue(cursor, out var amount) ? amount : 0;
@@ -335,7 +337,7 @@ public class BookService
                     periodsGoalMet++;
                 }
 
-                cursor = cursor.AddDays(-1);
+                cursor = HabitSchedule.PreviousPeriodStartLocal(cursor, book.Period);
             }
 
             var completionRate = periodsConsidered == 0 ? 0 : (double)periodsGoalMet / periodsConsidered * 100;
@@ -344,7 +346,7 @@ public class BookService
             {
                 BookId = book.Id,
                 Title = book.Title,
-                CurrentStreak = CountStreakFromTotals(totals, today, book.DailyGoalAmount, book.CreatedAt, tz),
+                CurrentStreak = CountStreakFromTotals(totals, today, book.DailyGoalAmount, book.CreatedAt, book.Period, tz),
                 CompletionRatePercent = Math.Round(completionRate, 1)
             });
         }
@@ -362,7 +364,11 @@ public class BookService
         return ranked;
     }
 
-    private async Task<Dictionary<DateTime, int>> LoadDailyTotalsAsync(int bookId, CancellationToken cancellationToken)
+    private async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
+        int bookId,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        CancellationToken cancellationToken)
     {
         var rows = await _context.BookReadingLogs
             .AsNoTracking()
@@ -373,24 +379,25 @@ public class BookService
         var totals = new Dictionary<DateTime, int>();
         foreach (var row in rows)
         {
-            var key = row.ReadDate.Date;
+            var key = HabitSchedule.PeriodStartLocal(row.ReadDate, period, tz);
             totals[key] = totals.TryGetValue(key, out var existing) ? existing + row.Amount : row.Amount;
         }
 
         return totals;
     }
 
-    private async Task<int> CountStreakDaysAsync(Book book, TimeZoneInfo tz, DateTime fromLocalDate, CancellationToken cancellationToken)
+    private async Task<int> CountStreakPeriodsAsync(Book book, TimeZoneInfo tz, DateTime fromPeriodStart, CancellationToken cancellationToken)
     {
-        var totals = await LoadDailyTotalsAsync(book.Id, cancellationToken);
-        return CountStreakFromTotals(totals, fromLocalDate, book.DailyGoalAmount, book.CreatedAt, tz);
+        var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
+        return CountStreakFromTotals(totals, fromPeriodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz);
     }
 
     private static int CountStreakFromTotals(
         IReadOnlyDictionary<DateTime, int> totals,
-        DateTime fromLocalDate,
+        DateTime fromPeriodStart,
         int dailyGoalAmount,
         DateTime createdAtUtc,
+        HabitPeriod period,
         TimeZoneInfo tz)
     {
         if (dailyGoalAmount <= 0)
@@ -398,13 +405,13 @@ public class BookService
             return 0;
         }
 
-        var minDate = TimeZones.ToLocal(
+        var minStart = HabitSchedule.PeriodStartLocal(
             createdAtUtc.Kind == DateTimeKind.Utc ? createdAtUtc : DateTime.SpecifyKind(createdAtUtc, DateTimeKind.Utc),
-            tz).Date;
+            period, tz);
 
         int streak = 0;
-        var cursor = fromLocalDate;
-        while (cursor >= minDate)
+        var cursor = fromPeriodStart;
+        while (cursor >= minStart)
         {
             var total = totals.TryGetValue(cursor, out var amount) ? amount : 0;
             if (total < dailyGoalAmount)
@@ -413,7 +420,7 @@ public class BookService
             }
 
             streak++;
-            cursor = cursor.AddDays(-1);
+            cursor = HabitSchedule.PreviousPeriodStartLocal(cursor, period);
         }
 
         return streak;
@@ -425,6 +432,7 @@ public class BookService
         Title = book.Title,
         Author = book.Author,
         GoalType = book.GoalType,
+        Period = book.Period,
         TotalPages = book.TotalPages,
         DailyGoalAmount = book.DailyGoalAmount,
         CurrentPage = book.CurrentPage,

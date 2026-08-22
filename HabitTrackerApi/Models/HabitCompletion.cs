@@ -13,4 +13,7 @@ public class HabitCompletion
     public int XpEarned { get; set; }
 
     public int PetStreakBonusXp { get; set; }
+
+  
+    public bool IsOnTime { get; set; }
 }

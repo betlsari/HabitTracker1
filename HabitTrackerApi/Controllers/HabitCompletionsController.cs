@@ -56,14 +56,18 @@ public class HabitCompletionsController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId!);
         var completionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
+        var tz = TimeZones.Resolve(user?.TimeZoneId);
+
+        // YENİ: Habit.TargetTime tanımlıysa, tamamlamanın o saatte/öncesinde
+        // yapılıp yapılmadığı hesaplanır.
+        var isOnTime = IsWithinTargetTime(habit, completionUtc, tz);
+
         var snapshot = await _progressService.GetCompletionSnapshotAsync(
             habit, completionUtc, dto.Amount, user?.TimeZoneId);
 
         var streakKept = snapshot.GoalJustReached && snapshot.PreviousPeriodGoalMet;
-        int xpEarned = _xpService.CalculateCompletionXp(habit, dto.Amount, snapshot.TotalBeforeInPeriod, streakKept);
+        int xpEarned = _xpService.CalculateCompletionXp(habit, dto.Amount, snapshot.TotalBeforeInPeriod, streakKept, isOnTime);
 
-        // YENİ: Streak korunduğunda, habit kategorisi ne olursa olsun kullanıcının
-        // pet'lerine de düz bir bonus XP veriliyor (bkz. PetGrowthService.AddStreakBonusXpAsync).
         int petStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
 
         var newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
@@ -72,7 +76,8 @@ public class HabitCompletionsController : ControllerBase
             CompletionDate = completionUtc,
             Amount = dto.Amount,
             XpEarned = xpEarned,
-            PetStreakBonusXp = petStreakBonus
+            PetStreakBonusXp = petStreakBonus,
+            IsOnTime = isOnTime
         });
 
         if (user != null)
@@ -89,9 +94,6 @@ public class HabitCompletionsController : ControllerBase
             flower = await _flowerService.AddWaterAsync(userId!, dto.Amount);
         }
 
-        // YENİ: Odaklanma/çalışma habit'i tamamlandığında kullanıcının pet(ler)i
-        // doğrudan XP kazanır (bkz. PetGrowthService, dokümandaki "odaklanma süresi
-        // ile hayvan büyütme" özelliği).
         if (HabitCategories.IsFocus(habit.Category) && dto.Amount > 0)
         {
             await _petGrowthService.AddFocusXpAsync(userId!, dto.Amount);
@@ -106,17 +108,13 @@ public class HabitCompletionsController : ControllerBase
 
         if (snapshot.GoalJustReached)
         {
-            var periodLabel = habit.Period switch
-            {
-                HabitPeriod.Weekly => "haftalık",
-                HabitPeriod.Monthly => "aylık",
-                _ => "günlük"
-            };
+            // DÜZELTİLDİ: Sabit tek bir mesaj yerine çeşitlendirilmiş
+            // motivasyon mesajlarından biri rastgele seçiliyor.
             await _notificationService.TryEnqueueAsync(
                 userId!,
                 NotificationTypes.GoalReached,
                 "Hedef tamamlandı",
-                $"{habit.Name} için {periodLabel} hedefini tutturdun. Tebrikler!",
+                MotivationMessages.GoalReached(habit.Name),
                 habit.Id,
                 $"goal:{habit.Id}:{snapshot.PeriodStartLocal:yyyy-MM-dd}");
         }
@@ -144,15 +142,12 @@ public class HabitCompletionsController : ControllerBase
                 HabitId = c.HabitId,
                 CompletionDate = c.CompletionDate,
                 Amount = c.Amount,
-                XpEarned = c.XpEarned
+                XpEarned = c.XpEarned,
+                IsOnTime = c.IsOnTime
             })
             .ToListAsync();
     }
 
-    // DÜZELTİLDİ: Artık Amount/CompletionDate değişikliğinde XP, streak (pet bonus
-    // dahil), flower ve focus/pet etkilerini TAMAMEN yeniden hesaplıyor. Önceden
-    // bu endpoint sadece Amount/CompletionDate güncelliyor, XpEarned alanı bozuk
-    // kalıyordu ve diğer tüm yan etkiler senkron dışı kalıyordu.
     [HttpPut("{id}")]
     public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId, int id, CreateCompletionDto dto)
     {
@@ -193,17 +188,15 @@ public class HabitCompletionsController : ControllerBase
             await _userManager.UpdateAsync(user);
         }
 
-        // 2) Yeni ham değerleri kaydet (totals hesaplamasının DB'den doğru
-        // okunabilmesi için önce bunları persist ediyoruz).
+        // 2) Yeni ham değerleri kaydet.
         completion.Amount = dto.Amount;
         completion.CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
         completion.XpEarned = 0;
         completion.PetStreakBonusXp = 0;
+        completion.IsOnTime = false;
         await _context.SaveChangesAsync();
 
-        // 3) YENİ değerlerle snapshot'ı yeniden hesapla (bu completion'ın kendi
-        // dönemindeki toplam içinde payını çıkararak "bu kayıttan önceki toplam"ı
-        // buluyoruz — Create akışındaki mantıkla tutarlı).
+        // 3) YENİ değerlerle snapshot'ı yeniden hesapla.
         var tz = TimeZones.Resolve(user?.TimeZoneId);
         var periodStart = HabitSchedule.PeriodStartLocalOfCompletion(completion.CompletionDate, habit.Period, tz);
         var totals = await _progressService.LoadPeriodTotalsAsync(habit.Id, habit.Period, tz);
@@ -219,7 +212,10 @@ public class HabitCompletionsController : ControllerBase
             ? HabitProgressService.CountStreak(habit, totals, periodStart, tz)
             : HabitProgressService.CountStreak(habit, totals, HabitSchedule.PeriodStartLocal(DateTime.UtcNow, habit.Period, tz), tz);
 
-        var newXp = _xpService.CalculateCompletionXp(habit, completion.Amount, totalBeforeThis, streakKept);
+        // YENİ: Güncellenen tarih üzerinden TargetTime kontrolü yeniden yapılır.
+        var isOnTime = IsWithinTargetTime(habit, completion.CompletionDate, tz);
+
+        var newXp = _xpService.CalculateCompletionXp(habit, completion.Amount, totalBeforeThis, streakKept, isOnTime);
         var newPetStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
 
         // 4) YENİ etkileri uygula.
@@ -245,6 +241,7 @@ public class HabitCompletionsController : ControllerBase
 
         completion.XpEarned = newXp;
         completion.PetStreakBonusXp = newPetStreakBonus;
+        completion.IsOnTime = isOnTime;
         await _context.SaveChangesAsync();
 
         var snapshot = new CompletionSnapshot
@@ -260,17 +257,11 @@ public class HabitCompletionsController : ControllerBase
 
         if (goalJustReached)
         {
-            var periodLabel = habit.Period switch
-            {
-                HabitPeriod.Weekly => "haftalık",
-                HabitPeriod.Monthly => "aylık",
-                _ => "günlük"
-            };
             await _notificationService.TryEnqueueAsync(
                 userId!,
                 NotificationTypes.GoalReached,
                 "Hedef tamamlandı",
-                $"{habit.Name} için {periodLabel} hedefini tutturdun. Tebrikler!",
+                MotivationMessages.GoalReached(habit.Name),
                 habit.Id,
                 $"goal:{habit.Id}:{periodStart:yyyy-MM-dd}");
         }
@@ -278,9 +269,6 @@ public class HabitCompletionsController : ControllerBase
         return ToDto(completion);
     }
 
-    // DÜZELTİLDİ: Artık kullanıcının TotalXp'sinden (ve varsa pet streak bonusundan)
-    // bu completion'ın kazandırdığı miktar düşülüyor. Önceden sadece flower/pet
-    // focus etkileri geri alınıyor, XP kullanıcıda "sahte" olarak kalıyordu.
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteCompletion(int habitId, int id)
     {
@@ -301,19 +289,16 @@ public class HabitCompletionsController : ControllerBase
             await _flowerService.AddWaterAsync(userId!, -completion.Amount);
         }
 
-        // YENİ: Focus completion silinirse, önceden verilen pet XP'si geri alınır.
         if (HabitCategories.IsFocus(habit.Category) && completion.Amount != 0)
         {
             await _petGrowthService.RemoveFocusXpAsync(userId!, completion.Amount);
         }
 
-        // YENİ: Streak korunduğu için verilmiş pet bonus XP'si de geri alınır.
         if (completion.PetStreakBonusXp > 0)
         {
             await _petGrowthService.RemoveStreakBonusXpAsync(userId!, completion.PetStreakBonusXp);
         }
 
-        // YENİ: Kullanıcının genel TotalXp'sinden bu completion'ın kazandırdığı XP düşülür.
         if (completion.XpEarned != 0)
         {
             var user = await _userManager.FindByIdAsync(userId!);
@@ -329,12 +314,27 @@ public class HabitCompletionsController : ControllerBase
         return NoContent();
     }
 
+    // YENİ: Habit.TargetTime tanımlıysa, verilen tamamlama zamanının (UTC) o
+    // saatte veya öncesinde olup olmadığını kullanıcının yerel saatine göre
+    // kontrol eder. TargetTime tanımlı değilse her zaman false döner.
+    private static bool IsWithinTargetTime(Habit habit, DateTime completionUtc, TimeZoneInfo tz)
+    {
+        if (!habit.TargetTime.HasValue)
+        {
+            return false;
+        }
+
+        var local = TimeZones.ToLocal(completionUtc, tz);
+        return TimeOnly.FromDateTime(local) <= habit.TargetTime.Value;
+    }
+
     private static HabitCompletionDto ToDto(HabitCompletion completion) => new()
     {
         Id = completion.Id,
         HabitId = completion.HabitId,
         CompletionDate = completion.CompletionDate,
         Amount = completion.Amount,
-        XpEarned = completion.XpEarned
+        XpEarned = completion.XpEarned,
+        IsOnTime = completion.IsOnTime
     };
 }

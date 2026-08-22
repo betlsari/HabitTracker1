@@ -12,4 +12,7 @@ public static class NotificationTypes
     
     public const string BookGoalReached = "BookGoalReached";
     public const string BookCompleted = "BookCompleted";
+
+    
+    public const string StreakBroken = "StreakBroken";
 }

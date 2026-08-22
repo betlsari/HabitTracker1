@@ -21,10 +21,16 @@ public class Book
 
     public BookGoalType GoalType { get; set; } = BookGoalType.Pages;
 
+    // YENİ: Doküman "ay veya hafta için belirlediği okuma hedefini ekleyebilir"
+    // diyor; önceden DailyGoalAmount her zaman "gün" bazında yorumlanıyordu.
+    // Artık Habit'teki Period (Daily/Weekly/Monthly) ile aynı enum kullanılarak
+    // DailyGoalAmount'ın hangi dönem için geçerli olduğu ayrıca belirtilebiliyor.
+    public HabitPeriod Period { get; set; } = HabitPeriod.Daily;
+
     // GoalType = Pages ise kitabın toplam sayfa sayısı (ilerleme yüzdesi için opsiyonel)
     public int? TotalPages { get; set; }
 
-    // Günlük/haftalık hedef miktarı (sayfa ya da dakika, GoalType'a göre yorumlanır)
+    // Dönemsel (Period'a göre) hedef miktarı (sayfa ya da dakika, GoalType'a göre yorumlanır)
     public int DailyGoalAmount { get; set; }
 
     public int CurrentPage { get; set; }
