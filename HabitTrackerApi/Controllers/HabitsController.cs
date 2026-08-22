@@ -64,6 +64,14 @@ public class HabitsController : ControllerBase
         };
     }
 
+    [HttpGet("categories")]
+    public ActionResult<IEnumerable<string>> GetAllowedCategories()
+    {
+        // YENİ: İstemcinin hangi kategori değerlerini gönderebileceğini
+        // keşfedebilmesi için (form/dropdown doldurmak amacıyla) eklendi.
+        return Ok(HabitCategories.Allowed);
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<HabitDto>> GetHabit(int id)
     {
@@ -83,6 +91,15 @@ public class HabitsController : ControllerBase
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        // YENİ: Category artık sabit bir whitelist'e karşı doğrulanıyor.
+        // Geçersiz bir değer gönderilirse Su/Kitap/Odaklanma özel davranışları
+        // (çiçek büyütme, pet XP, okuma rozeti) sessizce devre dışı kalmak
+        // yerine istek doğrudan reddediliyor.
+        if (!HabitCategories.IsValid(dto.Category))
+        {
+            return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
+        }
 
         var normalizedName = dto.Name.Trim();
         var habitExist = await _context.Habits.AnyAsync(h =>
@@ -126,6 +143,11 @@ public class HabitsController : ControllerBase
         if (habit == null || habit.UserId != userId)
         {
             return NotFound();
+        }
+
+        if (!HabitCategories.IsValid(dto.Category))
+        {
+            return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
         }
 
         var normalizedName = dto.Name.Trim();
@@ -213,10 +235,6 @@ public class HabitsController : ControllerBase
         return await _progressService.GetProgressAsync(habit, user?.TimeZoneId);
     }
 
-    // DÜZELTİLDİ: granularity (Daily/Weekly/Monthly) parametresi eklendi.
-    // Verilmezse habit'in kendi Period'u kullanılır (önceki davranış). Böylece
-    // örn. haftalık hedefli bir alışkanlık isteğe bağlı olarak günlük veya
-    // aylık eksende de görüntülenebiliyor.
     [HttpGet("{habitId:int}/stats")]
     public async Task<ActionResult<IEnumerable<DailyStatDto>>> GetStats(int habitId, int days = 7, string? granularity = null)
     {

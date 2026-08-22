@@ -32,10 +32,18 @@ public class ReminderBackgroundService : BackgroundService
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
                 var progress = scope.ServiceProvider.GetRequiredService<HabitProgressService>();
+                var bookService = scope.ServiceProvider.GetRequiredService<BookService>();
                 var missedHour = _configuration.GetValue("Notifications:MissedHabitLocalHour", 21);
 
                 await SendRemindersAsync(db, notifications, progress, stoppingToken);
                 await SendMissedAsync(db, notifications, progress, missedHour, stoppingToken);
+
+                // YENİ: Kitaplar için de dönem sonunda hedef tutturulamadığında
+                // missed/streak-broken bildirimi gönderiliyor (habit'lerdeki
+                // SendMissedAsync ile aynı desen). Önceden kitaplarda sadece
+                // reading-log eklenince (goal reached) bildirim gidiyordu;
+                // hiç okumayınca veya seri kırılınca herhangi bir bildirim yoktu.
+                await SendBookMissedAsync(db, notifications, bookService, missedHour, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -94,13 +102,6 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
-    // DÜZELTİLDİ: Önceden dönem sonunda hedef tutturulamadığında her zaman aynı
-    // jenerik "Missed" bildirimi gönderiliyordu — kullanıcının önceden aktif bir
-    // serisi (streak) olup olmadığına hiç bakılmıyordu. Artık bir önceki dönemde
-    // hedef tutturulmuşsa (yani gerçekten bir zincir kırıldıysa) ayrı bir
-    // "StreakBroken" bildirimi, kaç dönemlik zincirin bozulduğunu belirterek
-    // gönderiliyor. Aktif bir seri yoksa (zaten kırılacak bir şey yoksa) eski
-    // jenerik "Missed" bildirimi kullanılmaya devam ediyor.
     private static async Task SendMissedAsync(
         AppDbContext db,
         NotificationService notifications,
@@ -136,8 +137,6 @@ public class ReminderBackgroundService : BackgroundService
                 _ => "günlük"
             };
 
-            // YENİ: Bir önceki dönemde streak var mıydı? Varsa bu, tam olarak
-            // "bozulan bir zincir" demektir.
             var previousPeriodStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, habit.Period);
             var lostStreak = HabitProgressService.CountStreak(habit, totals, previousPeriodStart, tz);
 
@@ -161,6 +160,79 @@ public class ReminderBackgroundService : BackgroundService
                     $"{habit.Name} bu dönem tamamlanmadı. Yarın zinciri yeniden kurabilirsin.",
                     habit.Id,
                     $"missed:{habit.Id}:{keyDate}",
+                    cancellationToken);
+            }
+        }
+    }
+
+    // YENİ: Habit'lerdeki SendMissedAsync'in kitap karşılığı. Bir kitabın
+    // Period'una göre dönem sonu penceresine (missedHour) girildiğinde, o
+    // dönemde DailyGoalAmount tutturulmadıysa:
+    //  - Bir önceki dönemde streak varsa "BookStreakBroken" (zincir koptu),
+    //  - Yoksa "BookMissed" (bu dönem hiç okunmadı/kaçırıldı)
+    // bildirimi gönderilir. Dedup key dönem başlangıcına göre kurulduğundan
+    // aynı dönem için birden fazla bildirim gitmez.
+    private static async Task SendBookMissedAsync(
+        AppDbContext db,
+        NotificationService notifications,
+        BookService bookService,
+        int missedHour,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var books = await db.Books.AsNoTracking()
+            .Include(b => b.User)
+            .Where(b => !b.IsCompleted && b.DailyGoalAmount > 0)
+            .ToListAsync(cancellationToken);
+
+        foreach (var book in books)
+        {
+            var tz = TimeZones.Resolve(book.User?.TimeZoneId);
+            if (!HabitSchedule.IsEndOfPeriodWindow(now, book.Period, tz, missedHour, MinuteTolerance))
+            {
+                continue;
+            }
+
+            var periodStart = HabitSchedule.PeriodStartLocal(now, book.Period, tz);
+            var totals = await bookService.LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
+            var totalInPeriod = totals.TryGetValue(periodStart, out var amount) ? amount : 0;
+            if (totalInPeriod >= book.DailyGoalAmount)
+            {
+                continue;
+            }
+
+            var keyDate = periodStart.ToString("yyyy-MM-dd");
+            var periodLabel = book.Period switch
+            {
+                HabitPeriod.Weekly => "haftalık",
+                HabitPeriod.Monthly => "aylık",
+                _ => "günlük"
+            };
+
+            var previousPeriodStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, book.Period);
+            var lostStreak = BookService.CountStreakFromTotals(
+                totals, previousPeriodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz);
+
+            if (lostStreak > 0)
+            {
+                await notifications.TryEnqueueAsync(
+                    book.UserId,
+                    NotificationTypes.BookStreakBroken,
+                    "Okuma serin bozuldu",
+                    $"{book.Title} için {lostStreak} {periodLabel} okuma zincirin bozuldu. Bugün yeniden başlayabilirsin.",
+                    habitId: null,
+                    dedupKey: $"bookstreakbroken:{book.Id}:{keyDate}",
+                    cancellationToken);
+            }
+            else
+            {
+                await notifications.TryEnqueueAsync(
+                    book.UserId,
+                    NotificationTypes.BookMissed,
+                    "Kaçırılan okuma hedefi",
+                    $"{book.Title} için bu dönem okuma hedefin tamamlanmadı.",
+                    habitId: null,
+                    dedupKey: $"bookmissed:{book.Id}:{keyDate}",
                     cancellationToken);
             }
         }

@@ -11,9 +11,14 @@ public class FlowerService
 
     private readonly AppDbContext _context;
 
-    public FlowerService(AppDbContext context)
+    // YENİ: Çiçek yeni bir evreye (Seed/Seedling/Sprout/Bloom) geçtiğinde
+    // bildirim göndermek için eklendi.
+    private readonly NotificationService _notifications;
+
+    public FlowerService(AppDbContext context, NotificationService notifications)
     {
         _context = context;
+        _notifications = notifications;
     }
 
     public async Task<Flower> GetOrCreateAsync(string userId, CancellationToken cancellationToken = default)
@@ -37,13 +42,38 @@ public class FlowerService
         return flower;
     }
 
+    // DÜZELTİLDİ: Level yükselip yeni bir evreye (StageName değişimi) geçildiğinde
+    // FlowerStageUp bildirimi gönderiliyor. amount negatifse (ör. bir habit
+    // completion'ı silinirken suyun geri alınması) Level artamayacağı için bu
+    // durumda hiçbir bildirim tetiklenmez — koşul zaten "yeni seviye eski
+    // seviyeden büyükse" olduğundan ayrı bir "sadece artışta" bayrağına gerek yok.
     public async Task<Flower> AddWaterAsync(string userId, int amount, CancellationToken cancellationToken = default)
     {
         var flower = await GetOrCreateAsync(userId, cancellationToken);
+        var oldLevel = flower.Level;
+
         flower.WaterAmount = Math.Max(0, flower.WaterAmount + amount);
         flower.Level = flower.WaterAmount / UnitsPerLevel;
         flower.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (flower.Level > oldLevel)
+        {
+            var oldStage = StageName(oldLevel);
+            var newStage = StageName(flower.Level);
+            if (!string.Equals(oldStage, newStage, StringComparison.Ordinal))
+            {
+                await _notifications.TryEnqueueAsync(
+                    userId,
+                    NotificationTypes.FlowerStageUp,
+                    "Çiçeğin büyüdü!",
+                    $"Çiçeğin artık '{newStage}' evresinde.",
+                    habitId: null,
+                    dedupKey: $"flowerstage:{userId}:{flower.Level}",
+                    cancellationToken);
+            }
+        }
+
         return flower;
     }
 

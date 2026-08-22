@@ -86,8 +86,6 @@ public class BooksController : ControllerBase
             Title = dto.Title,
             Author = dto.Author,
             GoalType = dto.GoalType,
-            // YENİ: Kitabın hedef dönemi (Daily/Weekly/Monthly) artık oluşturma
-            // sırasında kaydediliyor.
             Period = dto.Period,
             TotalPages = dto.TotalPages,
             DailyGoalAmount = dto.DailyGoalAmount,
@@ -114,19 +112,19 @@ public class BooksController : ControllerBase
         book.Title = dto.Title;
         book.Author = dto.Author;
         book.GoalType = dto.GoalType;
-        // YENİ: Period de güncellenebiliyor; değişirse RecalculateBookAsync
-        // ilerlemeyi/streak'leri yeni Period'a göre baştan hesaplar.
         book.Period = dto.Period;
         book.TotalPages = dto.TotalPages;
         book.DailyGoalAmount = dto.DailyGoalAmount;
 
         await _context.SaveChangesAsync();
 
-        // GoalType/TotalPages/Period değişmiş olabileceğinden ilerlemeyi yeniden hesapla.
-        var xpDelta = await _bookService.RecalculateBookAsync(book);
+        // DÜZELTİLDİ: kullanıcının gerçek saat dilimi RecalculateBookAsync'e
+        // geçiriliyor (bkz. BookService.RecalculateBookAsync).
+        var user = await _userManager.FindByIdAsync(userId);
+        var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
         if (xpDelta != 0)
         {
-            await ApplyXpDeltaAsync(userId, xpDelta);
+            await ApplyXpDeltaAsync(userId, xpDelta, user);
         }
 
         return BookService.ToDto(book);
@@ -158,8 +156,6 @@ public class BooksController : ControllerBase
             await ApplyXpDeltaAsync(userId, xpEarned);
         }
 
-        // DÜZELTİLDİ: Sabit tek bir mesaj yerine, çeşitlendirilmiş motivasyon
-        // mesajlarından biri rastgele seçiliyor.
         await _notificationService.TryEnqueueAsync(
             userId,
             NotificationTypes.BookCompleted,
@@ -222,11 +218,6 @@ public class BooksController : ControllerBase
 
         await _badgeService.EvaluateAfterBookLogAsync(userId, result.StreakAfterDays);
 
-        // DÜZELTİLDİ: result.GoalJustReachedToday -> result.GoalJustReachedInPeriod
-        // (artık gün değil, kitabın Period'una göre dönem). Dedup key de log
-        // tarihinin günü yerine dönemin gerçek başlangıcına göre kuruluyor,
-        // aksi halde haftalık/aylık hedefte aynı dönem içinde farklı günlerde
-        // birden fazla "hedef tamamlandı" bildirimi gidebilirdi.
         if (result.GoalJustReachedInPeriod)
         {
             var periodKey = result.PeriodStartLocal.ToString("yyyy-MM-dd");
@@ -301,10 +292,11 @@ public class BooksController : ControllerBase
         log.PageReachedAt = dto.PageReachedAt;
         await _context.SaveChangesAsync();
 
-        var xpDelta = await _bookService.RecalculateBookAsync(book);
+        var user = await _userManager.FindByIdAsync(userId);
+        var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
         if (xpDelta != 0)
         {
-            await ApplyXpDeltaAsync(userId, xpDelta);
+            await ApplyXpDeltaAsync(userId, xpDelta, user);
         }
 
         return BookService.ToLogDto(log);
@@ -329,10 +321,11 @@ public class BooksController : ControllerBase
         _context.BookReadingLogs.Remove(log);
         await _context.SaveChangesAsync();
 
-        var xpDelta = await _bookService.RecalculateBookAsync(book);
+        var user = await _userManager.FindByIdAsync(userId);
+        var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
         if (xpDelta != 0)
         {
-            await ApplyXpDeltaAsync(userId, xpDelta);
+            await ApplyXpDeltaAsync(userId, xpDelta, user);
         }
 
         return NoContent();
@@ -353,10 +346,6 @@ public class BooksController : ControllerBase
         return await _bookService.GetProgressAsync(book, user?.TimeZoneId);
     }
 
-    // DÜZELTİLDİ: granularity (Daily/Weekly/Monthly) parametresi eklendi.
-    // Verilmezse kitabın kendi Period'u kullanılır (önceki davranış); verilirse
-    // kitap haftalık hedefli olsa bile günlük eksende, ya da tam tersi
-    // görüntülenebilir.
     [HttpGet("{id:int}/stats")]
     public async Task<ActionResult<IEnumerable<BookDailyStatDto>>> GetStats(int id, int days = 7, string? granularity = null)
     {
@@ -410,9 +399,12 @@ public class BooksController : ControllerBase
         return Ok(result);
     }
 
-    private async Task ApplyXpDeltaAsync(string userId, int xpDelta)
+    // DÜZELTİLDİ: user opsiyonel parametre olarak eklendi — çağıran taraf zaten
+    // UserManager'dan kullanıcıyı çekmişse (timezone için) tekrar sorgu atmaya
+    // gerek kalmıyor. Verilmezse eskisi gibi userId üzerinden çekiliyor.
+    private async Task ApplyXpDeltaAsync(string userId, int xpDelta, User? preloadedUser = null)
     {
-        var user = await _userManager.FindByIdAsync(userId);
+        var user = preloadedUser ?? await _userManager.FindByIdAsync(userId);
         if (user == null)
         {
             return;

@@ -9,10 +9,16 @@ public static class NotificationTypes
 
     public const string PetHatched = "PetHatched";
 
-    
+
     public const string BookGoalReached = "BookGoalReached";
     public const string BookCompleted = "BookCompleted";
 
+    public const string BookMissed = "BookMissed";
+    public const string BookStreakBroken = "BookStreakBroken";
+
     
+    public const string FlowerStageUp = "FlowerStageUp";
+
+
     public const string StreakBroken = "StreakBroken";
 }

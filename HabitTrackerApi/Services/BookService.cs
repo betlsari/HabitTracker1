@@ -10,31 +10,21 @@ public sealed class BookLogResult
     public required BookReadingLog Log { get; init; }
     public int XpEarned { get; init; }
 
-    // DÜZELTİLDİ: "GoalJustReachedToday" -> "GoalJustReachedInPeriod" olarak
-    // yeniden adlandırıldı. Artık kitabın DailyGoalAmount hedefi, sadece "gün"
-    // değil Book.Period'a (Daily/Weekly/Monthly) göre bir dönem için
-    // değerlendiriliyor.
     public bool GoalJustReachedInPeriod { get; init; }
 
     public bool BookJustCompleted { get; init; }
 
-    // Dönemsel hedefin art arda kaç dönemdir (bugün dahil) tutturulduğu.
     public int StreakAfterDays { get; init; }
 
-    // YENİ: Bildirim dedup key'i için bu kaydın ait olduğu dönemin (Period'a
-    // göre) yerel başlangıç tarihi.
     public DateTime PeriodStartLocal { get; init; }
 }
 
 public class BookService
 {
-    // Her okuma kaydı için sabit XP (habit completion'lardaki mantığa paralel)
     private const int XpPerLog = 3;
 
-    // Kitap tamamlandığında ekstra bonus XP.
     public const int CompletionBonusXp = 25;
 
-    // Dönemsel hedef tutturulduğunda ekstra bonus XP (Habit'teki XpBonusForGoal'e paralel)
     private const int DailyGoalBonusXp = 5;
 
     private readonly AppDbContext _context;
@@ -53,10 +43,6 @@ public class BookService
         var tz = TimeZones.Resolve(timeZoneId);
         var readDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
 
-        // DÜZELTİLDİ: Artık "gün" yerine kitabın kendi Period'una (Daily/Weekly/
-        // Monthly) göre dönem başlangıcı kullanılıyor — Habit'teki HabitSchedule
-        // mantığıyla birebir tutarlı. Böylece "ay veya hafta için okuma hedefi"
-        // senaryosu gerçekten desteklenmiş oluyor.
         var periodStart = HabitSchedule.PeriodStartLocal(readDateUtc, book.Period, tz);
 
         var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
@@ -154,8 +140,16 @@ public class BookService
         return xpEarned;
     }
 
-    public async Task<int> RecalculateBookAsync(Book book, CancellationToken cancellationToken = default)
+    // DÜZELTİLDİ: timeZoneId parametresi eklendi. Önceden bu metot her zaman
+    // UTC bazlı dönem sınırları kullanıyordu — AddReadingLogAsync'in kullandığı
+    // gerçek kullanıcı saat dilimiyle tutarsızdı ve haftalık/aylık dönem
+    // sınırlarında ±1 günlük kaymalara (dolayısıyla yanlış XP/streak
+    // hesaplanmasına) yol açabiliyordu. Artık AddReadingLogAsync ile birebir
+    // aynı TimeZones.Resolve + HabitSchedule.PeriodStartLocal akışı kullanılıyor.
+    public async Task<int> RecalculateBookAsync(Book book, string? timeZoneId = null, CancellationToken cancellationToken = default)
     {
+        var tz = TimeZones.Resolve(timeZoneId);
+
         var logs = await _context.BookReadingLogs
             .Where(l => l.BookId == book.Id)
             .OrderBy(l => l.ReadDate)
@@ -169,17 +163,11 @@ public class BookService
         bool isCompleted = false;
         DateTime? completedAt = null;
 
-        // NOT: RecalculateBookAsync'e kullanıcı saat dilimi parametre olarak
-        // geçmiyor (BookReadingLog'lar UTC saklanıyor). Period sınırlarını
-        // hesaplarken burada UTC tabanlı bir gruplama kullanılıyor; bu, kullanıcı
-        // saat dilimine göre dönem sınırında ±1 günlük kaymalara yol açabilir.
-        // Tam doğruluk isteniyorsa bu metoda timeZoneId parametresi eklenip
-        // AddReadingLogAsync'teki gibi TimeZones.Resolve ile gerçek tz kullanılmalı.
         var dailyTotals = new Dictionary<DateTime, int>();
 
         foreach (var l in logs)
         {
-            var periodKey = HabitSchedule.PeriodStartLocal(l.ReadDate, book.Period, TimeZoneInfo.Utc);
+            var periodKey = HabitSchedule.PeriodStartLocal(l.ReadDate, book.Period, tz);
             var beforePeriod = dailyTotals.TryGetValue(periodKey, out var existing) ? existing : 0;
             var afterPeriod = beforePeriod + l.Amount;
             dailyTotals[periodKey] = afterPeriod;
@@ -272,11 +260,6 @@ public class BookService
         };
     }
 
-    // DÜZELTİLDİ: granularity eklendi. Verilmezse kitabın kendi Period'u
-    // kullanılır; verilirse (Daily/Weekly/Monthly) kullanıcı, kitabın hedef
-    // periyodundan bağımsız olarak istediği eksende istatistik görebilir
-    // (dokümandaki "haftalık ve aylık grafiklerle gösterilir" maddesi — önceden
-    // sadece kitabın kendi sabit periyoduna göre veri dönüyordu).
     public async Task<List<BookDailyStatDto>> GetStatsAsync(
         Book book,
         string? timeZoneId,
@@ -364,11 +347,15 @@ public class BookService
         return ranked;
     }
 
-    private async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
+    // DÜZELTİLDİ: public yapıldı — ReminderBackgroundService.SendBookMissedAsync
+    // kitapların dönemsel toplamlarını okuyabilmek için buna ihtiyaç duyuyor
+    // (HabitProgressService.LoadPeriodTotalsAsync'in zaten public olmasıyla
+    // aynı desen).
+    public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int bookId,
         HabitPeriod period,
         TimeZoneInfo tz,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var rows = await _context.BookReadingLogs
             .AsNoTracking()
@@ -392,7 +379,10 @@ public class BookService
         return CountStreakFromTotals(totals, fromPeriodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz);
     }
 
-    private static int CountStreakFromTotals(
+    // DÜZELTİLDİ: public static yapıldı — ReminderBackgroundService'in bir
+    // önceki dönemdeki streak'i (bozulan zincir uzunluğunu) hesaplayabilmesi
+    // için (HabitProgressService.CountStreak ile aynı desen).
+    public static int CountStreakFromTotals(
         IReadOnlyDictionary<DateTime, int> totals,
         DateTime fromPeriodStart,
         int dailyGoalAmount,

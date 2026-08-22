@@ -20,16 +20,24 @@ public class AuthController : ControllerBase
     private readonly SignInManager<User> _signInManager;
     private readonly TokenService _tokenService;
     private readonly EmailService _emailService;
+    private readonly ILogger<AuthController> _logger;
 
     private readonly AppDbContext _context;
 
-    public AuthController(UserManager<User> userManager, SignInManager<User> signInManager, TokenService tokenService, EmailService emailService, AppDbContext context)
+    public AuthController(
+        UserManager<User> userManager,
+        SignInManager<User> signInManager,
+        TokenService tokenService,
+        EmailService emailService,
+        AppDbContext context,
+        ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _tokenService = tokenService;
         _emailService = emailService;
         _context = context;
+        _logger = logger;
     }
 
 
@@ -45,11 +53,26 @@ public class AuthController : ControllerBase
         var result = await _userManager.CreateAsync(user, registerDto.Password);
         if (!result.Succeeded)
         {
+            // DÜZELTİLDİ (email enumeration): Hata sadece "bu email zaten
+            // kayıtlı" (DuplicateUserName/DuplicateEmail) ise, ForgotPassword/
+            // ResendConfirmation'daki gibi generic bir mesaj dönülüyor —
+            // saldırgana hangi email'lerin sistemde kayıtlı olduğu ifşa
+            // edilmiyor. Diğer hatalar (zayıf şifre vb.) hesap varlığı bilgisi
+            // taşımadığından olduğu gibi gösterilmeye devam ediyor.
+            var onlyDuplicateEmailErrors = result.Errors.All(e =>
+                e.Code == nameof(IdentityErrorDescriber.DuplicateUserName) ||
+                e.Code == nameof(IdentityErrorDescriber.DuplicateEmail));
+
+            if (onlyDuplicateEmailErrors)
+            {
+                return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
+            }
+
             return BadRequest(result.Errors);
         }
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailAsync(user.Email, "Email Doğrulama", $"Doğrulama kodunuz: {token}");
-        return Ok(result);
+        return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
     }
 
     [HttpPost("login")]
@@ -109,7 +132,6 @@ public class AuthController : ControllerBase
 
         if (!codeValid)
         {
-            // Kurtarma kodlarını da kabul et (authenticator cihazı kayıpsa).
             var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
             if (!recoveryValid.Succeeded)
             {
@@ -215,29 +237,53 @@ public class AuthController : ControllerBase
         await _userManager.SetTwoFactorEnabledAsync(user, false);
         await _userManager.ResetAuthenticatorKeyAsync(user);
 
-        // YENİ: 2FA kapatmak hesabın koruma seviyesini düşürdüğü için, bu işlemi
-        // gerçekten hesap sahibinin yaptığından emin olunsa da (şifre doğrulandı),
-        // güvenlik hijyeni gereği diğer tüm cihazlardaki refresh token'lar iptal
-        // ediliyor. Access token'lar da ResetAuthenticatorKeyAsync/SetTwoFactorEnabledAsync
-        // SecurityStamp'i değiştirdiği için sstamp kontrolüyle otomatik geçersiz olur.
         await RevokeAllRefreshTokensAsync(user.Id);
 
         return Ok(new { message = "İki adımlı doğrulama devre dışı bırakıldı." });
     }
 
+    // DÜZELTİLDİ: Refresh token reuse (çalınma) tespiti eklendi.
+    // Önceden storedToken == null / süresi dolmuş / zaten RevokedAt dolu
+    // durumlarının hepsi aynı şekilde (sadece Unauthorized) ele alınıyordu.
+    // Ama "token bulundu VE zaten revoke edilmiş" durumu aslında farklı bir
+    // anlam taşır: bu token daha önce bir refresh işleminde kullanılmış ve
+    // yerine yenisi verilmişti. Aynı (artık geçersiz) token'ın TEKRAR
+    // kullanılmaya çalışılması, token'ın çalınmış ve hem saldırgan hem de
+    // gerçek kullanıcı tarafından kullanılıyor olabileceğinin klasik işaretidir
+    // ("refresh token reuse detection"). Bu durumda sadece isteği reddetmek
+    // yetmez — o kullanıcının TÜM refresh token ailesi (tüm aktif oturumlar)
+    // iptal edilir, böylece çalınmış olabilecek diğer token'lar da işe yaramaz
+    // hale gelir ve gerçek kullanıcı tekrar giriş yapmaya zorlanır.
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
     {
-        // DÜZELTİLDİ: Refresh token'lar artık DB'de hash'lenmiş saklanıyor;
-        // gelen ham değer hash'lenip öyle aranıyor (bkz. TokenService.HashToken).
         var hashedIncoming = TokenService.HashToken(refreshTokenDto.RefreshToken);
         var storedToken = await _context.RefreshTokens
-        .Include(rt => rt.User)
-        .FirstOrDefaultAsync(rt => rt.Token == hashedIncoming);
-        if (storedToken == null || storedToken.ExpiresAt < DateTime.UtcNow || storedToken.RevokedAt != null)
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == hashedIncoming);
+
+        if (storedToken == null)
         {
             return Unauthorized();
         }
+
+        if (storedToken.RevokedAt != null)
+        {
+            // Reuse tespit edildi: bu token daha önce zaten kullanılmış
+            // (revoke edilmiş). Olası token hırsızlığı — güvenlik hijyeni
+            // gereği kullanıcının tüm aktif refresh token'ları iptal edilir.
+            var revokedCount = await RevokeAllRefreshTokensAsync(storedToken.UserId);
+            _logger.LogWarning(
+                "Refresh token reuse tespit edildi. UserId={UserId} RevokedTokenCount={RevokedCount}",
+                storedToken.UserId, revokedCount);
+            return Unauthorized("Oturumunuz güvenlik nedeniyle sonlandırıldı. Lütfen tekrar giriş yapın.");
+        }
+
+        if (storedToken.ExpiresAt < DateTime.UtcNow)
+        {
+            return Unauthorized();
+        }
+
         var newToken = _tokenService.GenerateToken(storedToken.User!);
         var newRefreshToken = _tokenService.GenerateRefreshToken();
         storedToken.RevokedAt = DateTime.UtcNow;
@@ -345,10 +391,6 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-        // YENİ: Şifre sıfırlandığında, hesabı ele geçirmiş olabilecek biri
-        // tarafından açılmış tüm oturumlar (refresh token'lar) iptal edilir.
-        // Access token'lar da ResetPasswordAsync'in yenilediği SecurityStamp
-        // sayesinde sstamp kontrolüyle otomatik geçersiz olur.
         await RevokeAllRefreshTokensAsync(user.Id);
 
         return Ok("Şifre başarıyla sıfırlandı.");
@@ -372,11 +414,6 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-        // YENİ: Şifre değiştiğinde tüm refresh token'lar iptal edilir. Access
-        // token'lar da ChangePasswordAsync'in otomatik yenilediği SecurityStamp
-        // sayesinde sstamp kontrolüyle anında geçersiz olur — hesabı ele geçirmiş
-        // biri şifre değiştirilince artık gerçekten dışarı atılmış olur (önceden
-        // JWT süresi dolana kadar, 2 saate kadar, geçerliliğini koruyordu).
         await RevokeAllRefreshTokensAsync(user.Id);
 
         return Ok("Şifre başarıyla değiştirildi.");
@@ -442,17 +479,12 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }
 
-    // Login ve 2fa/login uç noktalarında tekrarlanan token+refresh token
-    // üretme/kaydetme mantığını tek yerde topluyor.
     private async Task<(string AccessToken, string RefreshToken)> IssueTokensAsync(User user)
     {
         var token = _tokenService.GenerateToken(user);
         var refreshToken = _tokenService.GenerateRefreshToken();
         _context.RefreshTokens.Add(new RefreshToken
         {
-            // DÜZELTİLDİ: Ham değer yerine hash saklanıyor; DB sızıntısında
-            // token'lar doğrudan kullanılamaz. İstemciye dönen değer (refreshToken)
-            // hiçbir zaman veritabanına yazılmıyor.
             Token = TokenService.HashToken(refreshToken),
             UserId = user.Id,
             CreatedAt = DateTime.UtcNow,
@@ -463,9 +495,6 @@ public class AuthController : ControllerBase
         return (token, refreshToken);
     }
 
-    // YENİ: change-password, reset-password, 2fa/disable ve logout-all
-    // arasında tekrarlanan "kullanıcının tüm aktif refresh token'larını iptal
-    // et" mantığını tek yerde topluyor. Revoke edilen token sayısını döner.
     private async Task<int> RevokeAllRefreshTokensAsync(string userId)
     {
         var activeTokens = await _context.RefreshTokens

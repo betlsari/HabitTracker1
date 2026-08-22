@@ -20,6 +20,11 @@ public class PetsController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly NotificationService _notificationService;
 
+    // YENİ: Kullanıcı başına maksimum pet sayısı. Önceden hiçbir üst sınır
+    // yoktu; eggCost sadece XP maliyeti getiriyordu ama teorik olarak kullanıcı
+    // XP'si yettiği sürece sınırsız pet biriktirebiliyordu.
+    private const int MaxPetsPerUser = 5;
+
     public PetsController(AppDbContext context, UserManager<User> userManager, NotificationService notificationService)
     {
         _context = context;
@@ -27,9 +32,6 @@ public class PetsController : ControllerBase
         _notificationService = notificationService;
     }
 
-    // DÜZELTİLDİ: Sayfalama eklendi. Önceden kullanıcının tüm pet'leri tek
-    // seferde dönüyordu. page/pageSize opsiyonel — verilmezse page=1,
-    // pageSize=50 kullanılır (Habits/Books/Notifications ile tutarlı).
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<PetDto>>> GetPets(int page = 1, int pageSize = 50)
     {
@@ -61,16 +63,20 @@ public class PetsController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        // DÜZELTİLDİ: Type artık dokümanda belirtilen sabit seçeneklerle
-        // sınırlandırılıyor (kedi, köpek, panda, tavşan). Önceden herhangi
-        // bir string kabul ediliyordu.
         if (!PetTypes.IsValid(dto.Type))
         {
             return BadRequest($"Geçersiz evcil hayvan türü. İzin verilen türler: {string.Join(", ", PetTypes.Allowed)}");
         }
 
-        var hasExistingPet = await _context.Pets.AnyAsync(p => p.UserId == userId);
-        if (hasExistingPet)
+        var existingPetCount = await _context.Pets.CountAsync(p => p.UserId == userId);
+
+        // YENİ: Üst sınır kontrolü.
+        if (existingPetCount >= MaxPetsPerUser)
+        {
+            return BadRequest($"En fazla {MaxPetsPerUser} evcil hayvana sahip olabilirsiniz.");
+        }
+
+        if (existingPetCount > 0)
         {
             const int eggCost = 50;
             var user = await _userManager.FindByIdAsync(userId);
@@ -82,9 +88,6 @@ public class PetsController : ControllerBase
             await _userManager.UpdateAsync(user);
         }
 
-        // YENİ: Pet, önce yumurta aşamasında oluşturulur (dokümandaki "kullanıcı
-        // başlangıçta yumurta seçer" akışı). Level 0'da kalır ve Mood "Egg"
-        // olarak sabitlenir; PetHatching.HatchXpThreshold XP'ye ulaşınca açılır.
         var pet = new Pet
         {
             Type = dto.Type,
@@ -127,7 +130,6 @@ public class PetsController : ControllerBase
 
         pet.Xp += petXpGain;
 
-        // YENİ: Hâlâ yumurtaysa Level artmaz; sadece hatch eşiğine yaklaşılır.
         var justHatched = PetHatching.TryHatch(pet);
         if (pet.Stage == PetStage.Hatched)
         {
@@ -162,9 +164,6 @@ public class PetsController : ControllerBase
         return ToDto(pet);
     }
 
-    // YENİ: pet güncelleme (şu an için takma isim). Type ve Mood bilinçli
-    // olarak buradan değiştirilemiyor: Type sabit kalmalı, Mood ise sistem
-    // tarafından (PetMoodService) otomatik hesaplanıyor.
     [HttpPut("{id}")]
     public async Task<ActionResult<PetDto>> UpdatePet(int id, UpdatePetDto dto)
     {
