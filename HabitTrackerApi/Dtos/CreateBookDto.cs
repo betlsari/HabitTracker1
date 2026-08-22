@@ -5,6 +5,8 @@ namespace Dtos;
 
 public class CreateBookDto : IValidatableObject
 {
+    public const int MaxGoalAmount = 100_000;
+    public const int MaxTotalPages = 1_000_000;
     [MinLength(1)]
     public string Title { get; set; } = string.Empty;
 
@@ -16,10 +18,10 @@ public class CreateBookDto : IValidatableObject
     // Verilmezse Daily (önceki davranışla tam uyumlu) kullanılır.
     public HabitPeriod Period { get; set; } = HabitPeriod.Daily;
 
-    [Range(1, int.MaxValue)]
+    [Range(1, MaxGoalAmount)]
     public int DailyGoalAmount { get; set; }
 
-    [Range(1, int.MaxValue)]
+    [Range(1, MaxTotalPages)]
     public int? TotalPages { get; set; }
 
    

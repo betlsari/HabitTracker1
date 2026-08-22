@@ -277,3 +277,9 @@ C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.IdentityModel.Tokens.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\System.IdentityModel.Tokens.Jwt.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\appsettings.Production.json
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.Abstractions.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.FileProviders.Abstractions.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Hosting.Abstractions.dll

@@ -357,20 +357,29 @@ public class BookService
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _context.BookReadingLogs
-            .AsNoTracking()
-            .Where(l => l.BookId == bookId)
-            .Select(l => new { l.ReadDate, l.Amount })
-            .ToListAsync(cancellationToken);
+        var rows = await _context.Database.SqlQuery<PeriodTotal>($"""
+            SELECT date_trunc({GetDateTruncUnit(period)}, "ReadDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
+                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
+            FROM "BookReadingLogs"
+            WHERE "BookId" = {bookId}
+            GROUP BY 1
+            """).ToListAsync(cancellationToken);
 
-        var totals = new Dictionary<DateTime, int>();
-        foreach (var row in rows)
-        {
-            var key = HabitSchedule.PeriodStartLocal(row.ReadDate, period, tz);
-            totals[key] = totals.TryGetValue(key, out var existing) ? existing + row.Amount : row.Amount;
-        }
+        return rows.ToDictionary(row => row.PeriodStart, row => row.Total);
+    }
 
-        return totals;
+    private static string GetDateTruncUnit(HabitPeriod period) => period switch
+    {
+        HabitPeriod.Daily => "day",
+        HabitPeriod.Weekly => "week",
+        HabitPeriod.Monthly => "month",
+        _ => throw new ArgumentOutOfRangeException(nameof(period))
+    };
+
+    private sealed class PeriodTotal
+    {
+        public DateTime PeriodStart { get; init; }
+        public int Total { get; init; }
     }
 
     private async Task<int> CountStreakPeriodsAsync(Book book, TimeZoneInfo tz, DateTime fromPeriodStart, CancellationToken cancellationToken)

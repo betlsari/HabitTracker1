@@ -9,7 +9,7 @@ public enum BookGoalType
     Minutes = 1
 }
 
-public class Book
+public class Book : IHasConcurrencyToken
 {
     public int Id { get; set; }
 
@@ -48,4 +48,6 @@ public class Book
     public bool CompletionBonusAwarded { get; set; }
 
     public List<BookReadingLog> ReadingLogs { get; set; } = new();
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

@@ -15,6 +15,9 @@ namespace Controllers;
 [Authorize]
 public class HabitsController : ControllerBase
 {
+    private const int MaxHabitsPerUser = 100;
+    private const int MaxStatsPeriods = 366;
+    private const int MaxComparisonPeriods = 366;
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly XpService _xpService;
@@ -91,6 +94,11 @@ public class HabitsController : ControllerBase
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        if (await _context.Habits.CountAsync(h => h.UserId == userId) >= MaxHabitsPerUser)
+        {
+            return Conflict($"En fazla {MaxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
+        }
 
         // YENİ: Category artık sabit bir whitelist'e karşı doğrulanıyor.
         // Geçersiz bir değer gönderilirse Su/Kitap/Odaklanma özel davranışları
@@ -247,9 +255,9 @@ public class HabitsController : ControllerBase
             return NotFound();
         }
 
-        if (days <= 0)
+        if (days is <= 0 or > MaxStatsPeriods)
         {
-            return BadRequest("days parametresi 1 veya daha büyük olmalıdır.");
+            return BadRequest($"days parametresi 1 ile {MaxStatsPeriods} arasında olmalıdır.");
         }
 
         HabitPeriod? parsedGranularity = null;
@@ -283,9 +291,9 @@ public class HabitsController : ControllerBase
     [HttpGet("comparison")]
     public async Task<ActionResult<IEnumerable<HabitComparisonDto>>> GetComparison(int lookbackPeriods = 30)
     {
-        if (lookbackPeriods <= 0)
+        if (lookbackPeriods is <= 0 or > MaxComparisonPeriods)
         {
-            return BadRequest("lookbackPeriods parametresi 1 veya daha büyük olmalıdır.");
+            return BadRequest($"lookbackPeriods parametresi 1 ile {MaxComparisonPeriods} arasında olmalıdır.");
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

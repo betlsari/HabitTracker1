@@ -15,6 +15,9 @@ namespace Controllers;
 [Authorize]
 public class BooksController : ControllerBase
 {
+    private const int MaxBooksPerUser = 200;
+    private const int MaxStatsPeriods = 366;
+    private const int MaxComparisonPeriods = 366;
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly BookService _bookService;
@@ -80,6 +83,11 @@ public class BooksController : ControllerBase
     public async Task<ActionResult<BookDto>> CreateBook(CreateBookDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        if (await _context.Books.CountAsync(b => b.UserId == userId) >= MaxBooksPerUser)
+        {
+            return Conflict($"En fazla {MaxBooksPerUser} kitap oluşturabilirsiniz.");
+        }
 
         var book = new Book
         {
@@ -200,6 +208,11 @@ public class BooksController : ControllerBase
     [HttpPost("{id:int}/reading-logs")]
     public async Task<ActionResult<BookReadingLogDto>> LogReading(int id, LogReadingDto dto)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<BookReadingLogDto>>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -241,7 +254,9 @@ public class BooksController : ControllerBase
                 dedupKey: $"bookcompleted:{book.Id}");
         }
 
+        await transaction.CommitAsync();
         return BookService.ToLogDto(result.Log);
+        });
     }
 
     [HttpGet("{id:int}/reading-logs")]
@@ -349,9 +364,9 @@ public class BooksController : ControllerBase
     [HttpGet("{id:int}/stats")]
     public async Task<ActionResult<IEnumerable<BookDailyStatDto>>> GetStats(int id, int days = 7, string? granularity = null)
     {
-        if (days <= 0)
+        if (days is <= 0 or > MaxStatsPeriods)
         {
-            return BadRequest("days parametresi 1 veya daha büyük olmalıdır.");
+            return BadRequest($"days parametresi 1 ile {MaxStatsPeriods} arasında olmalıdır.");
         }
 
         HabitPeriod? parsedGranularity = null;
@@ -379,9 +394,9 @@ public class BooksController : ControllerBase
     [HttpGet("comparison")]
     public async Task<ActionResult<IEnumerable<BookComparisonDto>>> GetComparison(int lookbackDays = 30)
     {
-        if (lookbackDays <= 0)
+        if (lookbackDays is <= 0 or > MaxComparisonPeriods)
         {
-            return BadRequest("lookbackDays parametresi 1 veya daha büyük olmalıdır.");
+            return BadRequest($"lookbackDays parametresi 1 ile {MaxComparisonPeriods} arasında olmalıdır.");
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;

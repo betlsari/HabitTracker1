@@ -5,9 +5,10 @@ namespace Dtos;
 
 public class CreateHabitDto
 {
+    public const int MaxDailyGoal = 100_000;
     [MinLength(1)]
     public string Name { get; set; } = string.Empty;
-    [Range(1, int.MaxValue)]
+    [Range(1, MaxDailyGoal)]
     public int DailyGoal { get; set; }
     [MinLength(1)]
     public string Category { get; set; } = string.Empty;

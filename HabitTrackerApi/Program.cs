@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using System.Security.Claims;
+using Configuration;
+using Microsoft.AspNetCore.HttpLogging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,10 +49,24 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
 
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database");
+
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .Validate(options => Encoding.UTF8.GetByteCount(options.Key) >= 32,
+        "Jwt:Key en az 32 byte uzunluğunda olmalıdır.")
+    .ValidateOnStart();
+
+builder.Services.AddHttpLogging(options =>
+{
+    options.LoggingFields = HttpLoggingFields.RequestProperties | HttpLoggingFields.ResponseStatusCode | HttpLoggingFields.Duration;
+});
 
 builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
 {
@@ -61,12 +77,12 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     options.Lockout.AllowedForNewUsers = true;
 
 
-    options.Password.RequiredLength = 6;
-    options.Password.RequireDigit = false;
-    options.Password.RequireLowercase = false;
-    options.Password.RequireUppercase = false;
+    options.Password.RequiredLength = 12;
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
     options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequiredUniqueChars = 0;
+    options.Password.RequiredUniqueChars = 4;
 })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
@@ -195,6 +211,7 @@ builder.Services.AddHttpClient(nameof(FcmPushNotificationSender));
 builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<AuthAuditService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<XpService>();
 builder.Services.AddScoped<HabitProgressService>();
@@ -218,6 +235,16 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 app.UseExceptionHandler();
+app.Use(async (context, next) =>
+{
+    var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N");
+    context.Response.Headers["X-Correlation-ID"] = correlationId;
+    using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
+    {
+        await next();
+    }
+});
+app.UseHttpLogging();
 
 
 if (app.Environment.IsDevelopment())
@@ -241,3 +268,5 @@ app.MapHealthChecks("/health");
 
 
 app.Run();
+
+public partial class Program;

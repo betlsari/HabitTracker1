@@ -2,12 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Models;
 
-public class Habit
+public class Habit : IHasConcurrencyToken
 {
     public int Id { get; set; }
     [MinLength(1)]
     public string Name { get; set; } = string.Empty;
-    [Range(1, int.MaxValue)]
+    [Range(1, CreateHabitDto.MaxDailyGoal)]
     public int DailyGoal { get; set; }
     [MinLength(1)]
     public required string Category { get; set; }
@@ -28,4 +28,6 @@ public class Habit
     public TimeOnly? TargetTime { get; set; }
 
     public TimeOnly? ReminderTime { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

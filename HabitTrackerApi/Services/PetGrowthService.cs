@@ -35,7 +35,7 @@ public class PetGrowthService
             return pets;
         }
 
-        var xpGain = minutes * XpPerFocusMinute;
+        var xpGain = checked(minutes * XpPerFocusMinute);
         return await ApplyXpGainAsync(userId, pets, xpGain, cancellationToken);
     }
 

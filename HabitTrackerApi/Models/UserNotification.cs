@@ -1,6 +1,6 @@
 namespace Models;
 
-public class UserNotification
+public class UserNotification : IHasConcurrencyToken
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -12,4 +12,6 @@ public class UserNotification
     public bool IsRead { get; set; }
     public required string DedupKey { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

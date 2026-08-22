@@ -182,20 +182,29 @@ public class HabitProgressService
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _context.HabitCompletions
-            .AsNoTracking()
-            .Where(c => c.HabitId == habitId)
-            .Select(c => new { c.CompletionDate, c.Amount })
-            .ToListAsync(cancellationToken);
+        var rows = await _context.Database.SqlQuery<PeriodTotal>($"""
+            SELECT date_trunc({GetDateTruncUnit(period)}, "CompletionDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
+                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
+            FROM "HabitCompletions"
+            WHERE "HabitId" = {habitId}
+            GROUP BY 1
+            """).ToListAsync(cancellationToken);
 
-        var totals = new Dictionary<DateTime, int>();
-        foreach (var row in rows)
-        {
-            var key = HabitSchedule.PeriodStartLocalOfCompletion(row.CompletionDate, period, tz);
-            totals[key] = totals.TryGetValue(key, out var existing) ? existing + row.Amount : row.Amount;
-        }
+        return rows.ToDictionary(row => row.PeriodStart, row => row.Total);
+    }
 
-        return totals;
+    private static string GetDateTruncUnit(HabitPeriod period) => period switch
+    {
+        HabitPeriod.Daily => "day",
+        HabitPeriod.Weekly => "week",
+        HabitPeriod.Monthly => "month",
+        _ => throw new ArgumentOutOfRangeException(nameof(period))
+    };
+
+    private sealed class PeriodTotal
+    {
+        public DateTime PeriodStart { get; init; }
+        public int Total { get; init; }
     }
 
     private static HabitProgressDto BuildProgress(

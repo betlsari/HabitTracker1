@@ -4,9 +4,10 @@ namespace Dtos;
 
 public class CreateCompletionDto : IValidatableObject
 {
+    public const int MaxAmount = 10_000;
     public DateTime CompletionDate { get; set; }
 
-    [Range(0, int.MaxValue)]
+    [Range(0, MaxAmount)]
     public int Amount { get; set; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

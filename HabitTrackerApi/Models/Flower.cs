@@ -1,6 +1,6 @@
 namespace Models;
 
-public class Flower
+public class Flower : IHasConcurrencyToken
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -11,4 +11,6 @@ public class Flower
     public int Level { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

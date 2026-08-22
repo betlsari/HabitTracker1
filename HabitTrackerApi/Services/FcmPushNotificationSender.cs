@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Services;
 
@@ -23,15 +25,18 @@ public class FcmPushNotificationSender : IPushNotificationSender
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly FcmAccessTokenProvider _tokenProvider;
     private readonly ILogger<FcmPushNotificationSender> _logger;
+    private readonly AppDbContext _context;
 
     public FcmPushNotificationSender(
         IHttpClientFactory httpClientFactory,
         FcmAccessTokenProvider tokenProvider,
-        ILogger<FcmPushNotificationSender> logger)
+        ILogger<FcmPushNotificationSender> logger,
+        AppDbContext context)
     {
         _httpClientFactory = httpClientFactory;
         _tokenProvider = tokenProvider;
         _logger = logger;
+        _context = context;
     }
 
     public async Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
@@ -85,12 +90,15 @@ public class FcmPushNotificationSender : IPushNotificationSender
                 {
                     var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     var errorCode = TryExtractFcmErrorCode(errorBody);
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound ||
+                        string.Equals(errorCode, "UNREGISTERED", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var removed = await _context.DeviceTokens
+                            .Where(t => t.Token == token)
+                            .ExecuteDeleteAsync(cancellationToken);
+                        _logger.LogInformation("Geçersiz FCM token temizlendi. Removed={Removed}", removed);
+                    }
 
-                    // UNREGISTERED / NOT_FOUND: cihaz token'ı artık geçersiz
-                    // (uygulama kaldırılmış/token yenilenmiş). Bu durumda
-                    // DeviceTokens tablosundan temizlemek ayrı bir iyileştirme
-                    // konusudur (bkz. proje incelemesindeki madde 13); burada
-                    // sadece bilgi amaçlı logluyoruz.
                     _logger.LogWarning(
                         "FCM gönderimi başarısız. Status={Status} ErrorCode={ErrorCode} Body={Body}",
                         response.StatusCode, errorCode, errorBody);

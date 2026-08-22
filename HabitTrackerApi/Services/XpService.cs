@@ -26,25 +26,25 @@ public class XpService
         bool streakKept,
         bool isOnTime = false)
     {
-        int totalAfterThisCompletion = totalBeforeThisCompletion + amount;
-        int xpEarned = amount * habit.XpPerUnit;
+        int totalAfterThisCompletion = checked(totalBeforeThisCompletion + amount);
+        int xpEarned = checked(amount * habit.XpPerUnit);
 
         bool goalJustReached = totalBeforeThisCompletion < habit.DailyGoal
             && totalAfterThisCompletion >= habit.DailyGoal;
 
         if (goalJustReached)
         {
-            xpEarned += habit.XpBonusForGoal;
+            xpEarned = checked(xpEarned + habit.XpBonusForGoal);
             if (streakKept)
             {
-                xpEarned += StreakKeepBonus;
+                xpEarned = checked(xpEarned + StreakKeepBonus);
             }
         }
 
        
         if (habit.TargetTime.HasValue && isOnTime)
         {
-            xpEarned += TargetTimeBonus;
+            xpEarned = checked(xpEarned + TargetTimeBonus);
         }
 
         return xpEarned;

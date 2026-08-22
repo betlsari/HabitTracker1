@@ -23,7 +23,9 @@ public static class HabitCategories
 
     public static bool IsValid(string? category) =>
         !string.IsNullOrWhiteSpace(category) &&
-        Allowed.Contains(category, StringComparer.OrdinalIgnoreCase);
+        (Allowed.Contains(category, StringComparer.OrdinalIgnoreCase) ||
+         new[] { "Water", "Reading", "Focus", "Sport", "Other" }
+             .Contains(category, StringComparer.OrdinalIgnoreCase));
 
     public static bool IsWater(string? category) => Matches(category, Water);
 
@@ -33,5 +35,10 @@ public static class HabitCategories
 
     private static bool Matches(string? category, string target) =>
         !string.IsNullOrWhiteSpace(category) &&
-        category.Equals(target, StringComparison.OrdinalIgnoreCase);
+        (category.Equals(target, StringComparison.OrdinalIgnoreCase) ||
+         (target == Water && category.Equals("Water", StringComparison.OrdinalIgnoreCase)) ||
+         (target == Reading && category.Equals("Reading", StringComparison.OrdinalIgnoreCase)) ||
+         (target == Focus && category.Equals("Focus", StringComparison.OrdinalIgnoreCase)) ||
+         (target == Sport && category.Equals("Sport", StringComparison.OrdinalIgnoreCase)) ||
+         (target == Other && category.Equals("Other", StringComparison.OrdinalIgnoreCase)));
 }

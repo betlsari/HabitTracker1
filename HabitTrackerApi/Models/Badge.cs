@@ -8,7 +8,7 @@ public class Badge
     public required string Description { get; set; }
 }
 
-public class UserBadge
+public class UserBadge : IHasConcurrencyToken
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -16,4 +16,6 @@ public class UserBadge
     public int BadgeId { get; set; }
     public Badge? Badge { get; set; }
     public DateTime EarnedAt { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

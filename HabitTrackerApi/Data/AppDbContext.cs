@@ -33,6 +33,8 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<BookReadingLog> BookReadingLogs { get; set; }
 
+    public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -99,10 +101,17 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<AuthAuditEvent>(entity =>
+        {
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+            entity.HasIndex(e => new { e.Email, e.CreatedAt });
+        });
+
         // YENİ: Book / BookReadingLog ilişkileri
         builder.Entity<Book>(entity =>
         {
             entity.HasIndex(b => b.UserId);
+            entity.HasIndex(b => b.CreatedAt);
             entity.HasOne(b => b.User)
                 .WithMany(u => u.Books)
                 .HasForeignKey(b => b.UserId)
@@ -111,11 +120,55 @@ public class AppDbContext : IdentityDbContext<User>
 
         builder.Entity<BookReadingLog>(entity =>
         {
-            entity.HasIndex(l => l.BookId);
+            entity.HasIndex(l => new { l.BookId, l.ReadDate });
+            entity.HasIndex(l => l.ReadDate);
             entity.HasOne(l => l.Book)
                 .WithMany(b => b.ReadingLogs)
                 .HasForeignKey(l => l.BookId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        builder.Entity<HabitCompletion>(entity =>
+        {
+            entity.HasIndex(c => new { c.HabitId, c.CompletionDate });
+            entity.HasIndex(c => c.CompletionDate);
+        });
+
+        builder.Entity<Pet>(entity => entity.HasIndex(p => p.CreatedAt));
+
+        foreach (var entityType in builder.Model.GetEntityTypes()
+                     .Where(t => typeof(IHasConcurrencyToken).IsAssignableFrom(t.ClrType)))
+        {
+            builder.Entity(entityType.ClrType)
+                .Property<Guid>(nameof(IHasConcurrencyToken.ConcurrencyToken))
+                .IsConcurrencyToken();
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        SetConcurrencyTokens();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        SetConcurrencyTokens();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void SetConcurrencyTokens()
+    {
+        foreach (var entry in ChangeTracker.Entries<IHasConcurrencyToken>())
+        {
+            if (entry.State == EntityState.Added && entry.Entity.ConcurrencyToken == Guid.Empty)
+            {
+                entry.Entity.ConcurrencyToken = Guid.NewGuid();
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.ConcurrencyToken = Guid.NewGuid();
+            }
+        }
     }
 }

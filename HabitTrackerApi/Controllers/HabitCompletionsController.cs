@@ -47,6 +47,11 @@ public class HabitCompletionsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, CreateCompletionDto dto)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<HabitCompletionDto>>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
         var habit = await _context.Habits.FindAsync(habitId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (habit == null || habit.UserId != userId)
@@ -79,6 +84,10 @@ public class HabitCompletionsController : ControllerBase
             PetStreakBonusXp = petStreakBonus,
             IsOnTime = isOnTime
         });
+
+        // A completion changes period totals. Touching the aggregate root makes
+        // competing completions observe the optimistic concurrency token too.
+        _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
         if (user != null)
         {
@@ -119,7 +128,9 @@ public class HabitCompletionsController : ControllerBase
                 $"goal:{habit.Id}:{snapshot.PeriodStartLocal:yyyy-MM-dd}");
         }
 
+        await transaction.CommitAsync();
         return ToDto(newHabitCompletion.Entity);
+        });
     }
 
     [HttpGet]

@@ -20,6 +20,7 @@ public class AuthController : ControllerBase
     private readonly SignInManager<User> _signInManager;
     private readonly TokenService _tokenService;
     private readonly EmailService _emailService;
+    private readonly AuthAuditService _authAudit;
     private readonly ILogger<AuthController> _logger;
 
     private readonly AppDbContext _context;
@@ -29,6 +30,7 @@ public class AuthController : ControllerBase
         SignInManager<User> signInManager,
         TokenService tokenService,
         EmailService emailService,
+        AuthAuditService authAudit,
         AppDbContext context,
         ILogger<AuthController> logger)
     {
@@ -36,6 +38,7 @@ public class AuthController : ControllerBase
         _signInManager = signInManager;
         _tokenService = tokenService;
         _emailService = emailService;
+        _authAudit = authAudit;
         _context = context;
         _logger = logger;
     }
@@ -81,6 +84,7 @@ public class AuthController : ControllerBase
         var user = await _userManager.FindByEmailAsync(loginDto.Email);
         if (user == null)
         {
+            await _authAudit.RecordAsync(HttpContext, "login", false, email: loginDto.Email, detail: "unknown-user");
             return Unauthorized();
         }
         var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
@@ -88,17 +92,21 @@ public class AuthController : ControllerBase
         {
             if (result.IsNotAllowed)
             {
+                await _authAudit.RecordAsync(HttpContext, "login", false, user, detail: "email-not-confirmed");
                 return BadRequest("Email adresiniz doğrulanmamış. Lütfen email adresinizi doğrulayın.");
             }
             if (result.IsLockedOut)
             {
+                await _authAudit.RecordAsync(HttpContext, "login-lockout", false, user, detail: "lockout");
                 return BadRequest("Çok fazla başarısız giriş denemesi. Hesabınız geçici olarak kilitlendi, lütfen daha sonra tekrar deneyin.");
             }
+            await _authAudit.RecordAsync(HttpContext, "login", false, user, detail: "invalid-password");
             return Unauthorized();
         }
 
         if (await _userManager.GetTwoFactorEnabledAsync(user))
         {
+            await _authAudit.RecordAsync(HttpContext, "login-password", true, user, detail: "two-factor-required");
             var preAuthToken = _tokenService.GeneratePreAuthToken(user);
             return Ok(new
             {
@@ -108,6 +116,7 @@ public class AuthController : ControllerBase
         }
 
         var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
+        await _authAudit.RecordAsync(HttpContext, "login", true, user);
         return Ok(new { RequiresTwoFactor = false, Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
@@ -118,12 +127,14 @@ public class AuthController : ControllerBase
         var userId = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
         if (userId == null)
         {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, detail: "invalid-preauth-token");
             return Unauthorized("Oturum süresi dolmuş veya geçersiz. Lütfen tekrar giriş yapın.");
         }
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null || !await _userManager.GetTwoFactorEnabledAsync(user))
         {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "two-factor-not-enabled");
             return Unauthorized();
         }
 
@@ -135,11 +146,13 @@ public class AuthController : ControllerBase
             var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
             if (!recoveryValid.Succeeded)
             {
+                await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "invalid-code");
                 return BadRequest("Doğrulama kodu hatalı.");
             }
         }
 
         var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
+        await _authAudit.RecordAsync(HttpContext, "two-factor-login", true, user);
         return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
@@ -293,7 +306,9 @@ public class AuthController : ControllerBase
             UserId = storedToken.UserId,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
-            RevokedAt = null
+            RevokedAt = null,
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
         });
         await _context.SaveChangesAsync();
         return Ok(new { Token = newToken, RefreshToken = newRefreshToken });
@@ -331,6 +346,75 @@ public class AuthController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var revokedCount = await RevokeAllRefreshTokensAsync(userId);
         return Ok(new { message = "Tüm oturumlar kapatıldı.", revokedCount });
+    }
+
+    [HttpGet("sessions")]
+    [Authorize]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> GetSessions()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        return await _context.RefreshTokens.AsNoTracking()
+            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => new SessionDto
+            {
+                Id = t.Id, CreatedAt = t.CreatedAt, ExpiresAt = t.ExpiresAt,
+                IpAddress = t.IpAddress, UserAgent = t.UserAgent
+            })
+            .ToListAsync();
+    }
+
+    [HttpDelete("sessions/{sessionId:int}")]
+    [Authorize]
+    public async Task<IActionResult> RevokeSession(int sessionId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var session = await _context.RefreshTokens
+            .FirstOrDefaultAsync(t => t.Id == sessionId && t.UserId == userId);
+        if (session == null)
+        {
+            return NotFound();
+        }
+
+        if (session.RevokedAt == null)
+        {
+            session.RevokedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+        return NoContent();
+    }
+
+    [HttpPost("email-change")]
+    [Authorize]
+    public async Task<IActionResult> RequestEmailChange(RequestEmailChangeDto dto)
+    {
+        var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (user == null) return NotFound();
+        if (string.Equals(user.Email, dto.NewEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest("Yeni email mevcut email ile aynı olamaz.");
+        }
+
+        var token = await _userManager.GenerateChangeEmailTokenAsync(user, dto.NewEmail);
+        await _emailService.SendEmailAsync(dto.NewEmail, "Email değişikliği", $"Onay kodunuz: {token}");
+        await _authAudit.RecordAsync(HttpContext, "email-change-request", true, user, detail: dto.NewEmail);
+        return Ok("Onay kodu yeni email adresinize gönderildi.");
+    }
+
+    [HttpPost("email-change/confirm")]
+    [Authorize]
+    public async Task<IActionResult> ConfirmEmailChange(ConfirmEmailChangeDto dto)
+    {
+        var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (user == null) return NotFound();
+
+        var result = await _userManager.ChangeEmailAsync(user, dto.NewEmail, dto.Token);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        await _userManager.SetUserNameAsync(user, dto.NewEmail);
+        await RevokeAllRefreshTokensAsync(user.Id);
+        await _authAudit.RecordAsync(HttpContext, "email-change-confirm", true, user, detail: dto.NewEmail);
+        return Ok("Email adresiniz güncellendi. Lütfen tekrar giriş yapın.");
     }
 
     [HttpGet("confirm-email")]
@@ -489,7 +573,9 @@ public class AuthController : ControllerBase
             UserId = user.Id,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
-            RevokedAt = null
+            RevokedAt = null,
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
         });
         await _context.SaveChangesAsync();
         return (token, refreshToken);

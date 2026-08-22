@@ -1,6 +1,6 @@
 namespace Models;
 
-public class HabitCompletion
+public class HabitCompletion : IHasConcurrencyToken
 {
     public int Id { get; set; }
     public int HabitId { get; set; }
@@ -16,4 +16,6 @@ public class HabitCompletion
 
   
     public bool IsOnTime { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

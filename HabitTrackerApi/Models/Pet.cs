@@ -1,6 +1,6 @@
 namespace Models;
 
-public class Pet
+public class Pet : IHasConcurrencyToken
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -20,4 +20,6 @@ public class Pet
     public PetStage Stage { get; set; } = PetStage.Egg;
 
     public DateTime? HatchedAt { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }
