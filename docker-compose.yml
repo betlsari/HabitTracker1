@@ -40,5 +40,10 @@ services:
       Email__SenderPassword: ""
       Email__SenderName: "HabitTracker"
 
+      Fcm__ProjectId: "${FCM_PROJECT_ID:-}"
+      Fcm__ServiceAccountJson: "${FCM_SERVICE_ACCOUNT_JSON:-}"
+    volumes:
+      - ./secrets/fcm-service-account.json:/app/secrets/fcm-service-account.json:ro
+
 volumes:
   habittracker_pgdata:

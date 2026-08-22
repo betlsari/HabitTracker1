@@ -9,6 +9,7 @@ using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,7 +60,7 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.AllowedForNewUsers = true;
 
-    
+
     options.Password.RequiredLength = 6;
     options.Password.RequireDigit = false;
     options.Password.RequireLowercase = false;
@@ -86,6 +87,53 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
     };
+
+    // YENİ: (1) purpose=2fa-pending token'ları (TokenService.GeneratePreAuthToken
+    // ile üretilenler) normal [Authorize] endpoint'lerinde ASLA kabul edilmesin —
+    // önceden sadece 2fa/login endpoint'i bu claim'i kontrol ediyordu, JWT
+    // middleware'i seviyesinde hiçbir engel yoktu (2FA bypass açığı: şifresi
+    // kırılmış bir kullanıcının PreAuthToken'ı doğrudan Bearer token olarak
+    // habits/books/pets/auth-me gibi TÜM korumalı endpoint'lerde kullanılabiliyordu).
+    // (2) sstamp claim'i kullanıcının güncel SecurityStamp'i ile eşleşmezse
+    // (şifre değişti / 2FA açıldı-kapandı / logout-all yapıldı) token reddedilsin
+    // — böylece şifre değiştirmek artık eski access token'ları da gerçekten
+    // geçersiz kılıyor (aksi halde JWT süresi dolana kadar, 2 saat boyunca,
+    // geçerliliğini korurdu).
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            if (principal == null)
+            {
+                context.Fail("Geçersiz token.");
+                return;
+            }
+
+            var purpose = principal.FindFirstValue("purpose");
+            if (purpose == "2fa-pending")
+            {
+                context.Fail("Bu token sadece 2FA doğrulama akışında kullanılabilir.");
+                return;
+            }
+
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var tokenStamp = principal.FindFirstValue("sstamp");
+            if (string.IsNullOrEmpty(userId))
+            {
+                context.Fail("Geçersiz token.");
+                return;
+            }
+
+            var userManager = context.HttpContext.RequestServices
+                .GetRequiredService<UserManager<Models.User>>();
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null || user.SecurityStamp != tokenStamp)
+            {
+                context.Fail("Oturum geçersiz kılınmış. Lütfen tekrar giriş yapın.");
+            }
+        }
+    };
 });
 
 builder.Services.AddCors(options =>
@@ -108,19 +156,29 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddFixedWindowLimiter("AuthPolicy", opt =>
+    // DÜZELTİLDİ: Önceden AddFixedWindowLimiter'a partition key verilmediği
+    // için TÜM istemciler arasında paylaşılan TEK bir sayaç oluşuyordu — herhangi
+    // bir kullanıcı/saldırgan dakikada 5 istek atarak login/register/2FA gibi
+    // auth endpoint'lerini TÜM kullanıcılar için kilitleyebiliyordu (trivial DoS).
+    // Artık GlobalLimiter'daki gibi IP bazlı partition kullanılıyor; her IP kendi
+    // 5-istek/dakika sayacına sahip.
+    options.AddPolicy("AuthPolicy", httpContext =>
     {
-        opt.PermitLimit = 5;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        opt.QueueLimit = 0;
+        var partitionKey = $"auth-ip:{httpContext.Connection.RemoteIpAddress}";
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
     });
 
-    
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
         var partitionKey = httpContext.User.Identity?.IsAuthenticated == true
-            ? $"user:{httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value}"
+            ? $"user:{httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value}"
             : $"ip:{httpContext.Connection.RemoteIpAddress}";
 
         return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
@@ -134,11 +192,14 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddHttpClient(nameof(FcmPushNotificationSender));
+builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
+builder.Services.AddSingleton<FcmAccessTokenProvider>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<XpService>();
 builder.Services.AddScoped<HabitProgressService>();
 builder.Services.AddScoped<FlowerService>();
+
 builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BadgeService>();

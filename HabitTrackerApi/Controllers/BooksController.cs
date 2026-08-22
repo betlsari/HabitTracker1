@@ -186,11 +186,22 @@ public class BooksController : ControllerBase
             .Where(l => l.BookId == id)
             .SumAsync(l => (int?)l.XpEarned) ?? 0;
 
-        // DÜZELTİLDİ: Elle tamamlama (özellikle dakika bazlı kitaplarda
-        // POST {id}/complete ile) verilen bonus XP, hiçbir BookReadingLog'a
-        // bağlı olmadığından yukarıdaki toplama dahil değildi ve silme sırasında
-        // kullanıcıda "hayalet XP" olarak kalıyordu. Artık ayrıca hesaba katılıyor.
-        var manualCompletionXp = book.CompletionBonusAwarded ? BookService.CompletionBonusXp : 0;
+        // DÜZELTİLDİ: Önceden burada book.CompletionBonusAwarded kontrol
+        // ediliyordu. Ancak CompletionBonusAwarded hem OTOMATİK tamamlanmada
+        // (BookService.AddReadingLogAsync — sayfa hedefine ulaşınca) hem de
+        // MANUEL tamamlanmada (BookService.CompleteManuallyAsync) true oluyor.
+        // Otomatik tamamlanan kitaplarda bonus XP zaten ilgili BookReadingLog
+        // kaydının XpEarned'ine dahil edilmiş ve yukarıdaki totalXpFromLogs
+        // toplamına dahildi — CompletionBonusAwarded true olduğu için bonus bir
+        // kez daha ekleniyor, kullanıcıdan olması gerekenden FAZLA XP
+        // düşülüyordu. Manuel tamamlanan kitaplarda ise bonus HİÇBİR log'a
+        // bağlı olmadığından (CompleteManuallyAsync doğrudan Book.TotalXp'ye
+        // ekliyor) totalXpFromLogs'a dahil değil ve ayrıca eklenmesi doğruydu.
+        // Ayırt edici olan CompletionBonusAwarded değil, ManuallyCompleted
+        // olmalı — bonus'un log'lara dahil olup olmadığını bu flag belirliyor.
+        var manualCompletionXp = book.ManuallyCompleted && book.CompletionBonusAwarded
+            ? BookService.CompletionBonusXp
+            : 0;
         var totalXpToRemove = totalXpFromLogs + manualCompletionXp;
 
         _context.Books.Remove(book);

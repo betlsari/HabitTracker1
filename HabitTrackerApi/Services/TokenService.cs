@@ -30,7 +30,15 @@ public class TokenService
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Email, user.Email!)
+            new Claim(ClaimTypes.Email, user.Email!),
+            // YENİ: Identity, şifre değiştiğinde / 2FA açılıp kapandığında /
+            // ResetPasswordAsync çağrıldığında SecurityStamp'i otomatik olarak
+            // yeniler. Bu claim'i JWT'ye gömüp Program.cs'deki OnTokenValidated
+            // event'inde kullanıcının GÜNCEL SecurityStamp'i ile karşılaştırarak,
+            // önceden verilmiş access token'ları anında (süresi dolmadan) geçersiz
+            // kılabiliyoruz. Böylece "şifre değiştir" işlemi artık gerçekten
+            // önceki oturumları sonlandırıyor.
+            new Claim("sstamp", user.SecurityStamp ?? string.Empty)
         };
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -54,12 +62,27 @@ public class TokenService
     }
 
     /// <summary>
+    /// YENİ: Refresh token'lar artık veritabanında düz metin olarak saklanmıyor.
+    /// DB sızıntısı durumunda token'ların doğrudan kullanılabilir olmasını
+    /// önlemek için SHA-256 hash'i saklanıyor; istemciye verilen ham (random,
+    /// 64 byte'lık) değer hiçbir zaman veritabanına yazılmıyor. Token zaten
+    /// yüksek entropili rastgele bir değer olduğundan salt'a gerek yok
+    /// (brute-force/rainbow-table pratik değil).
+    /// </summary>
+    public static string HashToken(string token)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToBase64String(bytes);
+    }
+
+    /// <summary>
     /// YENİ: Şifresi doğrulanmış ama henüz 2FA kodunu girmemiş bir kullanıcı için
     /// kısa ömürlü (5 dk), sadece "purpose=2fa-pending" claim'i taşıyan bir token
-    /// üretir. Bu token normal Authorize akışlarında kullanılamaz (JwtBearer
-    /// validasyonundan geçse bile controller'lar ayrıca "purpose" claim'ini
-    /// kontrol etmez, dolayısıyla bu token'ın TEK amacı 2fa/login uç noktasına
-    /// taşınmaktır); asıl erişim token'ı sadece kod doğrulandıktan sonra verilir.
+    /// üretir. Bu token normal Authorize akışlarında kullanılamaz — hem
+    /// ValidatePreAuthTokenAndGetUserId hem de artık (2FA bypass açığını
+    /// kapatmak için) Program.cs'deki JWT Bearer OnTokenValidated event'i bu
+    /// claim'i kontrol edip reddediyor; asıl erişim token'ı sadece kod
+    /// doğrulandıktan sonra GenerateToken ile verilir.
     /// </summary>
     public string GeneratePreAuthToken(User user)
     {

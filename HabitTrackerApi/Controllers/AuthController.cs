@@ -215,15 +215,25 @@ public class AuthController : ControllerBase
         await _userManager.SetTwoFactorEnabledAsync(user, false);
         await _userManager.ResetAuthenticatorKeyAsync(user);
 
+        // YENİ: 2FA kapatmak hesabın koruma seviyesini düşürdüğü için, bu işlemi
+        // gerçekten hesap sahibinin yaptığından emin olunsa da (şifre doğrulandı),
+        // güvenlik hijyeni gereği diğer tüm cihazlardaki refresh token'lar iptal
+        // ediliyor. Access token'lar da ResetAuthenticatorKeyAsync/SetTwoFactorEnabledAsync
+        // SecurityStamp'i değiştirdiği için sstamp kontrolüyle otomatik geçersiz olur.
+        await RevokeAllRefreshTokensAsync(user.Id);
+
         return Ok(new { message = "İki adımlı doğrulama devre dışı bırakıldı." });
     }
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
     {
+        // DÜZELTİLDİ: Refresh token'lar artık DB'de hash'lenmiş saklanıyor;
+        // gelen ham değer hash'lenip öyle aranıyor (bkz. TokenService.HashToken).
+        var hashedIncoming = TokenService.HashToken(refreshTokenDto.RefreshToken);
         var storedToken = await _context.RefreshTokens
         .Include(rt => rt.User)
-        .FirstOrDefaultAsync(rt => rt.Token == refreshTokenDto.RefreshToken);
+        .FirstOrDefaultAsync(rt => rt.Token == hashedIncoming);
         if (storedToken == null || storedToken.ExpiresAt < DateTime.UtcNow || storedToken.RevokedAt != null)
         {
             return Unauthorized();
@@ -233,7 +243,7 @@ public class AuthController : ControllerBase
         storedToken.RevokedAt = DateTime.UtcNow;
         _context.RefreshTokens.Add(new RefreshToken
         {
-            Token = newRefreshToken,
+            Token = TokenService.HashToken(newRefreshToken),
             UserId = storedToken.UserId,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
@@ -249,8 +259,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout(RefreshTokenDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var hashedIncoming = TokenService.HashToken(dto.RefreshToken);
         var storedToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == dto.RefreshToken && rt.UserId == userId);
+            .FirstOrDefaultAsync(rt => rt.Token == hashedIncoming && rt.UserId == userId);
 
         if (storedToken == null)
         {
@@ -271,18 +282,9 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> LogoutAll()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var activeTokens = await _context.RefreshTokens
-            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
-            .ToListAsync();
-
-        foreach (var token in activeTokens)
-        {
-            token.RevokedAt = DateTime.UtcNow;
-        }
-
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "Tüm oturumlar kapatıldı.", revokedCount = activeTokens.Count });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var revokedCount = await RevokeAllRefreshTokensAsync(userId);
+        return Ok(new { message = "Tüm oturumlar kapatıldı.", revokedCount });
     }
 
     [HttpGet("confirm-email")]
@@ -342,6 +344,13 @@ public class AuthController : ControllerBase
         {
             return BadRequest(result.Errors);
         }
+
+        // YENİ: Şifre sıfırlandığında, hesabı ele geçirmiş olabilecek biri
+        // tarafından açılmış tüm oturumlar (refresh token'lar) iptal edilir.
+        // Access token'lar da ResetPasswordAsync'in yenilediği SecurityStamp
+        // sayesinde sstamp kontrolüyle otomatik geçersiz olur.
+        await RevokeAllRefreshTokensAsync(user.Id);
+
         return Ok("Şifre başarıyla sıfırlandı.");
     }
 
@@ -362,6 +371,13 @@ public class AuthController : ControllerBase
         {
             return BadRequest(result.Errors);
         }
+
+        // YENİ: Şifre değiştiğinde tüm refresh token'lar iptal edilir. Access
+        // token'lar da ChangePasswordAsync'in otomatik yenilediği SecurityStamp
+        // sayesinde sstamp kontrolüyle anında geçersiz olur — hesabı ele geçirmiş
+        // biri şifre değiştirilince artık gerçekten dışarı atılmış olur (önceden
+        // JWT süresi dolana kadar, 2 saate kadar, geçerliliğini koruyordu).
+        await RevokeAllRefreshTokensAsync(user.Id);
 
         return Ok("Şifre başarıyla değiştirildi.");
     }
@@ -434,7 +450,10 @@ public class AuthController : ControllerBase
         var refreshToken = _tokenService.GenerateRefreshToken();
         _context.RefreshTokens.Add(new RefreshToken
         {
-            Token = refreshToken,
+            // DÜZELTİLDİ: Ham değer yerine hash saklanıyor; DB sızıntısında
+            // token'lar doğrudan kullanılamaz. İstemciye dönen değer (refreshToken)
+            // hiçbir zaman veritabanına yazılmıyor.
+            Token = TokenService.HashToken(refreshToken),
             UserId = user.Id,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
@@ -442,5 +461,27 @@ public class AuthController : ControllerBase
         });
         await _context.SaveChangesAsync();
         return (token, refreshToken);
+    }
+
+    // YENİ: change-password, reset-password, 2fa/disable ve logout-all
+    // arasında tekrarlanan "kullanıcının tüm aktif refresh token'larını iptal
+    // et" mantığını tek yerde topluyor. Revoke edilen token sayısını döner.
+    private async Task<int> RevokeAllRefreshTokensAsync(string userId)
+    {
+        var activeTokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync();
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+        }
+
+        if (activeTokens.Count > 0)
+        {
+            await _context.SaveChangesAsync();
+        }
+
+        return activeTokens.Count;
     }
 }

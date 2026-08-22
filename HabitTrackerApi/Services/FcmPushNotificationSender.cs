@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+
 namespace Services;
 
 public interface IPushNotificationSender
@@ -5,48 +8,92 @@ public interface IPushNotificationSender
     Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// DÜZELTİLDİ: Google'ın kapattığı FCM Legacy HTTP API (fcm.googleapis.com/fcm/send
+/// + "key={serverKey}" header'ı) yerine FCM HTTP v1 API kullanılıyor. v1 API,
+/// server key değil OAuth2 access token (servis hesabı üzerinden) gerektiriyor —
+/// bkz. FcmAccessTokenProvider. Endpoint artık proje bazlı:
+/// https://fcm.googleapis.com/v1/projects/{projectId}/messages:send ve her
+/// mesaj ayrı ayrı, tek bir "message" nesnesiyle gönderiliyor (v1'de toplu
+/// gönderim yok, batching gerekiyorsa Admin SDK'daki sendEachForMulticast
+/// dengi ayrıca eklenmeli).
+/// </summary>
 public class FcmPushNotificationSender : IPushNotificationSender
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _configuration;
+    private readonly FcmAccessTokenProvider _tokenProvider;
     private readonly ILogger<FcmPushNotificationSender> _logger;
 
     public FcmPushNotificationSender(
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration,
+        FcmAccessTokenProvider tokenProvider,
         ILogger<FcmPushNotificationSender> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _configuration = configuration;
+        _tokenProvider = tokenProvider;
         _logger = logger;
     }
 
     public async Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
     {
-        var serverKey = _configuration["Fcm:ServerKey"];
-        if (string.IsNullOrWhiteSpace(serverKey) || deviceTokens.Count == 0)
+        if (deviceTokens.Count == 0)
         {
             return;
         }
 
+        if (!_tokenProvider.IsConfigured)
+        {
+            // FCM yapılandırılmamışsa (ör. local/dev ortamı) sessizce çık —
+            // bildirim kaydı zaten UserNotifications tablosuna yazıldı, sadece
+            // push gönderimi atlanıyor.
+            return;
+        }
+
+        var accessToken = await _tokenProvider.GetAccessTokenAsync(cancellationToken);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            _logger.LogWarning("FCM access token alınamadığı için push bildirimi gönderilemedi.");
+            return;
+        }
+
+        var projectId = _tokenProvider.ProjectId;
+        var endpoint = $"https://fcm.googleapis.com/v1/projects/{projectId}/messages:send";
+
         var client = _httpClientFactory.CreateClient(nameof(FcmPushNotificationSender));
-        client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"key={serverKey}");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         foreach (var token in deviceTokens)
         {
             var payload = new
             {
-                to = token,
-                notification = new { title, body },
-                data = new { title, body }
+                message = new
+                {
+                    token,
+                    notification = new { title, body },
+                    data = new Dictionary<string, string>
+                    {
+                        ["title"] = title,
+                        ["body"] = body
+                    }
+                }
             };
 
             try
             {
-                var response = await client.PostAsJsonAsync("https://fcm.googleapis.com/fcm/send", payload, cancellationToken);
+                var response = await client.PostAsJsonAsync(endpoint, payload, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("FCM gönderimi başarısız. Status={Status}", response.StatusCode);
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var errorCode = TryExtractFcmErrorCode(errorBody);
+
+                    // UNREGISTERED / NOT_FOUND: cihaz token'ı artık geçersiz
+                    // (uygulama kaldırılmış/token yenilenmiş). Bu durumda
+                    // DeviceTokens tablosundan temizlemek ayrı bir iyileştirme
+                    // konusudur (bkz. proje incelemesindeki madde 13); burada
+                    // sadece bilgi amaçlı logluyoruz.
+                    _logger.LogWarning(
+                        "FCM gönderimi başarısız. Status={Status} ErrorCode={ErrorCode} Body={Body}",
+                        response.StatusCode, errorCode, errorBody);
                 }
             }
             catch (Exception ex)
@@ -54,5 +101,31 @@ public class FcmPushNotificationSender : IPushNotificationSender
                 _logger.LogWarning(ex, "FCM gönderimi sırasında hata oluştu.");
             }
         }
+    }
+
+    private static string? TryExtractFcmErrorCode(string errorBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(errorBody);
+            if (doc.RootElement.TryGetProperty("error", out var errorEl) &&
+                errorEl.TryGetProperty("details", out var detailsEl) &&
+                detailsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var detail in detailsEl.EnumerateArray())
+                {
+                    if (detail.TryGetProperty("errorCode", out var codeEl))
+                    {
+                        return codeEl.GetString();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Parse edilemezse sorun değil, sadece ham body loglanır.
+        }
+
+        return null;
     }
 }
