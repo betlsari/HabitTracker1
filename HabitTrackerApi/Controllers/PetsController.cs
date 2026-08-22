@@ -27,12 +27,33 @@ public class PetsController : ControllerBase
         _notificationService = notificationService;
     }
 
+    // DÜZELTİLDİ: Sayfalama eklendi. Önceden kullanıcının tüm pet'leri tek
+    // seferde dönüyordu. page/pageSize opsiyonel — verilmezse page=1,
+    // pageSize=50 kullanılır (Habits/Books/Notifications ile tutarlı).
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<PetDto>>> GetPets()
+    public async Task<ActionResult<PagedResultDto<PetDto>>> GetPets(int page = 1, int pageSize = 50)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var pets = await _context.Pets.AsNoTracking().Where(p => p.UserId == userId).ToListAsync();
-        return pets.Select(ToDto).ToList();
+        var query = _context.Pets.AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .OrderByDescending(p => p.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var pets = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<PetDto>
+        {
+            Items = pets.Select(ToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
     }
 
     [HttpPost]

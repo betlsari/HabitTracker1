@@ -129,6 +129,48 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
+    // YENİ: Dakika bazlı (Minutes) kitaplarda TotalPages gibi otomatik bir
+    // tamamlanma sinyali yok; kullanıcı kitabı burada elle "bitti" olarak
+    // işaretler. Sayfa bazlı ve TotalPages belirtilmiş kitaplar zaten hedef
+    // sayfaya ulaşıldığında otomatik tamamlandığı için, tutarsızlığı önlemek
+    // amacıyla buradan tekrar tamamlatılmasına izin verilmiyor.
+    [HttpPost("{id:int}/complete")]
+    public async Task<ActionResult<BookDto>> CompleteBook(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        if (book.IsCompleted)
+        {
+            return BadRequest("Bu kitap zaten tamamlanmış.");
+        }
+
+        if (book.GoalType == BookGoalType.Pages && book.TotalPages.HasValue)
+        {
+            return BadRequest("Sayfa bazlı ve toplam sayfa sayısı belirtilmiş kitaplar, hedef sayfaya ulaşıldığında otomatik olarak tamamlanır.");
+        }
+
+        var xpEarned = await _bookService.CompleteManuallyAsync(book);
+        if (xpEarned != 0)
+        {
+            await ApplyXpDeltaAsync(userId, xpEarned);
+        }
+
+        await _notificationService.TryEnqueueAsync(
+            userId,
+            NotificationTypes.BookCompleted,
+            "Kitap tamamlandı",
+            $"{book.Title} kitabını bitirdin. Tebrikler!",
+            habitId: null,
+            dedupKey: $"bookcompleted:{book.Id}");
+
+        return BookService.ToDto(book);
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteBook(int id)
     {
@@ -144,12 +186,19 @@ public class BooksController : ControllerBase
             .Where(l => l.BookId == id)
             .SumAsync(l => (int?)l.XpEarned) ?? 0;
 
+        // DÜZELTİLDİ: Elle tamamlama (özellikle dakika bazlı kitaplarda
+        // POST {id}/complete ile) verilen bonus XP, hiçbir BookReadingLog'a
+        // bağlı olmadığından yukarıdaki toplama dahil değildi ve silme sırasında
+        // kullanıcıda "hayalet XP" olarak kalıyordu. Artık ayrıca hesaba katılıyor.
+        var manualCompletionXp = book.CompletionBonusAwarded ? BookService.CompletionBonusXp : 0;
+        var totalXpToRemove = totalXpFromLogs + manualCompletionXp;
+
         _context.Books.Remove(book);
         await _context.SaveChangesAsync();
 
-        if (totalXpFromLogs != 0)
+        if (totalXpToRemove != 0)
         {
-            await ApplyXpDeltaAsync(userId, -totalXpFromLogs);
+            await ApplyXpDeltaAsync(userId, -totalXpToRemove);
         }
 
         return NoContent();

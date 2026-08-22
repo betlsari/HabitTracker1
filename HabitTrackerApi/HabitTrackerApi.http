@@ -1,6 +1,67 @@
 @HabitTrackerApi_HostAddress = http://localhost:5213
 
-GET {{HabitTrackerApi_HostAddress}}/weatherforecast/
+### Health check
+GET {{HabitTrackerApi_HostAddress}}/health
 Accept: application/json
+
+###
+
+### Register
+POST {{HabitTrackerApi_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "test123",
+  "confirmPassword": "test123"
+}
+
+###
+
+### Login (2FA kapalıysa doğrudan Token/RefreshToken döner;
+### açıksa RequiresTwoFactor=true + PreAuthToken döner, ardından
+### aşağıdaki "2FA ile giriş" isteğini kullanın)
+POST {{HabitTrackerApi_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "test123"
+}
+
+###
+
+### 2FA ile giriş (Login'den dönen PreAuthToken + authenticator kodu)
+POST {{HabitTrackerApi_HostAddress}}/api/auth/2fa/login
+Content-Type: application/json
+
+{
+  "preAuthToken": "{{preAuthToken}}",
+  "code": "123456"
+}
+
+###
+
+### 2FA kurulumu (QR/paylaşılan anahtar üretir) — Bearer token gerektirir
+POST {{HabitTrackerApi_HostAddress}}/api/auth/2fa/setup
+Authorization: Bearer {{token}}
+
+###
+
+### 2FA'yı etkinleştir (authenticator uygulamasındaki kodla) — Bearer token gerektirir
+POST {{HabitTrackerApi_HostAddress}}/api/auth/2fa/enable
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "code": "123456"
+}
+
+###
+
+### Alışkanlıkları getir (Bearer token gerektirir)
+GET {{HabitTrackerApi_HostAddress}}/api/habits?page=1&pageSize=50
+Accept: application/json
+Authorization: Bearer {{token}}
 
 ###

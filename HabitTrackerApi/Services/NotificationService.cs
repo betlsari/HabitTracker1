@@ -62,17 +62,31 @@ public class NotificationService
         return true;
     }
 
-    public async Task<List<NotificationDto>> ListAsync(string userId, bool unreadOnly, CancellationToken cancellationToken = default)
+    // DÜZELTİLDİ: Sayfalama eklendi. Önceden en fazla son 100 bildirim sabit
+    // olarak dönüyordu ve daha eskilere erişmenin bir yolu yoktu. HabitsController/
+    // BooksController'daki page/pageSize deseniyle tutarlı hale getirildi.
+    public async Task<PagedResultDto<NotificationDto>> ListAsync(
+        string userId,
+        bool unreadOnly,
+        int page = 1,
+        int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
         var query = _context.UserNotifications.AsNoTracking().Where(n => n.UserId == userId);
         if (unreadOnly)
         {
             query = query.Where(n => !n.IsRead);
         }
 
-        return await query
-            .OrderByDescending(n => n.CreatedAt)
-            .Take(100)
+        query = query.OrderByDescending(n => n.CreatedAt);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(n => new NotificationDto
             {
                 Id = n.Id,
@@ -84,6 +98,14 @@ public class NotificationService
                 CreatedAt = n.CreatedAt
             })
             .ToListAsync(cancellationToken);
+
+        return new PagedResultDto<NotificationDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
     }
 
     public async Task<bool> MarkReadAsync(string userId, int id, CancellationToken cancellationToken = default)

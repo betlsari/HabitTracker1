@@ -25,8 +25,11 @@ public class BookService
     // Her okuma kaydı için sabit XP (habit completion'lardaki mantığa paralel)
     private const int XpPerLog = 3;
 
-    // Kitap tamamlandığında ekstra bonus XP
-    private const int CompletionBonusXp = 25;
+    // Kitap tamamlandığında ekstra bonus XP.
+    // DÜZELTİLDİ: public yapıldı — BooksController, kitap silinirken elle
+    // tamamlanmış (ManuallyCompleted) kitapların bonus XP'sini geri almak için
+    // bu sabite ihtiyaç duyuyor.
+    public const int CompletionBonusXp = 25;
 
     // YENİ: Günlük hedef tutturulduğunda ekstra bonus XP (Habit'teki XpBonusForGoal'e paralel)
     private const int DailyGoalBonusXp = 5;
@@ -100,6 +103,7 @@ public class BookService
         if (bookJustCompleted)
         {
             book.CompletedAt = DateTime.UtcNow;
+            book.CompletionBonusAwarded = true;
             xpEarned += CompletionBonusXp;
         }
 
@@ -119,6 +123,36 @@ public class BookService
             BookJustCompleted = bookJustCompleted,
             StreakAfterDays = streakAfterDays
         };
+    }
+
+    /// <summary>
+    /// YENİ: Dakika bazlı (Minutes) kitaplarda — ya da TotalPages belirtilmemiş
+    /// sayfa bazlı kitaplarda — otomatik bir tamamlanma sinyali olmadığından,
+    /// kullanıcının kitabı elle "bitti" olarak işaretlemesini sağlar.
+    /// Tamamlanma bonusu (XP) yalnızca bir kez verilir (CompletionBonusAwarded ile
+    /// korunur) ve BookReadingLog kayıtlarına bağlı OLMADIĞI için
+    /// RecalculateBookAsync tarafından geri alınmaz.
+    /// </summary>
+    public async Task<int> CompleteManuallyAsync(Book book, CancellationToken cancellationToken = default)
+    {
+        if (book.IsCompleted)
+        {
+            return 0;
+        }
+
+        book.IsCompleted = true;
+        book.ManuallyCompleted = true;
+        book.CompletedAt = DateTime.UtcNow;
+
+        var xpEarned = 0;
+        if (!book.CompletionBonusAwarded)
+        {
+            book.CompletionBonusAwarded = true;
+            xpEarned = CompletionBonusXp;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return xpEarned;
     }
 
     /// <summary>
@@ -190,6 +224,18 @@ public class BookService
             }
 
             l.XpEarned = recalculatedXp;
+        }
+
+        // YENİ: Elle tamamlanmış (ManuallyCompleted) kitaplarda — özellikle Minutes
+        // tipinde, çünkü orada yukarıdaki döngü hiçbir zaman isCompleted'i true
+        // yapmaz — tamamlanma durumu günlük kayıtlardan değil kullanıcının elle
+        // tamamlama işleminden gelir. Log ekleme/güncelleme/silme bu durumu
+        // GERİ ALMAZ; bonus XP de zaten loglara değil Book.CompletionBonusAwarded'a
+        // bağlı olduğundan burada tekrar eklenmiyor (çift sayılmıyor).
+        if (book.ManuallyCompleted)
+        {
+            isCompleted = true;
+            completedAt ??= book.CompletedAt;
         }
 
         book.CurrentPage = currentPage;

@@ -2,10 +2,10 @@ namespace Models;
 
 public enum BookGoalType
 {
-    // Hedef sayfa sayısı bazlı takip edilir
+   
     Pages = 0,
 
-    // Hedef okuma süresi (dakika) bazlı takip edilir
+    
     Minutes = 1
 }
 
@@ -36,6 +36,10 @@ public class Book
     public DateTime CreatedAt { get; set; }
 
     public DateTime? CompletedAt { get; set; }
+
+    
+    public bool ManuallyCompleted { get; set; }
+    public bool CompletionBonusAwarded { get; set; }
 
     public List<BookReadingLog> ReadingLogs { get; set; } = new();
 }

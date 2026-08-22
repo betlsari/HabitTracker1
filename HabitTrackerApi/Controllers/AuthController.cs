@@ -13,7 +13,7 @@ namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[EnableRateLimiting("AuthPolicy")] // brute-force / spam koruması (Program.cs'te tanımlı)
+[EnableRateLimiting("AuthPolicy")] 
 public class AuthController : ControllerBase
 {
     private readonly UserManager<User> _userManager;
@@ -74,19 +74,148 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var token = _tokenService.GenerateToken(user);
-        var refreshToken = _tokenService.GenerateRefreshToken();
-        _context.RefreshTokens.Add(new RefreshToken
+        if (await _userManager.GetTwoFactorEnabledAsync(user))
         {
-            Token = refreshToken,
-            UserId = user.Id,
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
-            RevokedAt = null
+            var preAuthToken = _tokenService.GeneratePreAuthToken(user);
+            return Ok(new
+            {
+                RequiresTwoFactor = true,
+                PreAuthToken = preAuthToken
+            });
+        }
 
+        var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
+        return Ok(new { RequiresTwoFactor = false, Token = accessToken, RefreshToken = refreshTokenValue });
+    }
+
+    
+    [HttpPost("2fa/login")]
+    public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
+    {
+        var userId = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
+        if (userId == null)
+        {
+            return Unauthorized("Oturum süresi dolmuş veya geçersiz. Lütfen tekrar giriş yapın.");
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || !await _userManager.GetTwoFactorEnabledAsync(user))
+        {
+            return Unauthorized();
+        }
+
+        var codeValid = await _userManager.VerifyTwoFactorTokenAsync(
+            user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
+
+        if (!codeValid)
+        {
+            // Kurtarma kodlarını da kabul et (authenticator cihazı kayıpsa).
+            var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
+            if (!recoveryValid.Succeeded)
+            {
+                return BadRequest("Doğrulama kodu hatalı.");
+            }
+        }
+
+        var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
+        return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
+    }
+
+    
+    [HttpGet("2fa/status")]
+    [Authorize]
+    public async Task<IActionResult> TwoFactorStatus()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new { Enabled = user.TwoFactorEnabled });
+    }
+
+  
+    [HttpPost("2fa/setup")]
+    [Authorize]
+    public async Task<IActionResult> SetupTwoFactor()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        await _userManager.ResetAuthenticatorKeyAsync(user);
+        var unformattedKey = await _userManager.GetAuthenticatorKeyAsync(user);
+
+        const string issuer = "HabitTracker";
+        var label = user.Email ?? user.UserName ?? user.Id;
+        var authenticatorUri =
+            $"otpauth://totp/{Uri.EscapeDataString(issuer)}:{Uri.EscapeDataString(label)}" +
+            $"?secret={unformattedKey}&issuer={Uri.EscapeDataString(issuer)}&digits=6";
+
+        return Ok(new { SharedKey = unformattedKey, AuthenticatorUri = authenticatorUri });
+    }
+
+    
+    [HttpPost("2fa/enable")]
+    [Authorize]
+    public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        if (user.TwoFactorEnabled)
+        {
+            return BadRequest("İki adımlı doğrulama zaten etkin.");
+        }
+
+        var isValid = await _userManager.VerifyTwoFactorTokenAsync(
+            user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
+        if (!isValid)
+        {
+            return BadRequest("Doğrulama kodu hatalı. Authenticator uygulamanızdaki güncel kodu girin.");
+        }
+
+        await _userManager.SetTwoFactorEnabledAsync(user, true);
+        var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+
+        return Ok(new
+        {
+            message = "İki adımlı doğrulama etkinleştirildi. Kurtarma kodlarınızı güvenli bir yerde saklayın; her biri yalnızca bir kez kullanılabilir.",
+            recoveryCodes
         });
-        await _context.SaveChangesAsync();
-        return Ok(new { Token = token, RefreshToken = refreshToken });
+    }
+
+    
+    [HttpPost("2fa/disable")]
+    [Authorize]
+    public async Task<IActionResult> DisableTwoFactor(DisableTwoFactorDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+        if (!passwordValid)
+        {
+            return BadRequest("Şifre hatalı.");
+        }
+
+        await _userManager.SetTwoFactorEnabledAsync(user, false);
+        await _userManager.ResetAuthenticatorKeyAsync(user);
+
+        return Ok(new { message = "İki adımlı doğrulama devre dışı bırakıldı." });
     }
 
     [HttpPost("refresh")]
@@ -268,7 +397,7 @@ public class AuthController : ControllerBase
         {
             return NotFound();
         }
-        return Ok(new { user.Email, user.TotalXp, user.TimeZoneId });
+        return Ok(new { user.Email, user.TotalXp, user.TimeZoneId, user.TwoFactorEnabled });
     }
 
     [HttpDelete("me")]
@@ -295,5 +424,23 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
+    }
+
+    // Login ve 2fa/login uç noktalarında tekrarlanan token+refresh token
+    // üretme/kaydetme mantığını tek yerde topluyor.
+    private async Task<(string AccessToken, string RefreshToken)> IssueTokensAsync(User user)
+    {
+        var token = _tokenService.GenerateToken(user);
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        _context.RefreshTokens.Add(new RefreshToken
+        {
+            Token = refreshToken,
+            UserId = user.Id,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            RevokedAt = null
+        });
+        await _context.SaveChangesAsync();
+        return (token, refreshToken);
     }
 }

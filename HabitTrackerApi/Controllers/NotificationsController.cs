@@ -18,11 +18,16 @@ public class NotificationsController : ControllerBase
         _notificationService = notificationService;
     }
 
+    // DÜZELTİLDİ: Sayfalama eklendi. page/pageSize opsiyonel — verilmezse
+    // page=1, pageSize=50 kullanılır (Habits/Books ile tutarlı varsayılan).
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<NotificationDto>>> GetNotifications([FromQuery] bool unreadOnly = false)
+    public async Task<ActionResult<PagedResultDto<NotificationDto>>> GetNotifications(
+        [FromQuery] bool unreadOnly = false,
+        int page = 1,
+        int pageSize = 50)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        return await _notificationService.ListAsync(userId, unreadOnly);
+        return await _notificationService.ListAsync(userId, unreadOnly, page, pageSize);
     }
 
     [HttpPost("{id:int}/read")]
@@ -46,7 +51,7 @@ public class NotificationsController : ControllerBase
         return Ok(new { markedRead = count });
     }
 
-    // YENİ: Tek bir bildirimi siler.
+    
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
