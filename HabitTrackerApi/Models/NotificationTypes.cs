@@ -6,4 +6,7 @@ public static class NotificationTypes
     public const string Missed = "Missed";
     public const string GoalReached = "GoalReached";
     public const string BadgeEarned = "BadgeEarned";
+
+    
+    public const string PetHatched = "PetHatched";
 }

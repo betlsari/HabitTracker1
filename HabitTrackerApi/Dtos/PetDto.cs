@@ -9,4 +9,11 @@ public class PetDto
     public required string Mood { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? Nickname { get; set; }
+
+    
+    public required string Stage { get; set; }
+    public DateTime? HatchedAt { get; set; }
+
+   
+    public bool IsEgg { get; set; }
 }

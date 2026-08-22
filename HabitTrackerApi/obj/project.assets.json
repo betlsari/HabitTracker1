@@ -3837,7 +3837,7 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\betls\\AppData\\Local\\Temp\\cursor-sandbox-cache\\c7fa80b7dd0cbc5d415553e1fc757d15\\nuget": {},
+    "C:\\Users\\betls\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
@@ -3846,7 +3846,7 @@
       "projectUniqueName": "C:\\Users\\betls\\OneDrive\\Masaüstü\\HabitTracker\\HabitTrackerApi\\HabitTrackerApi.csproj",
       "projectName": "HabitTrackerApi",
       "projectPath": "C:\\Users\\betls\\OneDrive\\Masaüstü\\HabitTracker\\HabitTrackerApi\\HabitTrackerApi.csproj",
-      "packagesPath": "C:\\Users\\betls\\AppData\\Local\\Temp\\cursor-sandbox-cache\\c7fa80b7dd0cbc5d415553e1fc757d15\\nuget",
+      "packagesPath": "C:\\Users\\betls\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\betls\\OneDrive\\Masaüstü\\HabitTracker\\HabitTrackerApi\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [

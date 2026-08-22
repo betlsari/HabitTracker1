@@ -8,10 +8,10 @@ public class PetMoodService
 {
     private readonly AppDbContext _context;
 
-    // Kaç gün üst üste hiçbir habit hedefi tutturulmazsa pet üzülsün.
+    
     private const int SadAfterConsecutiveMissedDays = 2;
 
-    // Geriye doğru en fazla kaç gün kontrol edilsin (performans için sınır).
+   
     private const int LookbackWindowDays = 14;
 
     public PetMoodService(AppDbContext context)
@@ -30,6 +30,12 @@ public class PetMoodService
             return;
         }
 
+        var hatchedPets = pets.Where(p => p.Stage == Models.PetStage.Hatched).ToList();
+        if (!hatchedPets.Any())
+        {
+            return;
+        }
+
         var habits = await _context.Habits
             .Where(h => h.UserId == userId)
             .Select(h => new { h.Id, h.DailyGoal })
@@ -38,7 +44,7 @@ public class PetMoodService
         if (!habits.Any())
         {
            
-            SetMood(pets, "Happy");
+            SetMood(hatchedPets, "Happy");
             await _context.SaveChangesAsync(cancellationToken);
             return;
         }
@@ -71,7 +77,7 @@ public class PetMoodService
         }
 
         var mood = consecutiveMissedDays >= SadAfterConsecutiveMissedDays ? "Sad" : "Happy";
-        SetMood(pets, mood);
+        SetMood(hatchedPets, mood);
 
         await _context.SaveChangesAsync(cancellationToken);
     }

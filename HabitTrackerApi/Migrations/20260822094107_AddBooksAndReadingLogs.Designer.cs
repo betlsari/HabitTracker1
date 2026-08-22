@@ -3,6 +3,7 @@ using System;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HabitTrackerApi.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260822094107_AddBooksAndReadingLogs")]
+    partial class AddBooksAndReadingLogs
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -462,9 +465,6 @@ namespace HabitTrackerApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("HatchedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("Level")
                         .HasColumnType("integer");
 
@@ -474,9 +474,6 @@ namespace HabitTrackerApi.Migrations
 
                     b.Property<string>("Nickname")
                         .HasColumnType("text");
-
-                    b.Property<int>("Stage")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Type")
                         .IsRequired()

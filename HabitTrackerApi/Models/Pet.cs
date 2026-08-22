@@ -8,9 +8,16 @@ public class Pet
     public required string Type { get; set; }
     public int Level { get; set; }
     public int Xp { get; set; }
+
+    
     public string Mood { get; set; } = "Happy";
+
     public DateTime CreatedAt { get; set; }
 
-   
     public string? Nickname { get; set; }
+
+    
+    public PetStage Stage { get; set; } = PetStage.Egg;
+
+    public DateTime? HatchedAt { get; set; }
 }

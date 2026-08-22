@@ -34,6 +34,77 @@ public class HabitProgressService
         return result;
     }
 
+    /// <summary>
+    /// YENİ: Kullanıcının alışkanlıklarını "en iyi sürdürülenden en kötüye" sıralar.
+    /// Sıralama kriteri: son <paramref name="lookbackPeriods"/> dönemdeki hedef
+    /// tutturma oranı (birincil), ardından mevcut streak (ikincil, eşitlik durumunda).
+    /// </summary>
+    public async Task<List<HabitComparisonDto>> GetComparisonAsync(
+        IReadOnlyList<Habit> habits,
+        string? timeZoneId,
+        int lookbackPeriods = 30,
+        CancellationToken cancellationToken = default)
+    {
+        var tz = TimeZones.Resolve(timeZoneId);
+        var now = DateTime.UtcNow;
+        var results = new List<HabitComparisonDto>(habits.Count);
+
+        foreach (var habit in habits)
+        {
+            var totals = await LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
+            var currentPeriodStart = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
+
+            var createdAtUtc = habit.CreatedAt.Kind == DateTimeKind.Utc
+                ? habit.CreatedAt
+                : DateTime.SpecifyKind(habit.CreatedAt, DateTimeKind.Utc);
+            var habitStart = HabitSchedule.PeriodStartLocal(createdAtUtc, habit.Period, tz);
+
+            var cursor = currentPeriodStart;
+            int periodsConsidered = 0;
+            int periodsGoalMet = 0;
+
+            while (cursor >= habitStart && periodsConsidered < lookbackPeriods)
+            {
+                periodsConsidered++;
+                var total = totals.TryGetValue(cursor, out var amount) ? amount : 0;
+                if (total >= habit.DailyGoal)
+                {
+                    periodsGoalMet++;
+                }
+
+                cursor = HabitSchedule.PreviousPeriodStartLocal(cursor, habit.Period);
+            }
+
+            var completionRate = periodsConsidered == 0 ? 0 : (double)periodsGoalMet / periodsConsidered * 100;
+            var totalInCurrentPeriod = totals.TryGetValue(currentPeriodStart, out var currentTotal) ? currentTotal : 0;
+            var percentageThisPeriod = habit.DailyGoal == 0
+                ? 0
+                : Math.Min(100, (double)totalInCurrentPeriod / habit.DailyGoal * 100);
+
+            results.Add(new HabitComparisonDto
+            {
+                HabitId = habit.Id,
+                Name = habit.Name,
+                Category = habit.Category,
+                CurrentStreak = CountStreak(habit, totals, currentPeriodStart, tz),
+                CompletionRatePercent = Math.Round(completionRate, 1),
+                PercentageCompletedThisPeriod = Math.Round(percentageThisPeriod, 1)
+            });
+        }
+
+        var ranked = results
+            .OrderByDescending(r => r.CompletionRatePercent)
+            .ThenByDescending(r => r.CurrentStreak)
+            .ToList();
+
+        for (int i = 0; i < ranked.Count; i++)
+        {
+            ranked[i].Rank = i + 1;
+        }
+
+        return ranked;
+    }
+
     public async Task<List<DailyStatDto>> GetStatsAsync(Habit habit, string? timeZoneId, int periods, CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -147,7 +218,9 @@ public class HabitProgressService
         };
     }
 
-    private static int CountStreak(Habit habit, IReadOnlyDictionary<DateTime, int> totals, DateTime currentPeriodStart, TimeZoneInfo tz)
+    // Public: ReminderBackgroundService gibi dışarıdan da (örn. kırılan streak
+    // uzunluğunu bildirime yansıtmak için) çağrılabilmesi için erişilebilir.
+    public static int CountStreak(Habit habit, IReadOnlyDictionary<DateTime, int> totals, DateTime currentPeriodStart, TimeZoneInfo tz)
     {
         int streak = 0;
         var cursor = currentPeriodStart;

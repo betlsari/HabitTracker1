@@ -6,6 +6,7 @@ using Dtos;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Services;
 
 
 
@@ -17,29 +18,21 @@ public class PetsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
+    private readonly NotificationService _notificationService;
 
-    public PetsController(AppDbContext context, UserManager<User> userManager)
+    public PetsController(AppDbContext context, UserManager<User> userManager, NotificationService notificationService)
     {
         _context = context;
         _userManager = userManager;
+        _notificationService = notificationService;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<PetDto>>> GetPets()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        return await _context.Pets.AsNoTracking().Where(p => p.UserId == userId)
-             .Select(p => new PetDto
-             {
-                 Id = p.Id,
-                 Type = p.Type,
-                 Level = p.Level,
-                 Xp = p.Xp,
-                 Mood = p.Mood,
-                 CreatedAt = p.CreatedAt,
-                 Nickname = p.Nickname
-             })
-             .ToListAsync();
+        var pets = await _context.Pets.AsNoTracking().Where(p => p.UserId == userId).ToListAsync();
+        return pets.Select(ToDto).ToList();
     }
 
     [HttpPost]
@@ -67,29 +60,24 @@ public class PetsController : ControllerBase
             user.TotalXp -= eggCost;
             await _userManager.UpdateAsync(user);
         }
+
+        // YENİ: Pet, önce yumurta aşamasında oluşturulur (dokümandaki "kullanıcı
+        // başlangıçta yumurta seçer" akışı). Level 0'da kalır ve Mood "Egg"
+        // olarak sabitlenir; PetHatching.HatchXpThreshold XP'ye ulaşınca açılır.
         var pet = new Pet
         {
             Type = dto.Type,
             Level = 0,
             Xp = 0,
+            Mood = "Egg",
+            Stage = PetStage.Egg,
             UserId = userId,
             CreatedAt = DateTime.UtcNow
         };
         _context.Pets.Add(pet);
         await _context.SaveChangesAsync();
 
-        var petDto = new PetDto
-        {
-            Id = pet.Id,
-            Type = pet.Type,
-            Level = pet.Level,
-            Xp = pet.Xp,
-            Mood = pet.Mood,
-            CreatedAt = pet.CreatedAt,
-            Nickname = pet.Nickname
-        };
-
-        return petDto;
+        return ToDto(pet);
     }
 
     [HttpPost("{id}/feed")]
@@ -117,21 +105,28 @@ public class PetsController : ControllerBase
         await _userManager.UpdateAsync(user);
 
         pet.Xp += petXpGain;
-        pet.Level = pet.Xp / 100;
+
+        // YENİ: Hâlâ yumurtaysa Level artmaz; sadece hatch eşiğine yaklaşılır.
+        var justHatched = PetHatching.TryHatch(pet);
+        if (pet.Stage == PetStage.Hatched)
+        {
+            pet.Level = pet.Xp / 100;
+        }
+
         await _context.SaveChangesAsync();
 
-        var petDto = new PetDto
+        if (justHatched)
         {
-            Id = pet.Id,
-            Type = pet.Type,
-            Level = pet.Level,
-            Xp = pet.Xp,
-            Mood = pet.Mood,
-            CreatedAt = pet.CreatedAt,
-            Nickname = pet.Nickname
-        };
+            await _notificationService.TryEnqueueAsync(
+                userId,
+                NotificationTypes.PetHatched,
+                "Yumurta çatladı!",
+                $"{(pet.Nickname ?? pet.Type)} yumurtasından çıktı!",
+                habitId: null,
+                dedupKey: $"pethatch:{pet.Id}");
+        }
 
-        return petDto;
+        return ToDto(pet);
     }
 
     [HttpGet("{id}")]
@@ -143,17 +138,7 @@ public class PetsController : ControllerBase
         {
             return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
         }
-        var petDto = new PetDto
-        {
-            Id = pet.Id,
-            Type = pet.Type,
-            Level = pet.Level,
-            Xp = pet.Xp,
-            Mood = pet.Mood,
-            CreatedAt = pet.CreatedAt,
-            Nickname = pet.Nickname
-        };
-        return petDto;
+        return ToDto(pet);
     }
 
     // YENİ: pet güncelleme (şu an için takma isim). Type ve Mood bilinçli
@@ -172,16 +157,7 @@ public class PetsController : ControllerBase
         pet.Nickname = dto.Nickname;
         await _context.SaveChangesAsync();
 
-        return new PetDto
-        {
-            Id = pet.Id,
-            Type = pet.Type,
-            Level = pet.Level,
-            Xp = pet.Xp,
-            Mood = pet.Mood,
-            CreatedAt = pet.CreatedAt,
-            Nickname = pet.Nickname
-        };
+        return ToDto(pet);
     }
 
     [HttpDelete("{id}")]
@@ -199,4 +175,18 @@ public class PetsController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    private static PetDto ToDto(Pet pet) => new()
+    {
+        Id = pet.Id,
+        Type = pet.Type,
+        Level = pet.Level,
+        Xp = pet.Xp,
+        Mood = pet.Mood,
+        CreatedAt = pet.CreatedAt,
+        Nickname = pet.Nickname,
+        Stage = pet.Stage.ToString(),
+        HatchedAt = pet.HatchedAt,
+        IsEgg = pet.Stage == PetStage.Egg
+    };
 }

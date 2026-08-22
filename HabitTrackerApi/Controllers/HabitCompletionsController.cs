@@ -22,6 +22,7 @@ public class HabitCompletionsController : ControllerBase
     private readonly FlowerService _flowerService;
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
+    private readonly PetGrowthService _petGrowthService;
 
     public HabitCompletionsController(
         AppDbContext context,
@@ -30,7 +31,8 @@ public class HabitCompletionsController : ControllerBase
         HabitProgressService progressService,
         FlowerService flowerService,
         BadgeService badgeService,
-        NotificationService notificationService)
+        NotificationService notificationService,
+        PetGrowthService petGrowthService)
     {
         _context = context;
         _userManager = userManager;
@@ -39,6 +41,7 @@ public class HabitCompletionsController : ControllerBase
         _flowerService = flowerService;
         _badgeService = badgeService;
         _notificationService = notificationService;
+        _petGrowthService = petGrowthService;
     }
 
     [HttpPost]
@@ -79,6 +82,14 @@ public class HabitCompletionsController : ControllerBase
         if (HabitCategories.IsWater(habit.Category) && dto.Amount > 0)
         {
             flower = await _flowerService.AddWaterAsync(userId!, dto.Amount);
+        }
+
+        // YENİ: Odaklanma/çalışma habit'i tamamlandığında kullanıcının pet(ler)i
+        // doğrudan XP kazanır (bkz. PetGrowthService, dokümandaki "odaklanma süresi
+        // ile hayvan büyütme" özelliği).
+        if (HabitCategories.IsFocus(habit.Category) && dto.Amount > 0)
+        {
+            await _petGrowthService.AddFocusXpAsync(userId!, dto.Amount);
         }
 
         await _badgeService.EvaluateAfterCompletionAsync(userId!, habit, snapshot, flower);
@@ -143,6 +154,10 @@ public class HabitCompletionsController : ControllerBase
             return NotFound();
         }
 
+        // Not: Bu endpoint şu an XP/streak/flower/pet etkilerini yeniden hesaplamıyor
+        // (mevcut davranışla tutarlı). Amount değişikliği focus/water türü habit'lerde
+        // pet/flower state'ini geriye dönük düzeltmez; gerekirse ayrı bir "recalculate"
+        // akışı eklenmeli.
         completion.Amount = dto.Amount;
         completion.CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
 
@@ -168,6 +183,12 @@ public class HabitCompletionsController : ControllerBase
         if (HabitCategories.IsWater(habit.Category) && completion.Amount != 0)
         {
             await _flowerService.AddWaterAsync(userId!, -completion.Amount);
+        }
+
+        // YENİ: Focus completion silinirse, önceden verilen pet XP'si geri alınır.
+        if (HabitCategories.IsFocus(habit.Category) && completion.Amount != 0)
+        {
+            await _petGrowthService.RemoveFocusXpAsync(userId!, completion.Amount);
         }
 
         _context.HabitCompletions.Remove(completion);

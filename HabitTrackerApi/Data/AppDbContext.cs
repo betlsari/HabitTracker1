@@ -28,6 +28,11 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<DeviceToken> DeviceTokens { get; set; }
 
+    // YENİ: Kitap okuma takibi
+    public DbSet<Book> Books { get; set; }
+
+    public DbSet<BookReadingLog> BookReadingLogs { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -91,6 +96,25 @@ public class AppDbContext : IdentityDbContext<User>
             entity.HasOne(d => d.User)
                 .WithMany(u => u.DeviceTokens)
                 .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // YENİ: Book / BookReadingLog ilişkileri
+        builder.Entity<Book>(entity =>
+        {
+            entity.HasIndex(b => b.UserId);
+            entity.HasOne(b => b.User)
+                .WithMany(u => u.Books)
+                .HasForeignKey(b => b.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<BookReadingLog>(entity =>
+        {
+            entity.HasIndex(l => l.BookId);
+            entity.HasOne(l => l.Book)
+                .WithMany(b => b.ReadingLogs)
+                .HasForeignKey(l => l.BookId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

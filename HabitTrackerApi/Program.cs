@@ -118,6 +118,10 @@ builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>()
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BadgeService>();
 builder.Services.AddScoped<PetMoodService>();
+// YENİ: Kitap okuma takibi servisi
+builder.Services.AddScoped<BookService>();
+// YENİ: Odaklanma habit'lerinden pet XP büyütme servisi
+builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

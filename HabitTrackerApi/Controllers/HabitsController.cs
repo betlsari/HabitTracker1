@@ -178,6 +178,30 @@ public class HabitsController : ControllerBase
         return Ok(result);
     }
 
+    
+    [HttpGet("comparison")]
+    public async Task<ActionResult<IEnumerable<HabitComparisonDto>>> GetComparison(int lookbackPeriods = 30)
+    {
+        if (lookbackPeriods <= 0)
+        {
+            return BadRequest("lookbackPeriods parametresi 1 veya daha büyük olmalıdır.");
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var habits = await _context.Habits.AsNoTracking()
+            .Where(h => h.UserId == userId)
+            .ToListAsync();
+
+        if (habits.Count == 0)
+        {
+            return Ok(new List<HabitComparisonDto>());
+        }
+
+        var user = await _userManager.FindByIdAsync(userId!);
+        var result = await _progressService.GetComparisonAsync(habits, user?.TimeZoneId, lookbackPeriods);
+        return Ok(result);
+    }
+
     private static HabitDto ToDto(Habit habit) => new()
     {
         Id = habit.Id,

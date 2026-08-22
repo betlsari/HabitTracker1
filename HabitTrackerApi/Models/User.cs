@@ -21,4 +21,6 @@ public class User : IdentityUser
     public List<DeviceToken> DeviceTokens { get; set; } = new List<DeviceToken>();
 
     public Flower? Flower { get; set; }
+
+    public List<Book> Books { get; set; } = new List<Book>();
 }
