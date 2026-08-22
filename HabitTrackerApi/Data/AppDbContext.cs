@@ -28,7 +28,7 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<DeviceToken> DeviceTokens { get; set; }
 
-    // YENİ: Kitap okuma takibi
+    
     public DbSet<Book> Books { get; set; }
 
     public DbSet<BookReadingLog> BookReadingLogs { get; set; }

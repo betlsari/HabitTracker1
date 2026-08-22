@@ -48,6 +48,9 @@ builder.Services.AddControllers()
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+
+builder.Services.AddHealthChecks();
+
 builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
 {
     options.SignIn.RequireConfirmedEmail = true;
@@ -56,7 +59,13 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.AllowedForNewUsers = true;
 
+    
     options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredUniqueChars = 0;
 })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
@@ -106,6 +115,22 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
     });
+
+    
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var partitionKey = httpContext.User.Identity?.IsAuthenticated == true
+            ? $"user:{httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value}"
+            : $"ip:{httpContext.Connection.RemoteIpAddress}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
 });
 
 builder.Services.AddHttpClient(nameof(FcmPushNotificationSender));
@@ -118,20 +143,28 @@ builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>()
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BadgeService>();
 builder.Services.AddScoped<PetMoodService>();
-// YENİ: Kitap okuma takibi servisi
+
 builder.Services.AddScoped<BookService>();
-// YENİ: Odaklanma habit'lerinden pet XP büyütme servisi
+
 builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
+
+builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 
 var app = builder.Build();
 app.UseExceptionHandler();
-app.UseSwagger();
-app.UseSwaggerUI();
+
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseCors("DefaultCorsPolicy");
@@ -139,6 +172,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+
+app.MapHealthChecks("/health");
 
 
 

@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: habittracker
       POSTGRES_USER: habittracker
-      POSTGRES_PASSWORD: change-me-in-local-env-file
+      POSTGRES_PASSWORD: 1
     ports:
       - "5432:5432"
     volumes:
@@ -30,7 +30,7 @@ services:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=habittracker;Username=habittracker;Password=change-me-in-local-env-file"
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=habittracker;Username=habittracker;Password=1"
       Jwt__Key: "REPLACE_WITH_A_LONG_RANDOM_SECRET"
       Jwt__Issuer: "HabitTrackerApi"
       Jwt__Audience: "HabitTrackerApiUsers"

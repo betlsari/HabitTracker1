@@ -45,4 +45,27 @@ public class NotificationsController : ControllerBase
         var count = await _notificationService.MarkAllReadAsync(userId);
         return Ok(new { markedRead = count });
     }
+
+    // YENİ: Tek bir bildirimi siler.
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var ok = await _notificationService.DeleteAsync(userId, id);
+        if (!ok)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
+    }
+
+    
+    [HttpDelete("read")]
+    public async Task<IActionResult> DeleteAllRead()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var count = await _notificationService.DeleteAllReadAsync(userId);
+        return Ok(new { deleted = count });
+    }
 }

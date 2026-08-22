@@ -11,4 +11,9 @@ public class RegisterDto
     [Required]
     [MinLength(6, ErrorMessage = "Şifre en az 6 karakter olmalıdır.")]
     public required string Password { get; set; }
+
+   
+    [Required]
+    [Compare(nameof(Password), ErrorMessage = "Şifreler eşleşmiyor.")]
+    public required string ConfirmPassword { get; set; }
 }

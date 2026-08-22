@@ -114,4 +114,39 @@ public class NotificationService
         await _context.SaveChangesAsync(cancellationToken);
         return unread.Count;
     }
+
+    // YENİ: Tek bir bildirimi siler. Kullanıcının kendi bildirimi olduğu
+    // (userId eşleşmesi) kontrol edilir.
+    public async Task<bool> DeleteAsync(string userId, int id, CancellationToken cancellationToken = default)
+    {
+        var notification = await _context.UserNotifications
+            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, cancellationToken);
+        if (notification == null)
+        {
+            return false;
+        }
+
+        _context.UserNotifications.Remove(notification);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    // YENİ: Kullanıcının okunmuş (IsRead = true) tüm bildirimlerini temizler.
+    // Önceden sadece "okundu işaretleme" vardı, bildirim geçmişini temizlemenin
+    // hiçbir yolu yoktu.
+    public async Task<int> DeleteAllReadAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        var read = await _context.UserNotifications
+            .Where(n => n.UserId == userId && n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        if (read.Count == 0)
+        {
+            return 0;
+        }
+
+        _context.UserNotifications.RemoveRange(read);
+        await _context.SaveChangesAsync(cancellationToken);
+        return read.Count;
+    }
 }

@@ -35,16 +35,33 @@ public class BooksController : ControllerBase
         _notificationService = notificationService;
     }
 
+    // DÜZELTİLDİ: Sayfalama eklendi. Önceden kullanıcının tüm kitapları tek
+    // seferde dönüyordu; kitap sayısı arttıkça bu ölçeklenmiyordu. page/pageSize
+    // opsiyonel — verilmezse page=1, pageSize=50 kullanılır.
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<BookDto>>> GetBooks()
+    public async Task<ActionResult<PagedResultDto<BookDto>>> GetBooks(int page = 1, int pageSize = 50)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var books = await _context.Books.AsNoTracking()
+        var query = _context.Books.AsNoTracking()
             .Where(b => b.UserId == userId)
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderByDescending(b => b.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var books = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return books.Select(BookService.ToDto).ToList();
+        return new PagedResultDto<BookDto>
+        {
+            Items = books.Select(BookService.ToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
     }
 
     [HttpGet("{id:int}")]

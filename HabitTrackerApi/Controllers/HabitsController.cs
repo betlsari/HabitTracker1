@@ -19,27 +19,53 @@ public class HabitsController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly XpService _xpService;
     private readonly HabitProgressService _progressService;
+    private readonly FlowerService _flowerService;
+    private readonly PetGrowthService _petGrowthService;
 
     public HabitsController(
         AppDbContext context,
         UserManager<User> userManager,
         XpService xpService,
-        HabitProgressService progressService)
+        HabitProgressService progressService,
+        FlowerService flowerService,
+        PetGrowthService petGrowthService)
     {
         _context = context;
         _userManager = userManager;
         _xpService = xpService;
         _progressService = progressService;
+        _flowerService = flowerService;
+        _petGrowthService = petGrowthService;
     }
 
+    // DÜZELTİLDİ: Sayfalama eklendi. Önceden kullanıcının tüm habit'leri tek
+    // seferde dönüyordu; habit sayısı arttıkça bu ölçeklenmiyordu. page/pageSize
+    // opsiyonel — verilmezse page=1, pageSize=50 (mevcut davranışa yakın, geniş
+    // bir varsayılan) kullanılır.
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<HabitDto>>> GetHabits()
+    public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(int page = 1, int pageSize = 50)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var habits = await _context.Habits.AsNoTracking()
+        var query = _context.Habits.AsNoTracking()
             .Where(h => h.UserId == userId)
+            .OrderByDescending(h => h.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var habits = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
-        return habits.Select(ToDto).ToList();
+
+        return new PagedResultDto<HabitDto>
+        {
+            Items = habits.Select(ToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
     }
 
     [HttpGet("{id:int}")]
@@ -131,6 +157,17 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
+    // DÜZELTİLDİ: Önceden habit silindiğinde bağlı HabitCompletions cascade ile
+    // veritabanından siliniyordu ama:
+    //   1) Habit oluşturma sırasında verilen XpService.GetHabitCreationXp() XP'si
+    //      kullanıcıdan hiç geri alınmıyordu,
+    //   2) Tüm completion'ların kazandırdığı XpEarned toplamı kullanıcıda "hayalet
+    //      XP" olarak kalıyordu,
+    //   3) Streak korunduğu için pet'lere verilmiş PetStreakBonusXp geri alınmıyordu,
+    //   4) Su/Odaklanma kategorisindeki habit'lerde flower/pet XP etkileri de
+    //      (Flower.WaterAmount, Pet.Xp) geri alınmıyordu.
+    // BookService/BooksController.DeleteBook'taki mantığa paralel olarak artık
+    // silmeden önce tüm bu yan etkiler hesaplanıp geri alınıyor.
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteHabit(int id)
     {
@@ -140,8 +177,48 @@ public class HabitsController : ControllerBase
         {
             return NotFound();
         }
+
+        var completions = await _context.HabitCompletions
+            .Where(c => c.HabitId == id)
+            .ToListAsync();
+
+        var totalXpFromCompletions = completions.Sum(c => c.XpEarned);
+        var totalPetStreakBonus = completions.Sum(c => c.PetStreakBonusXp);
+        var totalAmount = completions.Sum(c => c.Amount);
+
+        // Su kategorisi: bu habit'e kayıtlı toplam su miktarı çiçekten geri alınır.
+        if (HabitCategories.IsWater(habit.Category) && totalAmount != 0)
+        {
+            await _flowerService.AddWaterAsync(userId!, -totalAmount);
+        }
+
+        // Odaklanma kategorisi: pet'lere verilmiş focus XP'si geri alınır.
+        if (HabitCategories.IsFocus(habit.Category) && totalAmount != 0)
+        {
+            await _petGrowthService.RemoveFocusXpAsync(userId!, totalAmount);
+        }
+
+        // Streak korunduğu için pet'lere verilmiş düz bonus XP geri alınır.
+        if (totalPetStreakBonus > 0)
+        {
+            await _petGrowthService.RemoveStreakBonusXpAsync(userId!, totalPetStreakBonus);
+        }
+
         _context.Habits.Remove(habit);
         await _context.SaveChangesAsync();
+
+        // Habit oluşturma XP'si + tüm completion'lardan kazanılan XP kullanıcıdan düşülür.
+        var totalXpToRemove = totalXpFromCompletions + _xpService.GetHabitCreationXp();
+        if (totalXpToRemove != 0)
+        {
+            var user = await _userManager.FindByIdAsync(userId!);
+            if (user != null)
+            {
+                user.TotalXp = Math.Max(0, user.TotalXp - totalXpToRemove);
+                await _userManager.UpdateAsync(user);
+            }
+        }
+
         return NoContent();
     }
 
@@ -195,7 +272,7 @@ public class HabitsController : ControllerBase
         return Ok(result);
     }
 
-    
+
     [HttpGet("comparison")]
     public async Task<ActionResult<IEnumerable<HabitComparisonDto>>> GetComparison(int lookbackPeriods = 30)
     {

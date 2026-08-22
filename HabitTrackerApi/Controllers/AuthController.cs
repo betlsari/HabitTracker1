@@ -114,7 +114,7 @@ public class AuthController : ControllerBase
         return Ok(new { Token = newToken, RefreshToken = newRefreshToken });
     }
 
-    // YENİ: Tek bir cihazdan çıkış yapar; sadece verilen refresh token'ı iptal eder.
+    
     [HttpPost("logout")]
     [Authorize]
     public async Task<IActionResult> Logout(RefreshTokenDto dto)
@@ -137,7 +137,7 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Çıkış yapıldı." });
     }
 
-    // YENİ: Tüm cihazlardan çıkış yapar (örn. "hesabım çalındı" senaryosu).
+    
     [HttpPost("logout-all")]
     [Authorize]
     public async Task<IActionResult> LogoutAll()
@@ -172,8 +172,7 @@ public class AuthController : ControllerBase
         return Ok("Email doğrulandı.");
     }
 
-    // YENİ: Doğrulama emaili gelmediyse / süresi dolduysa tekrar gönderir.
-    // Kullanıcı enumeration'ı önlemek için her durumda aynı mesaj dönülür.
+    
     [HttpPost("resend-confirmation")]
     public async Task<IActionResult> ResendConfirmation(ResendConfirmationDto dto)
     {
@@ -217,7 +216,7 @@ public class AuthController : ControllerBase
         return Ok("Şifre başarıyla sıfırlandı.");
     }
 
-    // YENİ: Giriş yapmış kullanıcı için "unuttum" akışı olmadan şifre değiştirme.
+    
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
@@ -270,5 +269,31 @@ public class AuthController : ControllerBase
             return NotFound();
         }
         return Ok(new { user.Email, user.TotalXp, user.TimeZoneId });
+    }
+
+    [HttpDelete("me")]
+    [Authorize]
+    public async Task<IActionResult> DeleteAccount(DeleteAccountDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+        if (!passwordValid)
+        {
+            return BadRequest("Şifre hatalı. Hesap silme işlemi iptal edildi.");
+        }
+
+        var result = await _userManager.DeleteAsync(user);
+        if (!result.Succeeded)
+        {
+            return BadRequest(result.Errors);
+        }
+
+        return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }
 }
