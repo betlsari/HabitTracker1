@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: habittracker
+      POSTGRES_USER: habittracker
+      POSTGRES_PASSWORD: change-me-in-local-env-file
+    ports:
+      - "5432:5432"
+    volumes:
+      - habittracker_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U habittracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./HabitTrackerApi
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=habittracker;Username=habittracker;Password=change-me-in-local-env-file"
+      Jwt__Key: "REPLACE_WITH_A_LONG_RANDOM_SECRET"
+      Jwt__Issuer: "HabitTrackerApi"
+      Jwt__Audience: "HabitTrackerApiUsers"
+      Email__SmtpHost: "smtp.gmail.com"
+      Email__SmtpPort: "587"
+      Email__SenderEmail: ""
+      Email__SenderPassword: ""
+      Email__SenderName: "HabitTracker"
+
+volumes:
+  habittracker_pgdata:

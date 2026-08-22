@@ -8,4 +8,5 @@ public class PetDto
     public int Xp { get; set; }
     public required string Mood { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? Nickname { get; set; }
 }

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Dtos;
 
-public class ForgotPasswordDto
+public class ResendConfirmationDto
 {
     [Required]
     [EmailAddress]

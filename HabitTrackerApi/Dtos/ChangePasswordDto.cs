@@ -2,14 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Dtos;
 
-public class ResetPasswordDto
+public class ChangePasswordDto
 {
     [Required]
-    [EmailAddress]
-    public required string Email { get; set; }
-
-    [Required]
-    public required string Token { get; set; }
+    public required string CurrentPassword { get; set; }
 
     [Required]
     [MinLength(6, ErrorMessage = "Yeni şifre en az 6 karakter olmalıdır.")]

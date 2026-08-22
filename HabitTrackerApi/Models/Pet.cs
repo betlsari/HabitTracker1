@@ -10,4 +10,7 @@ public class Pet
     public int Xp { get; set; }
     public string Mood { get; set; } = "Happy";
     public DateTime CreatedAt { get; set; }
+
+   
+    public string? Nickname { get; set; }
 }

@@ -27,30 +27,40 @@ public class PetsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<PetDto>>> GetPets()
     {
-       var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-       return await _context.Pets.Where(p => p.UserId == userId)
-            .Select(p => new PetDto
-            {
-                Id = p.Id,
-                Type = p.Type,
-                Level = p.Level,
-                Xp = p.Xp,
-                Mood= p.Mood,
-                CreatedAt = p.CreatedAt
-            })
-            .ToListAsync();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        return await _context.Pets.AsNoTracking().Where(p => p.UserId == userId)
+             .Select(p => new PetDto
+             {
+                 Id = p.Id,
+                 Type = p.Type,
+                 Level = p.Level,
+                 Xp = p.Xp,
+                 Mood = p.Mood,
+                 CreatedAt = p.CreatedAt,
+                 Nickname = p.Nickname
+             })
+             .ToListAsync();
     }
-[HttpPost]
+
+    [HttpPost]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        var hasExistingPet = await _context.Pets.AnyAsync(p => p.UserId == userId);
-        if(hasExistingPet)
+        // DÜZELTİLDİ: Type artık dokümanda belirtilen sabit seçeneklerle
+        // sınırlandırılıyor (kedi, köpek, panda, tavşan). Önceden herhangi
+        // bir string kabul ediliyordu.
+        if (!PetTypes.IsValid(dto.Type))
         {
-            const int eggCost= 50;
+            return BadRequest($"Geçersiz evcil hayvan türü. İzin verilen türler: {string.Join(", ", PetTypes.Allowed)}");
+        }
+
+        var hasExistingPet = await _context.Pets.AnyAsync(p => p.UserId == userId);
+        if (hasExistingPet)
+        {
+            const int eggCost = 50;
             var user = await _userManager.FindByIdAsync(userId);
-            if(user == null || user.TotalXp < eggCost)
+            if (user == null || user.TotalXp < eggCost)
             {
                 return BadRequest($"Yeterli XP'niz yok. Yeni bir yumurta {eggCost} XP gerektirir.");
             }
@@ -74,15 +84,16 @@ public class PetsController : ControllerBase
             Type = pet.Type,
             Level = pet.Level,
             Xp = pet.Xp,
-            Mood= pet.Mood,
-            CreatedAt = pet.CreatedAt
+            Mood = pet.Mood,
+            CreatedAt = pet.CreatedAt,
+            Nickname = pet.Nickname
         };
 
         return petDto;
     }
 
-[HttpPost("{id}/feed")]
-public async Task<ActionResult<PetDto>> FeedPet(int id)
+    [HttpPost("{id}/feed")]
+    public async Task<ActionResult<PetDto>> FeedPet(int id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
@@ -115,14 +126,16 @@ public async Task<ActionResult<PetDto>> FeedPet(int id)
             Type = pet.Type,
             Level = pet.Level,
             Xp = pet.Xp,
-            Mood= pet.Mood,
-            CreatedAt = pet.CreatedAt
+            Mood = pet.Mood,
+            CreatedAt = pet.CreatedAt,
+            Nickname = pet.Nickname
         };
 
         return petDto;
     }
-[HttpGet("{id}")]
-public async Task<ActionResult<PetDto>> GetPet(int id)
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<PetDto>> GetPet(int id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var pet = await _context.Pets.FindAsync(id);
@@ -136,28 +149,54 @@ public async Task<ActionResult<PetDto>> GetPet(int id)
             Type = pet.Type,
             Level = pet.Level,
             Xp = pet.Xp,
-            Mood= pet.Mood,
-            CreatedAt = pet.CreatedAt
+            Mood = pet.Mood,
+            CreatedAt = pet.CreatedAt,
+            Nickname = pet.Nickname
         };
         return petDto;
-
     }
 
-[HttpDelete("{id}")]
-public async Task<ActionResult> DeletePet(int id)
+    // YENİ: pet güncelleme (şu an için takma isim). Type ve Mood bilinçli
+    // olarak buradan değiştirilemiyor: Type sabit kalmalı, Mood ise sistem
+    // tarafından (PetMoodService) otomatik hesaplanıyor.
+    [HttpPut("{id}")]
+    public async Task<ActionResult<PetDto>> UpdatePet(int id, UpdatePetDto dto)
     {
-        
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var pet = await _context.Pets.FindAsync(id);
+        if (pet == null || pet.UserId != userId)
+        {
+            return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
+        }
+
+        pet.Nickname = dto.Nickname;
+        await _context.SaveChangesAsync();
+
+        return new PetDto
+        {
+            Id = pet.Id,
+            Type = pet.Type,
+            Level = pet.Level,
+            Xp = pet.Xp,
+            Mood = pet.Mood,
+            CreatedAt = pet.CreatedAt,
+            Nickname = pet.Nickname
+        };
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<ActionResult> DeletePet(int id)
+    {
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var pet = await _context.Pets.FindAsync(id);
 
-        if(pet== null || pet.UserId != userId)
+        if (pet == null || pet.UserId != userId)
         {
             return NotFound();
         }
         _context.Pets.Remove(pet);
         await _context.SaveChangesAsync();
         return NoContent();
-
     }
 }
-
