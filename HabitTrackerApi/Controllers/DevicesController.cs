@@ -8,6 +8,16 @@ using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Configuration;
 
+namespace Controllers;
+
+// DÜZELTİLDİ: [ApiController], [Route("api/[controller]")] ve [Authorize]
+// eksikti. Attribute routing olmadan endpoint'ler beklenen şekilde
+// eşlenmeyebiliyordu; [Authorize] olmadan da anonim bir istek
+// User.FindFirstValue(ClaimTypes.NameIdentifier)! çağrısında null
+// döndürüp NullReferenceException'a ya da kimliksiz erişime yol açabiliyordu.
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
 public class DevicesController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -60,8 +70,6 @@ public class DevicesController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok();
     }
-
-    
 
     [HttpDelete]
     public async Task<IActionResult> Unregister([FromQuery] string token)

@@ -13,7 +13,7 @@ namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[EnableRateLimiting("AuthPolicy")] 
+[EnableRateLimiting("AuthPolicy")]
 public class AuthController : ControllerBase
 {
     private readonly UserManager<User> _userManager;
@@ -26,111 +26,112 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
 
     private readonly IEmailQueue _emailQueue;
-private readonly TwoFactorLockoutService _twoFactorLockout;
+    private readonly TwoFactorLockoutService _twoFactorLockout;
 
-public AuthController(
-    UserManager<User> userManager,
-    SignInManager<User> signInManager,
-    TokenService tokenService,
-    EmailService emailService,
-    IEmailQueue emailQueue,
-    AuthAuditService authAudit,
-    AppDbContext context,
-    TwoFactorLockoutService twoFactorLockout,
-    ILogger<AuthController> logger)
-{
-    _userManager = userManager;
-    _signInManager = signInManager;
-    _tokenService = tokenService;
-    _emailService = emailService;
-    _emailQueue = emailQueue;
-    _authAudit = authAudit;
-    _context = context;
-    _twoFactorLockout = twoFactorLockout;
-    _logger = logger;
-}
-[HttpPost("2fa/login")]
-public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
-{
-    var userId = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
-    if (userId == null)
+    public AuthController(
+        UserManager<User> userManager,
+        SignInManager<User> signInManager,
+        TokenService tokenService,
+        EmailService emailService,
+        IEmailQueue emailQueue,
+        AuthAuditService authAudit,
+        AppDbContext context,
+        TwoFactorLockoutService twoFactorLockout,
+        ILogger<AuthController> logger)
     {
-        await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, detail: "invalid-preauth-token");
-        return Unauthorized("Oturum süresi dolmuş veya geçersiz. Lütfen tekrar giriş yapın.");
+        _userManager = userManager;
+        _signInManager = signInManager;
+        _tokenService = tokenService;
+        _emailService = emailService;
+        _emailQueue = emailQueue;
+        _authAudit = authAudit;
+        _context = context;
+        _twoFactorLockout = twoFactorLockout;
+        _logger = logger;
     }
 
-    var user = await _userManager.FindByIdAsync(userId);
-    if (user == null || !await _userManager.GetTwoFactorEnabledAsync(user))
+    [HttpPost("2fa/login")]
+    public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
     {
-        await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "two-factor-not-enabled");
-        return Unauthorized();
-    }
-
-    if (await _twoFactorLockout.IsLockedOutAsync(userId))
-    {
-        await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "2fa-locked-out");
-        return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
-    }
-
-    var codeValid = await _userManager.VerifyTwoFactorTokenAsync(
-        user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
-
-    if (!codeValid)
-    {
-        var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
-        if (!recoveryValid.Succeeded)
+        var userId = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
+        if (userId == null)
         {
-            await _twoFactorLockout.RecordFailureAsync(userId);
-            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "invalid-code");
-            return BadRequest("Doğrulama kodu hatalı.");
+            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, detail: "invalid-preauth-token");
+            return Unauthorized("Oturum süresi dolmuş veya geçersiz. Lütfen tekrar giriş yapın.");
         }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || !await _userManager.GetTwoFactorEnabledAsync(user))
+        {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "two-factor-not-enabled");
+            return Unauthorized();
+        }
+
+        if (await _twoFactorLockout.IsLockedOutAsync(userId))
+        {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "2fa-locked-out");
+            return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
+        }
+
+        var codeValid = await _userManager.VerifyTwoFactorTokenAsync(
+            user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
+
+        if (!codeValid)
+        {
+            var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
+            if (!recoveryValid.Succeeded)
+            {
+                await _twoFactorLockout.RecordFailureAsync(userId);
+                await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "invalid-code");
+                return BadRequest("Doğrulama kodu hatalı.");
+            }
+        }
+
+        await _twoFactorLockout.ResetAsync(userId);
+        var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
+        await _authAudit.RecordAsync(HttpContext, "two-factor-login", true, user);
+        return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
-    await _twoFactorLockout.ResetAsync(userId);
-    var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
-    await _authAudit.RecordAsync(HttpContext, "two-factor-login", true, user);
-    return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
-}
-
-[HttpPost("2fa/enable")]
-[Authorize]
-public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-    var user = await _userManager.FindByIdAsync(userId!);
-    if (user == null)
+    [HttpPost("2fa/enable")]
+    [Authorize]
+    public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
     {
-        return NotFound();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        if (user.TwoFactorEnabled)
+        {
+            return BadRequest("İki adımlı doğrulama zaten etkin.");
+        }
+
+        if (await _twoFactorLockout.IsLockedOutAsync(userId!))
+        {
+            return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
+        }
+
+        var isValid = await _userManager.VerifyTwoFactorTokenAsync(
+            user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
+        if (!isValid)
+        {
+            await _twoFactorLockout.RecordFailureAsync(userId!);
+            return BadRequest("Doğrulama kodu hatalı. Authenticator uygulamanızdaki güncel kodu girin.");
+        }
+
+        await _twoFactorLockout.ResetAsync(userId!);
+        await _userManager.SetTwoFactorEnabledAsync(user, true);
+        var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+
+        return Ok(new
+        {
+            message = "İki adımlı doğrulama etkinleştirildi. Kurtarma kodlarınızı güvenli bir yerde saklayın; her biri yalnızca bir kez kullanılabilir.",
+            recoveryCodes
+        });
     }
-
-    if (user.TwoFactorEnabled)
-    {
-        return BadRequest("İki adımlı doğrulama zaten etkin.");
-    }
-
-    if (await _twoFactorLockout.IsLockedOutAsync(userId!))
-    {
-        return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
-    }
-
-    var isValid = await _userManager.VerifyTwoFactorTokenAsync(
-        user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
-    if (!isValid)
-    {
-        await _twoFactorLockout.RecordFailureAsync(userId!);
-        return BadRequest("Doğrulama kodu hatalı. Authenticator uygulamanızdaki güncel kodu girin.");
-    }
-
-    await _twoFactorLockout.ResetAsync(userId!);
-    await _userManager.SetTwoFactorEnabledAsync(user, true);
-    var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-
-    return Ok(new
-    {
-        message = "İki adımlı doğrulama etkinleştirildi. Kurtarma kodlarınızı güvenli bir yerde saklayın; her biri yalnızca bir kez kullanılabilir.",
-        recoveryCodes
-    });
-}
 
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterDto registerDto)
@@ -144,7 +145,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         var result = await _userManager.CreateAsync(user, registerDto.Password);
         if (!result.Succeeded)
         {
-            
             var onlyDuplicateEmailErrors = result.Errors.All(e =>
                 e.Code == nameof(IdentityErrorDescriber.DuplicateUserName) ||
                 e.Code == nameof(IdentityErrorDescriber.DuplicateEmail));
@@ -156,8 +156,14 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
 
             return BadRequest(result.Errors);
         }
+
+        // DÜZELTİLDİ: Doğrudan senkron SmtpClient çağrısı (_emailService.SendEmailAsync)
+        // yerine, ResendConfirmation'daki gibi kuyruğa (_emailQueue) yazılıyor.
+        // Böylece register request'i SMTP sunucusunun gecikmesine/anlık
+        // erişilemezliğine bağımlı kalmıyor; gönderim EmailSenderBackgroundService
+        // tarafından arka planda, üstel geri çekilme (retry/backoff) ile yapılıyor.
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        await _emailService.SendEmailAsync(user.Email, "Email Doğrulama", $"Doğrulama kodunuz: {token}");
+        _emailQueue.Enqueue(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
     }
 
@@ -203,9 +209,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok(new { RequiresTwoFactor = false, Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
-   
-
-    
     [HttpGet("2fa/status")]
     [Authorize]
     public async Task<IActionResult> TwoFactorStatus()
@@ -220,7 +223,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok(new { Enabled = user.TwoFactorEnabled });
     }
 
-  
     [HttpPost("2fa/setup")]
     [Authorize]
     public async Task<IActionResult> SetupTwoFactor()
@@ -244,9 +246,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok(new { SharedKey = unformattedKey, AuthenticatorUri = authenticatorUri });
     }
 
-    
-  
-    
     [HttpPost("2fa/disable")]
     [Authorize]
     public async Task<IActionResult> DisableTwoFactor(DisableTwoFactorDto dto)
@@ -272,18 +271,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok(new { message = "İki adımlı doğrulama devre dışı bırakıldı." });
     }
 
-    // DÜZELTİLDİ: Refresh token reuse (çalınma) tespiti eklendi.
-    // Önceden storedToken == null / süresi dolmuş / zaten RevokedAt dolu
-    // durumlarının hepsi aynı şekilde (sadece Unauthorized) ele alınıyordu.
-    // Ama "token bulundu VE zaten revoke edilmiş" durumu aslında farklı bir
-    // anlam taşır: bu token daha önce bir refresh işleminde kullanılmış ve
-    // yerine yenisi verilmişti. Aynı (artık geçersiz) token'ın TEKRAR
-    // kullanılmaya çalışılması, token'ın çalınmış ve hem saldırgan hem de
-    // gerçek kullanıcı tarafından kullanılıyor olabileceğinin klasik işaretidir
-    // ("refresh token reuse detection"). Bu durumda sadece isteği reddetmek
-    // yetmez — o kullanıcının TÜM refresh token ailesi (tüm aktif oturumlar)
-    // iptal edilir, böylece çalınmış olabilecek diğer token'lar da işe yaramaz
-    // hale gelir ve gerçek kullanıcı tekrar giriş yapmaya zorlanır.
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
     {
@@ -299,9 +286,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
 
         if (storedToken.RevokedAt != null)
         {
-            // Reuse tespit edildi: bu token daha önce zaten kullanılmış
-            // (revoke edilmiş). Olası token hırsızlığı — güvenlik hijyeni
-            // gereği kullanıcının tüm aktif refresh token'ları iptal edilir.
             var revokedCount = await RevokeAllRefreshTokensAsync(storedToken.UserId);
             _logger.LogWarning(
                 "Refresh token reuse tespit edildi. UserId={UserId} RevokedTokenCount={RevokedCount}",
@@ -331,7 +315,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok(new { Token = newToken, RefreshToken = newRefreshToken });
     }
 
-    
     [HttpPost("logout")]
     [Authorize]
     public async Task<IActionResult> Logout(RefreshTokenDto dto)
@@ -355,7 +338,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok(new { message = "Çıkış yapıldı." });
     }
 
-    
     [HttpPost("logout-all")]
     [Authorize]
     public async Task<IActionResult> LogoutAll()
@@ -450,7 +432,6 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         return Ok("Email doğrulandı.");
     }
 
-    
     [HttpPost("resend-confirmation")]
     public async Task<IActionResult> ResendConfirmation(ResendConfirmationDto dto)
     {
@@ -458,7 +439,7 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         if (user != null && !await _userManager.IsEmailConfirmedAsync(user))
         {
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-            _emailQueue.Enqueue(new EmailMessage(user.Email, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
+            _emailQueue.Enqueue(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         }
 
         return Ok("Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, yeni bir doğrulama kodu gönderildi.");
@@ -472,25 +453,31 @@ public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
         {
             return Ok("Eğer bu email adresi kayıtlıysa, şifre sıfırlama linki gönderilecektir.");
         }
+
+        // DÜZELTİLDİ: Register ile aynı gerekçeyle, doğrudan senkron
+        // _emailService.SendEmailAsync çağrısı yerine kuyruğa yazılıyor.
+        // Şifre sıfırlama isteği artık SMTP gecikmesine bağımlı kalmıyor ve
+        // gönderim arka planda retry/backoff ile deneniyor.
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        await _emailService.SendEmailAsync(user.Email, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}");
+        _emailQueue.Enqueue(new EmailMessage(user.Email!, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}"));
 
         return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
     }
-    [HttpGet("me/export")]
-[Authorize]
-public async Task<IActionResult> ExportMyData([FromServices] UserDataExportService exportService)
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-    var user = await _userManager.FindByIdAsync(userId!);
-    if (user == null)
-    {
-        return NotFound();
-    }
 
-    var export = await exportService.ExportAsync(user);
-    return Ok(export);
-}
+    [HttpGet("me/export")]
+    [Authorize]
+    public async Task<IActionResult> ExportMyData([FromServices] UserDataExportService exportService)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var export = await exportService.ExportAsync(user);
+        return Ok(export);
+    }
 
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
@@ -511,7 +498,6 @@ public async Task<IActionResult> ExportMyData([FromServices] UserDataExportServi
         return Ok("Şifre başarıyla sıfırlandı.");
     }
 
-    
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)

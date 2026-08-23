@@ -7,10 +7,11 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Services;
-
-
+using Microsoft.Extensions.Options;
+using Configuration;
 
 namespace Controllers;
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -19,18 +20,26 @@ public class PetsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly NotificationService _notificationService;
-
     private readonly PetCosmeticsService _petCosmeticsService;
 
-    
-    private const int MaxPetsPerUser = 5;
+    // DÜZELTİLDİ: Sabit (hardcoded) "MaxPetsPerUser = 5" yerine, HabitsController
+    // ve DevicesController ile aynı desende IOptions<AppLimitsOptions> üzerinden
+    // config'ten okunuyor. Böylece appsettings.json'daki AppLimits:MaxPetsPerUser
+    // artık gerçekten etkili oluyor.
+    private readonly int _maxPetsPerUser;
 
-    public PetsController(AppDbContext context, UserManager<User> userManager, NotificationService notificationService,PetCosmeticsService petCosmeticsService)
+    public PetsController(
+        AppDbContext context,
+        UserManager<User> userManager,
+        NotificationService notificationService,
+        PetCosmeticsService petCosmeticsService,
+        IOptions<AppLimitsOptions> limits)
     {
         _context = context;
         _userManager = userManager;
         _notificationService = notificationService;
         _petCosmeticsService = petCosmeticsService;
+        _maxPetsPerUser = limits.Value.MaxPetsPerUser;
     }
 
     [HttpGet]
@@ -71,10 +80,9 @@ public class PetsController : ControllerBase
 
         var existingPetCount = await _context.Pets.CountAsync(p => p.UserId == userId);
 
-        // YENİ: Üst sınır kontrolü.
-        if (existingPetCount >= MaxPetsPerUser)
+        if (existingPetCount >= _maxPetsPerUser)
         {
-            return BadRequest($"En fazla {MaxPetsPerUser} evcil hayvana sahip olabilirsiniz.");
+            return BadRequest($"En fazla {_maxPetsPerUser} evcil hayvana sahip olabilirsiniz.");
         }
 
         if (existingPetCount > 0)
@@ -185,7 +193,6 @@ public class PetsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeletePet(int id)
     {
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var pet = await _context.Pets.FindAsync(id);
 
@@ -197,50 +204,51 @@ public class PetsController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
     [HttpGet("{id}/accessories")]
-public async Task<ActionResult<List<PetAccessoryDto>>> GetAccessories(int id)
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-    var pet = await _context.Pets.FindAsync(id);
-    if (pet == null || pet.UserId != userId)
+    public async Task<ActionResult<List<PetAccessoryDto>>> GetAccessories(int id)
     {
-        return NotFound();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var pet = await _context.Pets.FindAsync(id);
+        if (pet == null || pet.UserId != userId)
+        {
+            return NotFound();
+        }
+
+        return await _petCosmeticsService.GetCatalogForPetAsync(pet);
     }
 
-    return await _petCosmeticsService.GetCatalogForPetAsync(pet);
-}
-
-[HttpPut("{id}/accessory")]
-public async Task<ActionResult<PetDto>> EquipAccessory(int id, EquipAccessoryDto dto)
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-    var pet = await _context.Pets.FindAsync(id);
-    if (pet == null || pet.UserId != userId)
+    [HttpPut("{id}/accessory")]
+    public async Task<ActionResult<PetDto>> EquipAccessory(int id, EquipAccessoryDto dto)
     {
-        return NotFound();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var pet = await _context.Pets.FindAsync(id);
+        if (pet == null || pet.UserId != userId)
+        {
+            return NotFound();
+        }
+
+        var ok = await _petCosmeticsService.TryEquipAccessoryAsync(pet, dto.Accessory);
+        if (!ok)
+        {
+            return BadRequest("Bu aksesuar henüz açılmamış veya geçersiz.");
+        }
+
+        return ToDto(pet);
     }
 
-    var ok = await _petCosmeticsService.TryEquipAccessoryAsync(pet, dto.Accessory);
-    if (!ok)
+    private static PetDto ToDto(Pet pet) => new()
     {
-        return BadRequest("Bu aksesuar henüz açılmamış veya geçersiz.");
-    }
-
-    return ToDto(pet);
-}
-
-   private static PetDto ToDto(Pet pet) => new()
-{
-    Id = pet.Id,
-    Type = pet.Type,
-    Level = pet.Level,
-    Xp = pet.Xp,
-    Mood = pet.Mood,
-    CreatedAt = pet.CreatedAt,
-    Nickname = pet.Nickname,
-    Stage = pet.Stage.ToString(),
-    HatchedAt = pet.HatchedAt,
-    IsEgg = pet.Stage == PetStage.Egg,
-    EquippedAccessory = pet.EquippedAccessory 
-};
+        Id = pet.Id,
+        Type = pet.Type,
+        Level = pet.Level,
+        Xp = pet.Xp,
+        Mood = pet.Mood,
+        CreatedAt = pet.CreatedAt,
+        Nickname = pet.Nickname,
+        Stage = pet.Stage.ToString(),
+        HatchedAt = pet.HatchedAt,
+        IsEgg = pet.Stage == PetStage.Egg,
+        EquippedAccessory = pet.EquippedAccessory
+    };
 }

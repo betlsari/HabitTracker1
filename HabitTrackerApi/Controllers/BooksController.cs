@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Models;
 using Services;
 using System.Security.Claims;
+using Microsoft.Extensions.Options;
+using Configuration;
 
 namespace Controllers;
 
@@ -15,7 +17,6 @@ namespace Controllers;
 [Authorize]
 public class BooksController : ControllerBase
 {
-    private const int MaxBooksPerUser = 200;
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
     private readonly AppDbContext _context;
@@ -24,18 +25,26 @@ public class BooksController : ControllerBase
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
 
+    // DÜZELTİLDİ: Sabit (hardcoded) "MaxBooksPerUser = 200" yerine, HabitsController
+    // ve DevicesController ile aynı desende IOptions<AppLimitsOptions> üzerinden
+    // config'ten okunuyor. Böylece appsettings.json'daki AppLimits:MaxBooksPerUser
+    // artık gerçekten etkili oluyor.
+    private readonly int _maxBooksPerUser;
+
     public BooksController(
         AppDbContext context,
         UserManager<User> userManager,
         BookService bookService,
         BadgeService badgeService,
-        NotificationService notificationService)
+        NotificationService notificationService,
+        IOptions<AppLimitsOptions> limits)
     {
         _context = context;
         _userManager = userManager;
         _bookService = bookService;
         _badgeService = badgeService;
         _notificationService = notificationService;
+        _maxBooksPerUser = limits.Value.MaxBooksPerUser;
     }
 
     [HttpGet]
@@ -84,9 +93,9 @@ public class BooksController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        if (await _context.Books.CountAsync(b => b.UserId == userId) >= MaxBooksPerUser)
+        if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
         {
-            return Conflict($"En fazla {MaxBooksPerUser} kitap oluşturabilirsiniz.");
+            return Conflict($"En fazla {_maxBooksPerUser} kitap oluşturabilirsiniz.");
         }
 
         var book = new Book
@@ -126,8 +135,6 @@ public class BooksController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        // DÜZELTİLDİ: kullanıcının gerçek saat dilimi RecalculateBookAsync'e
-        // geçiriliyor (bkz. BookService.RecalculateBookAsync).
         var user = await _userManager.FindByIdAsync(userId);
         var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
         if (xpDelta != 0)
@@ -260,48 +267,48 @@ public class BooksController : ControllerBase
     }
 
     [HttpGet("{id:int}/reading-logs")]
-public async Task<ActionResult<PagedResultDto<BookReadingLogDto>>> GetReadingLogs(
-    int id, int page = 1, int pageSize = 50)
-{
-    if (page < 1) page = 1;
-    if (pageSize < 1 || pageSize > 200) pageSize = 50;
-
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-    var book = await _context.Books.AsNoTracking()
-        .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
-
-    if (book == null)
+    public async Task<ActionResult<PagedResultDto<BookReadingLogDto>>> GetReadingLogs(
+        int id, int page = 1, int pageSize = 50)
     {
-        return NotFound();
-    }
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
 
-    var query = _context.BookReadingLogs.AsNoTracking()
-        .Where(l => l.BookId == id)
-        .OrderByDescending(l => l.ReadDate);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
 
-    var totalCount = await query.CountAsync();
-    var items = await query
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .Select(l => new BookReadingLogDto
+        if (book == null)
         {
-            Id = l.Id,
-            BookId = l.BookId,
-            ReadDate = l.ReadDate,
-            Amount = l.Amount,
-            PageReachedAt = l.PageReachedAt,
-            XpEarned = l.XpEarned
-        })
-        .ToListAsync();
+            return NotFound();
+        }
 
-    return new PagedResultDto<BookReadingLogDto>
-    {
-        Items = items,
-        Page = page,
-        PageSize = pageSize,
-        TotalCount = totalCount
-    };
-}
+        var query = _context.BookReadingLogs.AsNoTracking()
+            .Where(l => l.BookId == id)
+            .OrderByDescending(l => l.ReadDate);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(l => new BookReadingLogDto
+            {
+                Id = l.Id,
+                BookId = l.BookId,
+                ReadDate = l.ReadDate,
+                Amount = l.Amount,
+                PageReachedAt = l.PageReachedAt,
+                XpEarned = l.XpEarned
+            })
+            .ToListAsync();
+
+        return new PagedResultDto<BookReadingLogDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
 
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
@@ -431,7 +438,6 @@ public async Task<ActionResult<PagedResultDto<BookReadingLogDto>>> GetReadingLog
         return Ok(result);
     }
 
-    
     private async Task ApplyXpDeltaAsync(string userId, int xpDelta, User? preloadedUser = null)
     {
         var user = preloadedUser ?? await _userManager.FindByIdAsync(userId);

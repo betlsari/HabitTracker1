@@ -88,6 +88,18 @@ if (builder.Environment.IsProduction())
         throw new InvalidOperationException(
             "Production ortamında Email:SmtpHost, Email:SenderEmail ve Email:SenderPassword tanımlanmalıdır (ortam değişkeni veya secret store üzerinden).");
     }
+
+    // DÜZELTİLDİ: HealthCheck:ApiKey production'da boş bırakılırsa,
+    // /health endpoint'i aşağıdaki filtre yüzünden HERKESE (monitoring/load
+    // balancer dahil) 404 dönüyordu ve bu durum fark edilmeden deploy
+    // edilebiliyordu. Diğer production zorunlu ayarlarla (Cors, Email) aynı
+    // desende, eksikse uygulama başlarken fail-fast ile durduruluyor.
+    var healthCheckApiKey = builder.Configuration["HealthCheck:ApiKey"];
+    if (string.IsNullOrWhiteSpace(healthCheckApiKey))
+    {
+        throw new InvalidOperationException(
+            "Production ortamında HealthCheck:ApiKey boş olamaz. Aksi halde /health endpoint'i monitoring/load balancer dahil herkes için erişilemez hale gelir. Ortam değişkeni veya secret store üzerinden tanımlayın.");
+    }
 }
 
 builder.Services.AddHttpLogging(options =>

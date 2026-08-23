@@ -62,12 +62,11 @@ public class HabitCompletionsController : ControllerBase
         var user = await _userManager.FindByIdAsync(userId!);
         var completionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
         if (completionUtc.Date < habit.CreatedAt.Date)
-{
-    return BadRequest("Tamamlama tarihi, alışkanlığın oluşturulma tarihinden önce olamaz.");
-}
+        {
+            return BadRequest("Tamamlama tarihi, alışkanlığın oluşturulma tarihinden önce olamaz.");
+        }
         var tz = TimeZones.Resolve(user?.TimeZoneId);
 
-        
         var isOnTime = IsWithinTargetTime(habit, completionUtc, tz);
 
         var snapshot = await _progressService.GetCompletionSnapshotAsync(
@@ -88,7 +87,6 @@ public class HabitCompletionsController : ControllerBase
             IsOnTime = isOnTime
         });
 
-        
         _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
         if (user != null)
@@ -119,7 +117,6 @@ public class HabitCompletionsController : ControllerBase
 
         if (snapshot.GoalJustReached)
         {
-            
             await _notificationService.TryEnqueueAsync(
                 userId!,
                 NotificationTypes.GoalReached,
@@ -134,11 +131,6 @@ public class HabitCompletionsController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ: Sayfalama eklendi. Önceden habit'in TÜM completion kayıtları
-    // tek seferde dönüyordu; uzun süredir kullanılan bir alışkanlıkta binlerce
-    // satır dönebiliyordu. Artık diğer controller'larla (Habits, Books, Pets,
-    // Notifications) tutarlı şekilde PagedResultDto + page/pageSize kullanılıyor.
-    // Varsayılan sıralama en yeni tamamlamalar önce gelecek şekilde ayarlandı.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitCompletionDto>>> GetHabitCompletions(
         int habitId,
@@ -207,14 +199,23 @@ public class HabitCompletionsController : ControllerBase
             return BadRequest("Tamamlama tarihi, alışkanlığın oluşturulma tarihinden önce olamaz.");
         }
 
-
-completion.Amount = dto.Amount;
-completion.CompletionDate = newCompletionUtc; 
-
-        
+        // DÜZELTİLDİ (bug): Eski değerler (Amount / XpEarned / PetStreakBonusXp),
+        // completion nesnesine YENİ değerler atanmadan ÖNCE okunuyor. Önceki
+        // sürümde "completion.Amount = dto.Amount;" satırı burada erken
+        // çalıştırılıp hemen ardından "oldAmount = completion.Amount" ile
+        // okunduğu için oldAmount aslında zaten atanmış YENİ değeri tutuyordu.
         var oldAmount = completion.Amount;
         var oldXp = completion.XpEarned;
         var oldPetStreakBonus = completion.PetStreakBonusXp;
+
+        // DÜZELTİLDİ (concurrency): CompleteHabit'te olduğu gibi habit'in
+        // ConcurrencyToken'ı da IsModified olarak işaretleniyor. Böylece bu
+        // completion güncellenirken aynı anda habit üzerinde (ör. DailyGoal
+        // değişikliği) yapılan başka bir işlem varsa, SaveChangesAsync
+        // DbUpdateConcurrencyException fırlatarak çakışmayı tespit edebiliyor.
+        // Önceden sadece CompleteHabit'te bu koruma vardı; Update/Delete
+        // akışlarında habit sessizce değişmiş olsa bile fark edilmiyordu.
+        _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
         if (HabitCategories.IsWater(habit.Category) && oldAmount != 0)
         {
@@ -234,15 +235,13 @@ completion.CompletionDate = newCompletionUtc;
             await _userManager.UpdateAsync(user);
         }
 
-        
         completion.Amount = dto.Amount;
-        completion.CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
+        completion.CompletionDate = newCompletionUtc;
         completion.XpEarned = 0;
         completion.PetStreakBonusXp = 0;
         completion.IsOnTime = false;
         await _context.SaveChangesAsync();
 
-        
         var tz = TimeZones.Resolve(user?.TimeZoneId);
         var periodStart = HabitSchedule.PeriodStartLocalOfCompletion(completion.CompletionDate, habit.Period, tz);
         var totals = await _progressService.LoadPeriodTotalsAsync(habit.Id, habit.Period, tz);
@@ -258,13 +257,11 @@ completion.CompletionDate = newCompletionUtc;
             ? HabitProgressService.CountStreak(habit, totals, periodStart, tz)
             : HabitProgressService.CountStreak(habit, totals, HabitSchedule.PeriodStartLocal(DateTime.UtcNow, habit.Period, tz), tz);
 
-        
         var isOnTime = IsWithinTargetTime(habit, completion.CompletionDate, tz);
 
         var newXp = _xpService.CalculateCompletionXp(habit, completion.Amount, totalBeforeThis, streakKept, isOnTime);
         var newPetStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
 
-        
         Flower? flower = null;
         if (HabitCategories.IsWater(habit.Category) && completion.Amount > 0)
         {
@@ -330,6 +327,11 @@ completion.CompletionDate = newCompletionUtc;
             return NotFound();
         }
 
+        // DÜZELTİLDİ (concurrency): UpdateCompletion ile aynı desende, silme
+        // işleminde de habit'in ConcurrencyToken'ı işaretleniyor; böylece
+        // eşzamanlı bir habit düzenlemesiyle çakışma tespit edilebiliyor.
+        _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
+
         if (HabitCategories.IsWater(habit.Category) && completion.Amount != 0)
         {
             await _flowerService.AddWaterAsync(userId!, -completion.Amount);
@@ -360,7 +362,6 @@ completion.CompletionDate = newCompletionUtc;
         return NoContent();
     }
 
-    
     private static bool IsWithinTargetTime(Habit habit, DateTime completionUtc, TimeZoneInfo tz)
     {
         if (!habit.TargetTime.HasValue)
