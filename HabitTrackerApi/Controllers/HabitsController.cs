@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Services;
+using Microsoft.Extensions.Options;
+using Configuration;
 
 namespace Controllers;
 
@@ -24,22 +26,25 @@ public class HabitsController : ControllerBase
     private readonly HabitProgressService _progressService;
     private readonly FlowerService _flowerService;
     private readonly PetGrowthService _petGrowthService;
+private readonly int _maxHabitsPerUser;
 
-    public HabitsController(
-        AppDbContext context,
-        UserManager<User> userManager,
-        XpService xpService,
-        HabitProgressService progressService,
-        FlowerService flowerService,
-        PetGrowthService petGrowthService)
-    {
-        _context = context;
-        _userManager = userManager;
-        _xpService = xpService;
-        _progressService = progressService;
-        _flowerService = flowerService;
-        _petGrowthService = petGrowthService;
-    }
+public HabitsController(
+    AppDbContext context,
+    UserManager<User> userManager,
+    XpService xpService,
+    HabitProgressService progressService,
+    FlowerService flowerService,
+    PetGrowthService petGrowthService,
+    IOptions<AppLimitsOptions> limits)
+{
+    _context = context;
+    _userManager = userManager;
+    _xpService = xpService;
+    _progressService = progressService;
+    _flowerService = flowerService;
+    _petGrowthService = petGrowthService;
+    _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
+}
 
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(int page = 1, int pageSize = 50)
@@ -70,8 +75,7 @@ public class HabitsController : ControllerBase
     [HttpGet("categories")]
     public ActionResult<IEnumerable<string>> GetAllowedCategories()
     {
-        // YENİ: İstemcinin hangi kategori değerlerini gönderebileceğini
-        // keşfedebilmesi için (form/dropdown doldurmak amacıyla) eklendi.
+        
         return Ok(HabitCategories.Allowed);
     }
 
@@ -95,10 +99,10 @@ public class HabitsController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        if (await _context.Habits.CountAsync(h => h.UserId == userId) >= MaxHabitsPerUser)
-        {
-            return Conflict($"En fazla {MaxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
-        }
+        if (await _context.Habits.CountAsync(h => h.UserId == userId) >= _maxHabitsPerUser)
+{
+    return Conflict($"En fazla {_maxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
+}
 
         
         if (!HabitCategories.IsValid(dto.Category))

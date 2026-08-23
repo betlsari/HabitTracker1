@@ -283,3 +283,7 @@ C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.FileProviders.Abstractions.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Microsoft.Extensions.Hosting.Abstractions.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Abstractions.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Http.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Mvc.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Mvc.ApiExplorer.dll

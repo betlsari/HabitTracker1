@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: habittracker
       POSTGRES_USER: habittracker
-      POSTGRES_PASSWORD: 1
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     ports:
       - "5432:5432"
     volumes:
@@ -29,21 +29,21 @@ services:
     ports:
       - "8080:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=habittracker;Username=habittracker;Password=1"
-      Jwt__Key: "REPLACE_WITH_A_LONG_RANDOM_SECRET"
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=habittracker;Username=habittracker;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
+      Jwt__Key: ${JWT_KEY:?JWT_KEY must be set in .env - use at least 32 random bytes}
       Jwt__Issuer: "HabitTrackerApi"
       Jwt__Audience: "HabitTrackerApiUsers"
       Email__SmtpHost: "smtp.gmail.com"
       Email__SmtpPort: "587"
-      Email__SenderEmail: ""
-      Email__SenderPassword: ""
+      Email__SenderEmail: "${EMAIL_SENDER:-}"
+      Email__SenderPassword: "${EMAIL_PASSWORD:-}"
       Email__SenderName: "HabitTracker"
 
       Fcm__ProjectId: "${FCM_PROJECT_ID:-}"
       Fcm__ServiceAccountJson: "${FCM_SERVICE_ACCOUNT_JSON:-}"
     volumes:
-      - ./secrets/fcm-service-account.json:/app/secrets/fcm-service-account.json:ro
+      - ./secrets:/app/secrets:ro
 
 volumes:
   habittracker_pgdata:

@@ -63,6 +63,33 @@ builder.Services.AddOptions<JwtOptions>()
         "Jwt:Key en az 32 byte uzunluğunda olmalıdır.")
     .ValidateOnStart();
 
+builder.Services.AddOptions<AppLimitsOptions>()
+    .Bind(builder.Configuration.GetSection(AppLimitsOptions.SectionName));
+
+// Production'da eksik bırakılırsa uygulamanın sessizce yanlış/güvensiz
+// ayarlarla ayağa kalkmasını önlemek için erken (startup sırasında) fail-fast.
+if (builder.Environment.IsProduction())
+{
+    var allowedOriginsCheck = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+    if (allowedOriginsCheck == null || allowedOriginsCheck.Length == 0)
+    {
+        throw new InvalidOperationException(
+            "Production ortamında Cors:AllowedOrigins boş olamaz. appsettings.Production.json veya ortam değişkeni ile en az bir origin tanımlayın.");
+    }
+
+    var smtpHost = builder.Configuration["Email:SmtpHost"];
+    var senderEmail = builder.Configuration["Email:SenderEmail"];
+    var senderPassword = builder.Configuration["Email:SenderPassword"];
+
+    if (string.IsNullOrWhiteSpace(smtpHost) ||
+        string.IsNullOrWhiteSpace(senderEmail) ||
+        string.IsNullOrWhiteSpace(senderPassword))
+    {
+        throw new InvalidOperationException(
+            "Production ortamında Email:SmtpHost, Email:SenderEmail ve Email:SenderPassword tanımlanmalıdır (ortam değişkeni veya secret store üzerinden).");
+    }
+}
+
 builder.Services.AddHttpLogging(options =>
 {
     options.LoggingFields = HttpLoggingFields.RequestProperties | HttpLoggingFields.ResponseStatusCode | HttpLoggingFields.Duration;
@@ -104,17 +131,10 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
     };
 
-    // YENİ: (1) purpose=2fa-pending token'ları (TokenService.GeneratePreAuthToken
-    // ile üretilenler) normal [Authorize] endpoint'lerinde ASLA kabul edilmesin —
-    // önceden sadece 2fa/login endpoint'i bu claim'i kontrol ediyordu, JWT
-    // middleware'i seviyesinde hiçbir engel yoktu (2FA bypass açığı: şifresi
-    // kırılmış bir kullanıcının PreAuthToken'ı doğrudan Bearer token olarak
-    // habits/books/pets/auth-me gibi TÜM korumalı endpoint'lerde kullanılabiliyordu).
+    // (1) purpose=2fa-pending token'ları (TokenService.GeneratePreAuthToken ile
+    // üretilenler) normal [Authorize] endpoint'lerinde ASLA kabul edilmesin.
     // (2) sstamp claim'i kullanıcının güncel SecurityStamp'i ile eşleşmezse
-    // (şifre değişti / 2FA açıldı-kapandı / logout-all yapıldı) token reddedilsin
-    // — böylece şifre değiştirmek artık eski access token'ları da gerçekten
-    // geçersiz kılıyor (aksi halde JWT süresi dolana kadar, 2 saat boyunca,
-    // geçerliliğini korurdu).
+    // (şifre değişti / 2FA açıldı-kapandı / logout-all yapıldı) token reddedilsin.
     options.Events = new JwtBearerEvents
     {
         OnTokenValidated = async context =>
@@ -172,12 +192,9 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    // DÜZELTİLDİ: Önceden AddFixedWindowLimiter'a partition key verilmediği
-    // için TÜM istemciler arasında paylaşılan TEK bir sayaç oluşuyordu — herhangi
-    // bir kullanıcı/saldırgan dakikada 5 istek atarak login/register/2FA gibi
-    // auth endpoint'lerini TÜM kullanıcılar için kilitleyebiliyordu (trivial DoS).
-    // Artık GlobalLimiter'daki gibi IP bazlı partition kullanılıyor; her IP kendi
-    // 5-istek/dakika sayacına sahip.
+    // IP bazlı partition: her IP kendi 5-istek/dakika sayacına sahip,
+    // tek bir global sayaç tüm kullanıcılar için auth endpoint'lerini
+    // kilitleyemesin diye.
     options.AddPolicy("AuthPolicy", httpContext =>
     {
         var partitionKey = $"auth-ip:{httpContext.Connection.RemoteIpAddress}";
@@ -225,11 +242,14 @@ builder.Services.AddScoped<PetMoodService>();
 builder.Services.AddScoped<BookService>();
 
 builder.Services.AddScoped<PetGrowthService>();
-builder.Services.AddScoped<PetCosmeticsService>(); 
+builder.Services.AddScoped<PetCosmeticsService>();
+builder.Services.AddScoped<TwoFactorLockoutService>();
+
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
-
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+builder.Services.AddHostedService<AuthAuditCleanupService>();
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
@@ -264,40 +284,22 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-
-app.MapHealthChecks("/health");
-
-
-
-
-
-await SeedRolesAndAdminAsync(app.Services, app.Configuration);
+// Production'da health check endpoint'i açık bırakılmıyor; sadece doğru
+// X-Health-Key header'ı ile erişilebiliyor (ör. load balancer/monitoring).
+app.MapHealthChecks("/health").AddEndpointFilter(async (context, next) =>
+{
+    if (app.Environment.IsProduction())
+    {
+        var expectedKey = app.Configuration["HealthCheck:ApiKey"];
+        var providedKey = context.HttpContext.Request.Headers["X-Health-Key"].FirstOrDefault();
+        if (string.IsNullOrEmpty(expectedKey) || providedKey != expectedKey)
+        {
+            return Results.NotFound();
+        }
+    }
+    return await next(context);
+});
 
 app.Run();
 
-static async Task SeedRolesAndAdminAsync(IServiceProvider services, IConfiguration configuration)
-{
-    using var scope = services.CreateScope();
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<Microsoft.AspNetCore.Identity.IdentityRole>>();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Models.User>>();
-
-    foreach (var roleName in new[] { "Admin", "User" })
-    {
-        if (!await roleManager.RoleExistsAsync(roleName))
-        {
-            await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(roleName));
-        }
-    }
-
-   
-    var bootstrapAdminEmail = configuration["Admin:BootstrapEmail"];
-    if (!string.IsNullOrWhiteSpace(bootstrapAdminEmail))
-    {
-        var user = await userManager.FindByEmailAsync(bootstrapAdminEmail);
-        if (user != null && !await userManager.IsInRoleAsync(user, "Admin"))
-        {
-            await userManager.AddToRoleAsync(user, "Admin");
-        }
-    }
-}
 public partial class Program;

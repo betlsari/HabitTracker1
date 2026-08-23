@@ -36,6 +36,7 @@ public class AppDbContext : IdentityDbContext<User>
 public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
 
     public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
+    public DbSet<TwoFactorAttempt> TwoFactorAttempts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -69,6 +70,10 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
                 new Badge { Id = 7, Code = "WATER_GROWTH_10", Name = "Çiçek bahçesi", Description = "Su çiçeğin 10. seviyeye ulaştı." }
             );
         });
+        builder.Entity<TwoFactorAttempt>(entity =>
+{
+    entity.HasIndex(t => t.UserId).IsUnique();
+});
 
         builder.Entity<UserBadge>(entity =>
         {
