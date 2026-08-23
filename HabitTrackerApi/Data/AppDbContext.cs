@@ -37,7 +37,7 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
     public DbSet<TwoFactorAttempt> TwoFactorAttempts { get; set; }
 
-    // Bildirim tercihleri.
+    
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -56,9 +56,10 @@ public class AppDbContext : IdentityDbContext<User>
             entity.HasIndex(h => new { h.UserId, h.IsArchived });
         });
         builder.Entity<RefreshToken>(entity =>
-        {
-            entity.HasIndex(rt => rt.Token).IsUnique();
-        });
+{
+    entity.HasIndex(rt => rt.Token).IsUnique();
+    entity.HasIndex(rt => rt.FamilyId); 
+});
 
         builder.Entity<Badge>(entity =>
         {

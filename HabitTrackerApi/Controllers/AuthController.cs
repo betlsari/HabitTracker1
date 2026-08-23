@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using Filters;
 
 namespace Controllers;
 
@@ -55,11 +56,18 @@ public class AuthController : ControllerBase
     }
 
 
+    // DÜZELTİLDİ (🔴 güvenlik): PreAuthToken artık SecurityStamp taşıyor (bkz.
+    // TokenService.GeneratePreAuthToken). Token doğrulandıktan sonra, içindeki
+    // SecurityStamp kullanıcının GÜNCEL SecurityStamp'i ile karşılaştırılıyor.
+    // Böylece login akışının ortasında (şifre doğrulandı, 2FA kodu bekleniyor)
+    // başka bir yerden şifre değiştirme/2FA kapatma gibi bir işlem yapılırsa,
+    // elde kalan eski PreAuthToken artık kullanılamıyor — normal access
+    // token'lardaki anlık iptal koruması (sstamp) bu akışa da taşınmış oldu.
     [HttpPost("2fa/login")]
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
     {
-        var userId = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
+        var (userId, tokenStamp) = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
         if (userId == null)
         {
             await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, detail: "invalid-preauth-token");
@@ -71,6 +79,12 @@ public class AuthController : ControllerBase
         {
             await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "two-factor-not-enabled");
             return Unauthorized();
+        }
+
+        if (user.SecurityStamp != tokenStamp)
+        {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "stale-preauth-token");
+            return Unauthorized("Oturumunuz güvenlik nedeniyle geçersiz kılındı. Lütfen tekrar giriş yapın.");
         }
 
         if (await _twoFactorLockout.IsLockedOutAsync(userId))
@@ -447,13 +461,21 @@ public class AuthController : ControllerBase
     }
 
     // DÜZELTİLDİ: Bu uç e-posta gönderimi tetiklediği için (spam/email
-    // bombing riski) AuthPolicy (5/dk) rate limitine alındı. Önceden sadece
+    // bombing riski) AuthPolicy (5/dk/IP) rate limitine alındı. Önceden sadece
     // global limitere (120/dk/kullanıcı) tabiydi; yetkili herhangi bir
     // kullanıcı, üçüncü bir kişinin adresini NewEmail olarak vererek o
     // adrese dakikada onlarca onay kodu e-postası tetikleyebiliyordu.
+    //
+    // DÜZELTİLDİ (🔴 güvenlik): [EmailRateLimit] eklendi. AuthPolicy sadece
+    // IP bazlı sınırlıyordu; farklı IP'lerden (ör. bir botnet/proxy havuzu)
+    // aynı NewEmail adresine yönelik istekler AuthPolicy'yi hiç doldurmadan
+    // geçebiliyordu. EmailRateLimitAttribute, DTO'daki Email/NewEmail alanını
+    // okuyup adres bazlı (IP'den bağımsız) bir pencere de uyguluyor —
+    // böylece IP değiştirilerek yapılan email bombing artık engelleniyor.
     [HttpPost("email-change")]
     [Authorize]
     [EnableRateLimiting("AuthPolicy")]
+    [EmailRateLimit]
     public async Task<IActionResult> RequestEmailChange(RequestEmailChangeDto dto)
     {
         var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -514,8 +536,12 @@ public class AuthController : ControllerBase
         return Ok("Email doğrulandı.");
     }
 
+    // DÜZELTİLDİ (🔴 güvenlik): [EmailRateLimit] eklendi. Önceden sadece IP
+    // bazlı AuthPolicy (5/dk) vardı; farklı IP'lerden gelen istekler aynı
+    // email adresine sınırsız doğrulama maili tetikleyebiliyordu.
     [HttpPost("resend-confirmation")]
     [EnableRateLimiting("AuthPolicy")]
+    [EmailRateLimit]
     public async Task<IActionResult> ResendConfirmation(ResendConfirmationDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
@@ -528,8 +554,14 @@ public class AuthController : ControllerBase
         return Ok("Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, yeni bir doğrulama kodu gönderildi.");
     }
 
+    // DÜZELTİLDİ (🔴 güvenlik): [EmailRateLimit] eklendi. Önceden sadece IP
+    // bazlı AuthPolicy (5/dk) vardı; bir saldırgan farklı IP'lerden aynı
+    // kurbanın email adresine sınırsız şifre sıfırlama maili tetikleyebiliyordu
+    // (email bombing / rahatsız etme saldırısı). Artık adres bazlı bir pencere
+    // de (varsayılan: 15 dakikada 8 istek) uygulanıyor, IP'den bağımsız olarak.
     [HttpPost("forgot-password")]
     [EnableRateLimiting("AuthPolicy")]
+    [EmailRateLimit]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);

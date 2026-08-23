@@ -12,5 +12,10 @@ public class RefreshToken : IHasConcurrencyToken
     public string UserId { get; set; } = string.Empty;
     public User? User { get; set; }
 
+    public Guid FamilyId { get; set; }
+
+   
+    public string? ReplacedByTokenHash { get; set; }
+
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

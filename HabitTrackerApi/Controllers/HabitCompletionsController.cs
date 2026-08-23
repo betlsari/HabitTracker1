@@ -48,7 +48,15 @@ public class HabitCompletionsController : ControllerBase
         _logger = logger;
     }
 
-        [HttpPost]
+    // DÜZELTİLDİ (🔴 race condition): Eşzamanlı iki tamamlama isteği aynı
+    // habit için aynı anda "totalBeforeInPeriod" anlık görüntüsünü görüp
+    // ikisi de "hedef ilk kez tutturuldu" bonusunu (XP + streak bonus +
+    // badge) alabiliyordu. PetsController/HabitsController/DevicesController
+    // ile aynı desende, habit'e özel bir Postgres advisory lock
+    // (pg_advisory_xact_lock) eklendi; kilit transaction sonunda otomatik
+    // serbest kalır. Aynı habit için gelen istekler artık serileştirilir;
+    // farklı habit'ler birbirini beklemez.
+    [HttpPost]
     public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, CreateCompletionDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -56,6 +64,9 @@ public class HabitCompletionsController : ControllerBase
         {
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"habit-completion:" + habitId}))");
 
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {
@@ -230,6 +241,7 @@ public class HabitCompletionsController : ControllerBase
         return ToDto(completion);
     }
 
+    
     [HttpPut("{id}")]
     public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId, int id, CreateCompletionDto dto)
     {
@@ -238,6 +250,9 @@ public class HabitCompletionsController : ControllerBase
         {
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"habit-completion:" + habitId}))");
 
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -371,6 +386,9 @@ public class HabitCompletionsController : ControllerBase
         {
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"habit-completion:" + habitId}))");
 
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

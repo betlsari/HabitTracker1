@@ -59,11 +59,11 @@ public class HabitsController : ControllerBase
         _logger = logger;
     }
 
-    // DÜZELTİLDİ (🟡 eksik özellik): Önceden sadece tekil `category`
-    // parametresiyle filtreleme mümkündü. Artık `categories` (çoklu değer,
-    // ör. ?categories=Su&categories=Spor) destekleniyor. Geriye dönük
-    // uyumluluk için eski `category` parametresi de çalışmaya devam ediyor;
-    // ikisi birlikte gönderilirse `categories` önceliklidir.
+    // DÜZELTİLDİ (madde 10): categoryFilter artık DB'ye gitmeden önce
+    // HabitCategories.Normalize ile kanonik forma çevriliyor. Habit.Category
+    // artık her zaman kanonik formda saklandığı için (bkz. CreateHabit/
+    // UpdateHabit), bu normalize edilmiş filtre ile birebir (case-sensitive)
+    // eşleşme doğru sonuç verir.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(
         int page = 1,
@@ -93,9 +93,14 @@ public class HabitsController : ControllerBase
             query = query.Where(h => EF.Functions.ILike(h.Name, $"%{term}%"));
         }
 
-        var categoryFilter = (categories != null && categories.Length > 0)
-            ? categories.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+        var rawCategoryFilter = (categories != null && categories.Length > 0)
+            ? categories.Where(c => !string.IsNullOrWhiteSpace(c)).ToArray()
             : (!string.IsNullOrWhiteSpace(category) ? new[] { category } : Array.Empty<string>());
+
+        var categoryFilter = rawCategoryFilter
+            .Select(c => HabitCategories.Normalize(c) ?? c)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         if (categoryFilter.Length > 0)
         {
@@ -148,8 +153,6 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    // DÜZELTİLDİ (🔴 race condition): kullanıcıya özel Postgres advisory lock
-    // ile korunuyor — aynı kullanıcının habit oluşturma istekleri serileştirilir.
     [HttpPost]
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
@@ -174,6 +177,10 @@ public class HabitsController : ControllerBase
                 return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
             }
 
+            // DÜZELTİLDİ (madde 10): Kategori artık kanonik (Allowed
+            // listesindeki doğru case'li) formda saklanıyor.
+            var normalizedCategory = HabitCategories.Normalize(dto.Category)!;
+
             var normalizedName = dto.Name.Trim();
             var normalizedNameKey = normalizedName.ToUpperInvariant();
             var habitExist = await _context.Habits.AnyAsync(h =>
@@ -189,7 +196,7 @@ public class HabitsController : ControllerBase
                 XpBonusForGoal = 10,
                 Name = normalizedName,
                 NormalizedName = normalizedNameKey,
-                Category = dto.Category,
+                Category = normalizedCategory,
                 DailyGoal = dto.DailyGoal,
                 Period = dto.Period,
                 TargetTime = dto.TargetTime,
@@ -235,6 +242,8 @@ public class HabitsController : ControllerBase
                 return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
             }
 
+            var normalizedCategory = HabitCategories.Normalize(dto.Category)!;
+
             var normalizedName = dto.Name.Trim();
             var normalizedNameKey = normalizedName.ToUpperInvariant();
             var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
@@ -249,11 +258,11 @@ public class HabitsController : ControllerBase
                 || habit.TargetTime != dto.TargetTime;
 
             var oldCategory = habit.Category;
-            var categoryChanged = !string.Equals(oldCategory, dto.Category, StringComparison.OrdinalIgnoreCase);
+            var categoryChanged = !string.Equals(oldCategory, normalizedCategory, StringComparison.OrdinalIgnoreCase);
 
             habit.Name = normalizedName;
             habit.NormalizedName = normalizedNameKey;
-            habit.Category = dto.Category;
+            habit.Category = normalizedCategory;
             habit.DailyGoal = dto.DailyGoal;
             habit.Period = dto.Period;
             habit.TargetTime = dto.TargetTime;

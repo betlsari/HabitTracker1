@@ -4,6 +4,14 @@ using Models;
 
 namespace Services;
 
+// DÜZELTİLDİ (🟡 N+1 / performans): Önceden habit ve book toplamları
+// (LoadPeriodTotalsAsync) her habit/book için AYRI AYRI çağrılıyordu — bu
+// job her dakika çalıştığı için kullanıcı sayısı arttıkça DB'ye ciddi yük
+// biniyordu. Artık habit'ler/kitaplar (Period, TimeZoneId) kombinasyonuna
+// göre gruplanıp her grup için TEK toplu sorgu (LoadPeriodTotalsBatchAsync)
+// atılıyor. Ayrıca aynı totals haritası hem "hatırlatma" hem de "kaçırıldı"
+// geçişinde tekrar kullanılıyor — önceden bu iki geçiş birbirinden habersiz,
+// aynı veriyi iki kez sorguluyordu.
 public class ReminderBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
@@ -35,11 +43,8 @@ public class ReminderBackgroundService : BackgroundService
                 var bookService = scope.ServiceProvider.GetRequiredService<BookService>();
                 var missedHour = _configuration.GetValue("Notifications:MissedHabitLocalHour", 21);
 
-                await SendRemindersAsync(db, notifications, progress, stoppingToken);
-                await SendMissedAsync(db, notifications, progress, missedHour, stoppingToken);
-
-                
-                await SendBookMissedAsync(db, notifications, bookService, missedHour, stoppingToken);
+                await RunHabitPassAsync(db, notifications, progress, missedHour, stoppingToken);
+                await RunBookPassAsync(db, notifications, bookService, missedHour, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -56,31 +61,78 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
-    private static async Task SendRemindersAsync(
+    private static async Task RunHabitPassAsync(
         AppDbContext db,
         NotificationService notifications,
         HabitProgressService progress,
+        int missedHour,
         CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
         var habits = await db.Habits.AsNoTracking()
-    .Include(h => h.User)
-    .Where(h => h.ReminderTime != null && !h.IsArchived)
-    .ToListAsync(cancellationToken);
+            .Include(h => h.User)
+            .Where(h => !h.IsArchived)
+            .ToListAsync(cancellationToken);
 
+        if (habits.Count == 0)
+        {
+            return;
+        }
+
+        var tzByHabit = habits.ToDictionary(h => h.Id, h => TimeZones.Resolve(h.User?.TimeZoneId));
+        var totalsByHabit = await LoadHabitTotalsGroupedAsync(progress, habits, tzByHabit, cancellationToken);
+
+        await SendRemindersAsync(habits, tzByHabit, totalsByHabit, notifications, now, cancellationToken);
+        await SendMissedAsync(habits, tzByHabit, totalsByHabit, notifications, missedHour, now, cancellationToken);
+    }
+
+    private static async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadHabitTotalsGroupedAsync(
+        HabitProgressService progress,
+        List<Habit> habits,
+        Dictionary<int, TimeZoneInfo> tzByHabit,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, Dictionary<DateTime, int>>();
+
+        foreach (var group in habits.GroupBy(h => (h.Period, TzId: tzByHabit[h.Id].Id)))
+        {
+            var habitIds = group.Select(h => h.Id).ToArray();
+            var tz = tzByHabit[group.First().Id];
+            var batch = await progress.LoadPeriodTotalsBatchAsync(habitIds, group.Key.Period, tz, cancellationToken);
+            foreach (var kv in batch)
+            {
+                result[kv.Key] = kv.Value;
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task SendRemindersAsync(
+        List<Habit> habits,
+        Dictionary<int, TimeZoneInfo> tzByHabit,
+        Dictionary<int, Dictionary<DateTime, int>> totalsByHabit,
+        NotificationService notifications,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
         foreach (var habit in habits)
         {
-            var tz = TimeZones.Resolve(habit.User?.TimeZoneId);
+            if (habit.ReminderTime == null)
+            {
+                continue;
+            }
+
+            var tz = tzByHabit[habit.Id];
             var local = TimeZones.ToLocal(now, tz);
-            var reminder = habit.ReminderTime!.Value;
-            var reminderTime = reminder.ToTimeSpan();
+            var reminderTime = habit.ReminderTime.Value.ToTimeSpan();
             if (Math.Abs((local.TimeOfDay - reminderTime).TotalMinutes) > MinuteTolerance)
             {
                 continue;
             }
 
+            var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
             var periodStart = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
-            var totals = await progress.LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
             if (HabitProgressService.IsGoalReached(habit, totals, periodStart))
             {
                 continue;
@@ -99,28 +151,24 @@ public class ReminderBackgroundService : BackgroundService
     }
 
     private static async Task SendMissedAsync(
-        AppDbContext db,
+        List<Habit> habits,
+        Dictionary<int, TimeZoneInfo> tzByHabit,
+        Dictionary<int, Dictionary<DateTime, int>> totalsByHabit,
         NotificationService notifications,
-        HabitProgressService progress,
         int missedHour,
+        DateTime now,
         CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
-        var habits = await db.Habits.AsNoTracking()
-    .Include(h => h.User)
-    .Where(h => !h.IsArchived)
-    .ToListAsync(cancellationToken);
-
         foreach (var habit in habits)
         {
-            var tz = TimeZones.Resolve(habit.User?.TimeZoneId);
+            var tz = tzByHabit[habit.Id];
             if (!HabitSchedule.IsEndOfPeriodWindow(now, habit.Period, tz, missedHour, MinuteTolerance))
             {
                 continue;
             }
 
+            var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
             var periodStart = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
-            var totals = await progress.LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
             if (HabitProgressService.IsGoalReached(habit, totals, periodStart))
             {
                 continue;
@@ -162,8 +210,7 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
-   
-    private static async Task SendBookMissedAsync(
+    private static async Task RunBookPassAsync(
         AppDbContext db,
         NotificationService notifications,
         BookService bookService,
@@ -172,20 +219,39 @@ public class ReminderBackgroundService : BackgroundService
     {
         var now = DateTime.UtcNow;
         var books = await db.Books.AsNoTracking()
-    .Include(b => b.User)
-    .Where(b => !b.IsCompleted && !b.IsArchived && b.DailyGoalAmount > 0)
-    .ToListAsync(cancellationToken);
+            .Include(b => b.User)
+            .Where(b => !b.IsCompleted && !b.IsArchived && b.DailyGoalAmount > 0)
+            .ToListAsync(cancellationToken);
+
+        if (books.Count == 0)
+        {
+            return;
+        }
+
+        var tzByBook = books.ToDictionary(b => b.Id, b => TimeZones.Resolve(b.User?.TimeZoneId));
+        var totalsByBook = new Dictionary<int, Dictionary<DateTime, int>>();
+
+        foreach (var group in books.GroupBy(b => (b.Period, TzId: tzByBook[b.Id].Id)))
+        {
+            var bookIds = group.Select(b => b.Id).ToArray();
+            var tz = tzByBook[group.First().Id];
+            var batch = await bookService.LoadPeriodTotalsBatchAsync(bookIds, group.Key.Period, tz, cancellationToken);
+            foreach (var kv in batch)
+            {
+                totalsByBook[kv.Key] = kv.Value;
+            }
+        }
 
         foreach (var book in books)
         {
-            var tz = TimeZones.Resolve(book.User?.TimeZoneId);
+            var tz = tzByBook[book.Id];
             if (!HabitSchedule.IsEndOfPeriodWindow(now, book.Period, tz, missedHour, MinuteTolerance))
             {
                 continue;
             }
 
+            var totals = totalsByBook.TryGetValue(book.Id, out var t) ? t : new Dictionary<DateTime, int>();
             var periodStart = HabitSchedule.PeriodStartLocal(now, book.Period, tz);
-            var totals = await bookService.LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
             var totalInPeriod = totals.TryGetValue(periodStart, out var amount) ? amount : 0;
             if (totalInPeriod >= book.DailyGoalAmount)
             {

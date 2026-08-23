@@ -334,6 +334,17 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
+        // DÜZELTİLDİ (🔴 tutarsızlık): HabitCompletionsController.CompleteHabit
+        // "tamamlama tarihi habit'in oluşturulma tarihinden önce olamaz" kontrolü
+        // yapıyordu, ama bu uç noktada kitabın oluşturulma tarihi için aynı
+        // kontrol hiç yoktu. Kitap oluşturulmadan önceki bir tarihe okuma
+        // kaydı eklenip geçmişe dönük sahte streak/istatistik üretilebiliyordu.
+        var readDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
+        if (readDateUtc.Date < book.CreatedAt.Date)
+        {
+            return BadRequest("Okuma tarihi, kitabın oluşturulma tarihinden önce olamaz.");
+        }
+
         _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var user = await _userManager.FindByIdAsync(userId);
@@ -472,6 +483,16 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
+        // DÜZELTİLDİ (🔴 tutarsızlık): Güncelleme sırasında da yeni ReadDate
+        // için aynı "kitabın oluşturulma tarihinden önce olamaz" kontrolü
+        // uygulanıyor; aksi halde LogReading'deki kısıtlama update ile
+        // dolanılabilirdi.
+        var newReadDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
+        if (newReadDateUtc.Date < book.CreatedAt.Date)
+        {
+            return BadRequest("Okuma tarihi, kitabın oluşturulma tarihinden önce olamaz.");
+        }
+
         _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
@@ -480,7 +501,7 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        log.ReadDate = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
+        log.ReadDate = newReadDateUtc;
         log.Amount = dto.Amount;
         log.PageReachedAt = dto.PageReachedAt;
         await _context.SaveChangesAsync();

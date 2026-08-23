@@ -239,6 +239,23 @@ builder.Services.AddAuthentication(options =>
 });
 
 // CORS
+// DÜZELTİLDİ (🔴 Development ortamı yapılandırma eksikliği): Önceden
+// Cors:AllowedOrigins hem Development hem Production'da appsettings.json'dan
+// okunuyordu ve appsettings.Development.json bu anahtarı hiç tanımlamıyordu.
+// appsettings.json'daki varsayılan da boş dizi olduğundan, Development'ta
+// hiç origin izin verilmiyordu — CORS politikası "AllowAnyOrigin" da
+// çağırmadığından policy fiilen hiçbir origin'e izin vermiyordu ve tarayıcı
+// tabanlı istemciler (web, Flutter web, Android emulator vb.) local API'ye
+// erişemiyordu.
+//
+// Çözüm: Development ortamında Cors:AllowedOrigins hâlâ boşsa, yaygın yerel
+// geliştirme adreslerine (localhost, 127.0.0.1 ve Android emulator'ün host
+// loopback adresi olan 10.0.2.2, hangi porttan gelirse gelsin) dinamik olarak
+// izin veriliyor. appsettings.Development.json içine açıkça origin
+// tanımlanırsa (bkz. güncellenmiş appsettings.Development.json), o liste
+// önceliklidir. Production davranışı DEĞİŞMEDİ: hâlâ sadece açıkça
+// tanımlanan origin'lere izin verilir ve yukarıdaki validasyon boş listeyle
+// başlamayı zaten engelliyor.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultCorsPolicy", policy =>
@@ -251,6 +268,16 @@ builder.Services.AddCors(options =>
             policy.WithOrigins(allowedOrigins)
                   .AllowAnyHeader()
                   .AllowAnyMethod();
+            return;
+        }
+
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(origin =>
+                    Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+                    (uri.Host is "localhost" or "127.0.0.1" or "10.0.2.2" or "[::1]"))
+                .AllowAnyHeader()
+                .AllowAnyMethod();
         }
     });
 });

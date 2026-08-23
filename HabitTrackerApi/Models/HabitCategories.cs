@@ -8,12 +8,6 @@ public static class HabitCategories
     public const string Sport = "Spor";
     public const string Other = "Diğer";
 
-    // DÜZELTİLDİ (madde 8): "Water"/"Reading"/"Focus"/"Sport"/"Other" gibi
-    // İngilizce alias'lar kaldırıldı. Önceden IsValid bunları sessizce kabul
-    // ediyordu ama GET /api/habits/categories sadece Türkçe Allowed listesini
-    // döndürüyordu; istemci geliştiricisi "gerçekten kabul edilen küme"yi bu
-    // endpoint'ten öğrenemiyordu. Artık kabul edilen küme == endpoint'in
-    // döndürdüğü küme (tek doğruluk kaynağı: Allowed).
     public static readonly string[] Allowed =
     {
         Water,
@@ -26,6 +20,24 @@ public static class HabitCategories
     public static bool IsValid(string? category) =>
         !string.IsNullOrWhiteSpace(category) &&
         Allowed.Contains(category, StringComparer.OrdinalIgnoreCase);
+
+    // YENİ (madde 10): IsValid case-insensitive çalışıyor ("su"/"SU"/"Su"
+    // hepsi geçerli) ama önceden veritabanına kullanıcının gönderdiği ham
+    // casing ile yazılıyordu. Aynı mantıksal kategori farklı satırlarda
+    // "Su"/"su"/"SU" olarak saklanabiliyordu; bu da HabitsController.GetHabits
+    // içindeki case-sensitive `categoryFilter.Contains(h.Category)` SQL
+    // filtresinin bazı kayıtları atlamasına yol açıyordu. Normalize, girdiyi
+    // Allowed listesindeki KANONİK (doğru case'li) forma çevirir; geçersizse
+    // null döner. Controller'lar artık DB'ye yazmadan önce bunu çağırıyor.
+    public static string? Normalize(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return null;
+        }
+
+        return Allowed.FirstOrDefault(a => a.Equals(category, StringComparison.OrdinalIgnoreCase));
+    }
 
     public static bool IsWater(string? category) => Matches(category, Water);
 

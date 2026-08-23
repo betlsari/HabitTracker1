@@ -115,6 +115,17 @@ public class SyncController : ControllerBase
                 {
                     return Failure(item.ClientRequestId, "Tamamlama tarihi gelecekte olamaz.");
                 }
+                // DÜZELTİLDİ (🔴 tutarsızlık): Tekil HabitCompletionsController
+                // uç noktası CreateCompletionDto.Validate() üzerinden
+                // MaxPastDays (10 yıl) sınırını uyguluyordu; bu batch akışında
+                // aynı kontrol hiç yapılmıyordu. Bu sayede batch endpoint'i
+                // üzerinden tekil uçtan geçmeyecek, aşırı eski tarihli (ör.
+                // yüzlerce yıl önceki) sahte tamamlama kayıtları oluşturulabiliyordu.
+                if (completionUtc < DateTime.UtcNow.AddDays(-CreateCompletionDto.MaxPastDays))
+                {
+                    return Failure(item.ClientRequestId,
+                        $"Tamamlama tarihi en fazla {CreateCompletionDto.MaxPastDays} gün öncesine ait olabilir.");
+                }
 
                 var tz = TimeZones.Resolve(user?.TimeZoneId);
                 var isOnTime = HabitSchedule.IsWithinTargetTime(habit, completionUtc, tz);
@@ -207,6 +218,18 @@ public class SyncController : ControllerBase
                 if (item.ReadDate > DateTime.UtcNow)
                 {
                     return Failure(item.ClientRequestId, "Okuma tarihi gelecekte olamaz.");
+                }
+
+                // DÜZELTİLDİ (🔴 tutarsızlık): Habit tarafında hem tekil hem
+                // artık batch uçta "tamamlama tarihi oluşturulma tarihinden
+                // önce olamaz" kontrolü varken, Book/BookReadingLog tarafında
+                // bu kontrol ne tekil (BooksController.LogReading) ne de
+                // batch akışında hiç yapılmıyordu. Kitap oluşturulmadan
+                // önceki bir tarihe okuma kaydı eklenebiliyordu.
+                var readDateUtc = DateTime.SpecifyKind(item.ReadDate, DateTimeKind.Utc);
+                if (readDateUtc.Date < book.CreatedAt.Date)
+                {
+                    return Failure(item.ClientRequestId, "Okuma tarihi, kitabın oluşturulma tarihinden önce olamaz.");
                 }
 
                 var dto = new LogReadingDto
