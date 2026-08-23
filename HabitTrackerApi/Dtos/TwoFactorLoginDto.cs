@@ -9,6 +9,6 @@ public class TwoFactorLoginDto
 
     
     [Required]
-    [StringLength(20, MinimumLength = 6, ErrorMessage = "Doğrulama kodu geçersiz.")]
+    [StringLength(64, MinimumLength = 6, ErrorMessage = "Doğrulama kodu geçersiz.")]
     public required string Code { get; set; }
 }

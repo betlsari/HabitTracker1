@@ -31,6 +31,7 @@ public class BooksController : ControllerBase
     private readonly BookService _bookService;
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
+    private readonly ILogger<BooksController> _logger;
     private readonly int _maxBooksPerUser;
 
     public BooksController(
@@ -39,7 +40,8 @@ public class BooksController : ControllerBase
         BookService bookService,
         BadgeService badgeService,
         NotificationService notificationService,
-        IOptions<AppLimitsOptions> limits)
+        IOptions<AppLimitsOptions> limits,
+        ILogger<BooksController> logger)
     {
         _context = context;
         _userManager = userManager;
@@ -47,6 +49,7 @@ public class BooksController : ControllerBase
         _badgeService = badgeService;
         _notificationService = notificationService;
         _maxBooksPerUser = limits.Value.MaxBooksPerUser;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -118,12 +121,6 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-    // DÜZELTİLDİ (🔴 race condition): "mevcut kitap sayısını say -> limiti
-    // aşıyorsa reddet -> kitabı ekle" adımları arasında hiçbir eşzamanlılık
-    // koruması yoktu. Aynı kullanıcıdan gelen iki eşzamanlı istek, ikisi de
-    // aynı anda "count < max" görüp MaxBooksPerUser limitini aşabiliyordu.
-    // PetsController.CreatePet / HabitsController.CreateHabit ile aynı
-    // desende kullanıcıya özel bir Postgres advisory lock eklendi.
     [HttpPost]
     public async Task<ActionResult<BookDto>> CreateBook(CreateBookDto dto)
     {
@@ -273,10 +270,6 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): kitap silme + geçmiş XP'yi geri
-    // alma artık tek transaction içinde. Önceden book silinip SaveChanges
-    // sonrası ApplyXpDeltaAsync başarısız olursa kitap gitmiş ama XP geri
-    // alınmamış olabiliyordu.
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteBook(int id)
     {
@@ -325,8 +318,6 @@ public class BooksController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        // YENİ (madde 6): Idempotency — HabitCompletionsController.CompleteHabit
-        // ile aynı desen.
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {
             var existingLog = await _context.BookReadingLogs.AsNoTracking()
@@ -343,7 +334,6 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        
         _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var user = await _userManager.FindByIdAsync(userId);
@@ -367,7 +357,8 @@ public class BooksController : ControllerBase
         if (user != null && result.XpEarned != 0)
         {
             user.TotalXp += result.XpEarned;
-            await _userManager.UpdateAsync(user);
+            var updateResult = await _userManager.UpdateAsync(user);
+            updateResult.EnsureSucceeded(_logger, "book-reading-log-xp", userId);
         }
 
         await _badgeService.EvaluateAfterBookLogAsync(userId, result.StreakAfterDays);
@@ -444,9 +435,6 @@ public class BooksController : ControllerBase
         };
     }
 
-    // YENİ (🟡 eksik uç nokta): Tekil bir BookReadingLog kaydını id ile
-    // getiren uç nokta yoktu (HabitCompletionsController.GetHabitCompletion
-    // ile aynı ihtiyaç/desen).
     [HttpGet("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> GetReadingLog(int id, int logId)
     {
@@ -484,13 +472,6 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        // DÜZELTİLDİ (madde 7): Önceden bu uç noktada Book.ConcurrencyToken
-        // hiç IsModified işaretlenmiyordu; RecalculateBookAsync hesapladığı
-        // değerler eskisiyle AYNI çıkarsa (ör. CurrentPage değişmezse) EF
-        // Book'u "Modified" olarak görmüyor ve olası paralel bir Book
-        // güncellemesiyle (ör. başka bir istekte DailyGoalAmount değişmiş
-        // olması) çakışma HİÇ tespit edilemiyordu. Habit tarafındaki
-        // desenle tutarlı hale getirildi.
         _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
@@ -533,7 +514,6 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        // DÜZELTİLDİ (madde 7): bkz. UpdateReadingLog açıklaması.
         _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
@@ -627,6 +607,10 @@ public class BooksController : ControllerBase
         return Ok(result);
     }
 
+    // DÜZELTİLDİ: UserManager.UpdateAsync sonucu artık kontrol ediliyor.
+    // Önceden bu metod XP güncellemesinin gerçekten kalıcı olup olmadığını
+    // hiç doğrulamıyordu; ConcurrencyStamp çakışmasında XP değişikliği
+    // sessizce kaybolabiliyordu.
     private async Task ApplyXpDeltaAsync(string userId, int xpDelta, User? preloadedUser = null)
     {
         var user = preloadedUser ?? await _userManager.FindByIdAsync(userId);
@@ -636,6 +620,7 @@ public class BooksController : ControllerBase
         }
 
         user.TotalXp = Math.Max(0, user.TotalXp + xpDelta);
-        await _userManager.UpdateAsync(user);
+        var updateResult = await _userManager.UpdateAsync(user);
+        updateResult.EnsureSucceeded(_logger, "book-xp-delta", userId);
     }
 }

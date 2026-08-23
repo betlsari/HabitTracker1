@@ -726,6 +726,62 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
         return (token, refreshToken);
     }
+    
+[HttpGet("2fa/recovery-codes/count")]
+[Authorize]
+public async Task<IActionResult> GetRemainingRecoveryCodesCount()
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var user = await _userManager.FindByIdAsync(userId!);
+    if (user == null)
+    {
+        return NotFound();
+    }
+
+    if (!await _userManager.GetTwoFactorEnabledAsync(user))
+    {
+        return BadRequest("İki adımlı doğrulama etkin değil.");
+    }
+
+    var remaining = await _userManager.CountRecoveryCodesAsync(user);
+    return Ok(new { RemainingCodes = remaining });
+}
+
+
+[HttpPost("2fa/recovery-codes/regenerate")]
+[Authorize]
+[EnableRateLimiting("AuthPolicy")]
+public async Task<IActionResult> RegenerateRecoveryCodes(RegenerateRecoveryCodesDto dto)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var user = await _userManager.FindByIdAsync(userId!);
+    if (user == null)
+    {
+        return NotFound();
+    }
+
+    if (!await _userManager.GetTwoFactorEnabledAsync(user))
+    {
+        await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", false, user, detail: "2fa-not-enabled");
+        return BadRequest("İki adımlı doğrulama etkin değil.");
+    }
+
+    var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+    if (!passwordValid)
+    {
+        await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", false, user, detail: "invalid-password");
+        return BadRequest("Şifre hatalı.");
+    }
+
+    var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+    await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", true, user);
+
+    return Ok(new
+    {
+        message = "Yeni kurtarma kodları oluşturuldu. Önceki kodlar artık geçersiz; yeni kodları güvenli bir yerde saklayın.",
+        recoveryCodes
+    });
+}
 
        private async Task<int> RevokeAllRefreshTokensAsync(string userId)
     {

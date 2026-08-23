@@ -24,6 +24,7 @@ public class HabitCompletionsController : ControllerBase
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
     private readonly PetGrowthService _petGrowthService;
+    private readonly ILogger<HabitCompletionsController> _logger;
 
     public HabitCompletionsController(
         AppDbContext context,
@@ -33,7 +34,8 @@ public class HabitCompletionsController : ControllerBase
         FlowerService flowerService,
         BadgeService badgeService,
         NotificationService notificationService,
-        PetGrowthService petGrowthService)
+        PetGrowthService petGrowthService,
+        ILogger<HabitCompletionsController> logger)
     {
         _context = context;
         _userManager = userManager;
@@ -43,6 +45,7 @@ public class HabitCompletionsController : ControllerBase
         _badgeService = badgeService;
         _notificationService = notificationService;
         _petGrowthService = petGrowthService;
+        _logger = logger;
     }
 
         [HttpPost]
@@ -54,11 +57,6 @@ public class HabitCompletionsController : ControllerBase
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        // YENİ (madde 6): Idempotency. Aynı habit + ClientRequestId ile daha
-        // önce başarıyla işlenmiş bir completion varsa, tekrar XP/streak/badge
-        // üretmeden var olan kaydı döndür. SyncController'daki batch akışıyla
-        // aynı desen; artık normal (tekli) uç nokta da mobil çift-dokunma /
-        // otomatik retry senaryolarına karşı korunuyor.
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {
             var existing = await _context.HabitCompletions.AsNoTracking()
@@ -113,17 +111,14 @@ public class HabitCompletionsController : ControllerBase
             if (user != null)
             {
                 user.TotalXp += xpEarned;
-                await _userManager.UpdateAsync(user);
+                var updateResult = await _userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(_logger, "habit-completion-xp", userId!);
             }
 
             await _context.SaveChangesAsync();
         }
         catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {
-            // YENİ: Aynı anda (ör. tekrar deneme + orijinal istek) iki eşzamanlı
-            // istek aynı ClientRequestId ile yarışırsa, unique index ihlali
-            // burada yakalanır — hata döndürmek yerine az önce diğer isteğin
-            // oluşturduğu kaydı bulup onu döneriz.
             var raced = await _context.HabitCompletions.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
             if (raced != null)
@@ -213,10 +208,6 @@ public class HabitCompletionsController : ControllerBase
         };
     }
 
-    // YENİ (🟡 eksik uç nokta): Önceden sadece liste + update/delete vardı;
-    // tek bir completion kaydını doğrudan id ile getiren bir uç nokta yoktu.
-    // İstemcinin (ör. bildirimden derin link ile) tek bir kaydı sayfalama
-    // yapmadan çekebilmesi için eklendi.
     [HttpGet("{id:int}")]
     public async Task<ActionResult<HabitCompletionDto>> GetHabitCompletion(int habitId, int id)
     {
@@ -239,14 +230,6 @@ public class HabitCompletionsController : ControllerBase
         return ToDto(completion);
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): Önceden bu metod birden fazla
-    // ayrı SaveChangesAsync çağrısı yapıyordu (eski XP geri alma, yeni XP
-    // ekleme, flower/pet güncellemeleri, completion güncelleme) — aralarında
-    // bir hata olursa (ör. son SaveChangesAsync patlarsa) kullanıcının XP'si,
-    // çiçek/pet durumu ve completion kaydı tutarsız kalabiliyordu.
-    // CompleteHabit ile aynı desende CreateExecutionStrategy +
-    // BeginTransactionAsync ile sarmalandı; her şey ya birlikte COMMIT olur
-    // ya da hiçbiri kalıcı olmaz.
     [HttpPut("{id}")]
     public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId, int id, CreateCompletionDto dto)
     {
@@ -296,7 +279,8 @@ public class HabitCompletionsController : ControllerBase
         if (user != null && oldXp != 0)
         {
             user.TotalXp = Math.Max(0, user.TotalXp - oldXp);
-            await _userManager.UpdateAsync(user);
+            var removeResult = await _userManager.UpdateAsync(user);
+            removeResult.EnsureSucceeded(_logger, "habit-completion-update-xp-remove", userId!);
         }
 
         completion.Amount = dto.Amount;
@@ -343,7 +327,8 @@ public class HabitCompletionsController : ControllerBase
         if (user != null)
         {
             user.TotalXp += newXp;
-            await _userManager.UpdateAsync(user);
+            var addResult = await _userManager.UpdateAsync(user);
+            addResult.EnsureSucceeded(_logger, "habit-completion-update-xp-add", userId!);
         }
 
         completion.XpEarned = newXp;
@@ -378,8 +363,6 @@ public class HabitCompletionsController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): flower/pet XP geri alma ve
-    // completion silme işlemleri artık tek transaction içinde.
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteCompletion(int habitId, int id)
     {
@@ -424,7 +407,8 @@ public class HabitCompletionsController : ControllerBase
             if (user != null)
             {
                 user.TotalXp = Math.Max(0, user.TotalXp - completion.XpEarned);
-                await _userManager.UpdateAsync(user);
+                var updateResult = await _userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(_logger, "habit-completion-delete-xp", userId!);
             }
         }
 

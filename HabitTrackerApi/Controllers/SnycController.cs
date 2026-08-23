@@ -25,6 +25,7 @@ public class SyncController : ControllerBase
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
     private readonly BookService _bookService;
+    private readonly ILogger<SyncController> _logger;
 
     public SyncController(
         AppDbContext context,
@@ -35,7 +36,8 @@ public class SyncController : ControllerBase
         PetGrowthService petGrowthService,
         BadgeService badgeService,
         NotificationService notificationService,
-        BookService bookService)
+        BookService bookService,
+        ILogger<SyncController> logger)
     {
         _context = context;
         _userManager = userManager;
@@ -46,6 +48,7 @@ public class SyncController : ControllerBase
         _badgeService = badgeService;
         _notificationService = notificationService;
         _bookService = bookService;
+        _logger = logger;
     }
 
     [HttpPost("batch")]
@@ -90,8 +93,6 @@ public class SyncController : ControllerBase
                 _context.ChangeTracker.Clear();
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                // Idempotency: aynı habit + ClientRequestId zaten işlenmişse
-                // var olan kaydı döndür, tekrar oluşturma.
                 var existing = await _context.HabitCompletions.AsNoTracking()
                     .FirstOrDefaultAsync(c => c.HabitId == item.HabitId && c.ClientRequestId == item.ClientRequestId);
                 if (existing != null)
@@ -140,7 +141,8 @@ public class SyncController : ControllerBase
                 if (user != null)
                 {
                     user.TotalXp += xpEarned;
-                    await _userManager.UpdateAsync(user);
+                    var updateResult = await _userManager.UpdateAsync(user);
+                    updateResult.EnsureSucceeded(_logger, "sync-habit-completion-xp", userId);
                 }
 
                 await _context.SaveChangesAsync();
@@ -221,7 +223,8 @@ public class SyncController : ControllerBase
                 if (user != null && addResult.XpEarned != 0)
                 {
                     user.TotalXp += addResult.XpEarned;
-                    await _userManager.UpdateAsync(user);
+                    var updateResult = await _userManager.UpdateAsync(user);
+                    updateResult.EnsureSucceeded(_logger, "sync-book-reading-log-xp", userId);
                 }
 
                 await _badgeService.EvaluateAfterBookLogAsync(userId, addResult.StreakAfterDays);

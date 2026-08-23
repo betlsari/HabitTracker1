@@ -34,6 +34,7 @@ public class HabitsController : ControllerBase
     private readonly FlowerService _flowerService;
     private readonly PetGrowthService _petGrowthService;
     private readonly BadgeService _badgeService;
+    private readonly ILogger<HabitsController> _logger;
     private readonly int _maxHabitsPerUser;
 
     public HabitsController(
@@ -44,7 +45,8 @@ public class HabitsController : ControllerBase
         FlowerService flowerService,
         PetGrowthService petGrowthService,
         BadgeService badgeService,
-        IOptions<AppLimitsOptions> limits)
+        IOptions<AppLimitsOptions> limits,
+        ILogger<HabitsController> logger)
     {
         _context = context;
         _userManager = userManager;
@@ -54,14 +56,21 @@ public class HabitsController : ControllerBase
         _petGrowthService = petGrowthService;
         _badgeService = badgeService;
         _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
+        _logger = logger;
     }
 
+    // DÜZELTİLDİ (🟡 eksik özellik): Önceden sadece tekil `category`
+    // parametresiyle filtreleme mümkündü. Artık `categories` (çoklu değer,
+    // ör. ?categories=Su&categories=Spor) destekleniyor. Geriye dönük
+    // uyumluluk için eski `category` parametresi de çalışmaya devam ediyor;
+    // ikisi birlikte gönderilirse `categories` önceliklidir.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(
         int page = 1,
         int pageSize = 50,
         string? search = null,
         string? category = null,
+        [FromQuery] string[]? categories = null,
         bool includeArchived = false,
         string sortBy = "createdAt",
         bool sortDesc = true)
@@ -84,9 +93,13 @@ public class HabitsController : ControllerBase
             query = query.Where(h => EF.Functions.ILike(h.Name, $"%{term}%"));
         }
 
-        if (!string.IsNullOrWhiteSpace(category))
+        var categoryFilter = (categories != null && categories.Length > 0)
+            ? categories.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : (!string.IsNullOrWhiteSpace(category) ? new[] { category } : Array.Empty<string>());
+
+        if (categoryFilter.Length > 0)
         {
-            query = query.Where(h => h.Category == category);
+            query = query.Where(h => categoryFilter.Contains(h.Category));
         }
 
         query = (sortBy.ToLowerInvariant(), sortDesc) switch
@@ -135,14 +148,8 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    // DÜZELTİLDİ (🔴 race condition): "mevcut habit sayısını say -> limiti
-    // aşıyorsa reddet -> isim çakışması var mı diye kontrol et -> ekle"
-    // adımları arasında hiçbir eşzamanlılık koruması yoktu. Aynı kullanıcıdan
-    // gelen iki eşzamanlı istek hem MaxHabitsPerUser limitini aşabiliyor hem
-    // de (DB'deki unique index'e rağmen) 500 hatasıyla sonuçlanabiliyordu.
-    // PetsController.CreatePet / DevicesController.Register ile aynı desende
-    // kullanıcıya özel bir Postgres advisory lock eklendi; bu sayede aynı
-    // kullanıcının habit oluşturma istekleri serileştirilir.
+    // DÜZELTİLDİ (🔴 race condition): kullanıcıya özel Postgres advisory lock
+    // ile korunuyor — aynı kullanıcının habit oluşturma istekleri serileştirilir.
     [HttpPost]
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
@@ -198,7 +205,8 @@ public class HabitsController : ControllerBase
             if (user != null)
             {
                 user.TotalXp += _xpService.GetHabitCreationXp();
-                await _userManager.UpdateAsync(user);
+                var updateResult = await _userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(_logger, "habit-creation-xp", userId);
             }
 
             await transaction.CommitAsync();
@@ -206,21 +214,6 @@ public class HabitsController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ: Kategori değişimi artık transaction içinde ele alınıyor
-    // ve geçmiş tamamlamalardan kaynaklanan çiçek suyu / pet odaklanma XP'si
-    // eski kategoriden geri alınıp yeni kategoriye göre yeniden uygulanıyor.
-    // Önceden ör. "Su" -> "Spor" geçişinde geçmişte sulanmış çiçek asla geri
-    // alınmıyor, "Spor" -> "Odaklanma" geçişinde ise geçmiş miktarlar pet'e
-    // hiç XP olarak yansımıyordu.
-    //
-    // DÜZELTİLDİ (🟡 rozet tutarsızlığı): Bir habit "Su" kategorisine
-    // taşındığında ve geçmiş miktar çiçeğe toplu olarak eklendiğinde çiçek
-    // seviyesi doğrudan 5/10'a atlayabiliyordu, ama bu yol normal
-    // AddWaterAsync (tekil completion) akışının çağırdığı
-    // BadgeService.EvaluateAfterCompletionAsync'i hiç tetiklemiyordu; bu da
-    // WATER_GROWTH_5 / WATER_GROWTH_10 rozetlerinin retroaktif olarak asla
-    // verilmemesine yol açıyordu. Artık kategori "Su"ya çevrildiğinde çiçek
-    // seviyesine göre bu rozetler de değerlendiriliyor.
     [HttpPut("{id:int}")]
     public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
     {
@@ -269,9 +262,6 @@ public class HabitsController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            // YENİ: Kategori değişince eski kategoriye bağlı yan etkiler
-            // (çiçek suyu / pet odaklanma XP'si) geçmiş toplam miktar
-            // üzerinden geri alınır, yeni kategoriye bağlıysa yeniden uygulanır.
             if (categoryChanged)
             {
                 var totalAmount = await _context.HabitCompletions
@@ -314,7 +304,8 @@ public class HabitsController : ControllerBase
                 if (recalc.XpDelta != 0 && user != null)
                 {
                     user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
-                    await _userManager.UpdateAsync(user);
+                    var updateResult = await _userManager.UpdateAsync(user);
+                    updateResult.EnsureSucceeded(_logger, "habit-update-recalc-xp", userId!);
                 }
 
                 if (recalc.PetStreakBonusDelta > 0)
@@ -421,7 +412,8 @@ public class HabitsController : ControllerBase
             if (user != null)
             {
                 user.TotalXp = Math.Max(0, user.TotalXp - totalXpToRemove);
-                await _userManager.UpdateAsync(user);
+                var updateResult = await _userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(_logger, "habit-delete-xp-removal", userId!);
             }
         }
 

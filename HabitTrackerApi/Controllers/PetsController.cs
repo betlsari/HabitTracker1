@@ -22,6 +22,7 @@ public class PetsController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly NotificationService _notificationService;
     private readonly PetCosmeticsService _petCosmeticsService;
+    private readonly ILogger<PetsController> _logger;
     private readonly int _maxPetsPerUser;
 
     // DÜZELTİLDİ (🟡 magic number): eggCost/feedCost/petXpGain artık
@@ -35,7 +36,8 @@ public class PetsController : ControllerBase
         UserManager<User> userManager,
         NotificationService notificationService,
         PetCosmeticsService petCosmeticsService,
-        IOptions<AppLimitsOptions> limits)
+        IOptions<AppLimitsOptions> limits,
+        ILogger<PetsController> logger)
     {
         _context = context;
         _userManager = userManager;
@@ -45,6 +47,7 @@ public class PetsController : ControllerBase
         _eggCostXp = limits.Value.PetEggCostXp;
         _feedCostXp = limits.Value.PetFeedCostXp;
         _feedXpGain = limits.Value.PetFeedXpGain;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -75,16 +78,13 @@ public class PetsController : ControllerBase
 
     // DÜZELTİLDİ (transaction eksikliği): yumurta maliyeti için kullanıcı
     // XP'sinin düşülmesi ile yeni Pet oluşturulması ayrı SaveChanges'lerdi.
-    // Önceden ikinci SaveChanges başarısız olursa kullanıcı XP kaybedip
-    // karşılığında pet alamayabiliyordu. Artık tek transaction.
+    // Artık tek transaction.
     //
     // DÜZELTİLDİ (🔴 race condition): "mevcut pet sayısını say -> limiti
     // aşıyorsa reddet -> yeni pet ekle" adımları arasında hiçbir eşzamanlılık
-    // koruması yoktu. Aynı kullanıcıdan gelen iki eşzamanlı istek, ikisi de
-    // aynı anda "count < max" görüp MaxPetsPerUser limitini aşabiliyordu
-    // (klasik check-then-act). DevicesController.Register ile aynı desende
-    // kullanıcıya özel bir Postgres advisory lock (pg_advisory_xact_lock)
-    // eklendi; kilit transaction sonunda otomatik serbest kalır.
+    // koruması yoktu. Kullanıcıya özel bir Postgres advisory lock
+    // (pg_advisory_xact_lock) eklendi; kilit transaction sonunda otomatik
+    // serbest kalır.
     [HttpPost]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
@@ -119,7 +119,8 @@ public class PetsController : ControllerBase
                 return BadRequest($"Yeterli XP'niz yok. Yeni bir yumurta {_eggCostXp} XP gerektirir.");
             }
             user.TotalXp -= _eggCostXp;
-            await _userManager.UpdateAsync(user);
+            var updateResult = await _userManager.UpdateAsync(user);
+            updateResult.EnsureSucceeded(_logger, "pet-egg-cost", userId);
         }
 
         var pet = new Pet
@@ -140,8 +141,19 @@ public class PetsController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): besleme maliyeti (kullanıcı XP
-    // düşümü) ile pet XP kazanımı/kaydı artık tek transaction içinde.
+    // DÜZELTİLDİ (🔴 race condition — YENİ): "kullanıcının yeterli XP'si var
+    // mı kontrol et -> XP düş -> pet'e XP ekle" adımları arasında hiçbir
+    // eşzamanlılık koruması YOKTU. Aynı kullanıcıdan gelen iki eşzamanlı
+    // "besle" isteği, ikisi de aynı anda "TotalXp >= feedCost" görüp
+    // kullanıcının XP'sini negatife düşürebiliyordu (klasik check-then-act).
+    // CreatePet/DevicesController.Register ile aynı desende kullanıcıya özel
+    // bir advisory lock eklendi; XP bakiyesiyle ilgili olduğu için CreatePet'in
+    // kullandığı "pet:" anahtarından KASITLI OLARAK farklı bir anahtar
+    // ("petfeed-xp:") kullanılmıyor — aslında ikisi de aynı kullanıcının
+    // XP'sini ilgilendirdiği için aynı "pet:" + userId anahtarı kullanılarak
+    // CreatePet ile de serileştiriliyor (yumurta maliyeti ile besleme
+    // maliyeti aynı kullanıcı için birbirini de bekler, bu güvenlik açısından
+    // sorun değildir, sadece ekstra bir serileşme).
     [HttpPost("{id}/feed")]
     public async Task<ActionResult<PetDto>> FeedPet(int id)
     {
@@ -152,6 +164,9 @@ public class PetsController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
 
         var pet = await _context.Pets.FindAsync(id);
         if (pet == null || pet.UserId != userId)
@@ -166,7 +181,8 @@ public class PetsController : ControllerBase
         }
 
         user.TotalXp -= _feedCostXp;
-        await _userManager.UpdateAsync(user);
+        var updateResult = await _userManager.UpdateAsync(user);
+        updateResult.EnsureSucceeded(_logger, "pet-feed-cost", userId);
 
         pet.Xp += _feedXpGain;
 

@@ -42,11 +42,28 @@ services:
 
       Fcm__ProjectId: "${FCM_PROJECT_ID:-}"
       Fcm__ServiceAccountJson: "${FCM_SERVICE_ACCOUNT_JSON:-}"
+
+      # DÜZELTİLDİ: Program.cs'deki HealthCheckApiKeyFilter, IsProduction()
+      # olduğunda /health* uç noktalarına erişim için X-Health-Key header'ı
+      # zorunlu kılıyor (yoksa 404 döner). Önceden bu ortam değişkeni hiç
+      # tanımlı değildi ve aşağıdaki healthcheck komutu header göndermiyordu;
+      # ASPNETCORE_ENVIRONMENT=Production'a çekildiğinde container healthcheck'i
+      # sürekli "unhealthy" dönecekti. Artık aynı anahtar hem uygulamaya hem de
+      # healthcheck komutuna veriliyor.
+      HealthCheck__ApiKey: "${HEALTH_CHECK_API_KEY:-}"
     volumes:
       - ./secrets:/app/secrets:ro
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "-H",
+          "X-Health-Key: ${HEALTH_CHECK_API_KEY:-}",
+          "http://localhost:8080/health/live",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
