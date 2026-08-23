@@ -1,3 +1,4 @@
+// HabitTrackerApi/Controllers/PetsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Data;
 using Models;
@@ -21,11 +22,6 @@ public class PetsController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly NotificationService _notificationService;
     private readonly PetCosmeticsService _petCosmeticsService;
-
-    // DÜZELTİLDİ: Sabit (hardcoded) "MaxPetsPerUser = 5" yerine, HabitsController
-    // ve DevicesController ile aynı desende IOptions<AppLimitsOptions> üzerinden
-    // config'ten okunuyor. Böylece appsettings.json'daki AppLimits:MaxPetsPerUser
-    // artık gerçekten etkili oluyor.
     private readonly int _maxPetsPerUser;
 
     public PetsController(
@@ -68,9 +64,19 @@ public class PetsController : ControllerBase
         };
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): yumurta maliyeti için kullanıcı
+    // XP'sinin düşülmesi ile yeni Pet oluşturulması ayrı SaveChanges'lerdi.
+    // Önceden ikinci SaveChanges başarısız olursa kullanıcı XP kaybedip
+    // karşılığında pet alamayabiliyordu. Artık tek transaction.
     [HttpPost]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<PetDto>>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         if (!PetTypes.IsValid(dto.Type))
@@ -110,12 +116,22 @@ public class PetsController : ControllerBase
         _context.Pets.Add(pet);
         await _context.SaveChangesAsync();
 
+        await transaction.CommitAsync();
         return ToDto(pet);
+        });
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): besleme maliyeti (kullanıcı XP
+    // düşümü) ile pet XP kazanımı/kaydı artık tek transaction içinde.
     [HttpPost("{id}/feed")]
     public async Task<ActionResult<PetDto>> FeedPet(int id)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<PetDto>>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         var pet = await _context.Pets.FindAsync(id);
@@ -134,7 +150,6 @@ public class PetsController : ControllerBase
         }
 
         user.TotalXp -= feedCost;
-
         await _userManager.UpdateAsync(user);
 
         pet.Xp += petXpGain;
@@ -159,7 +174,9 @@ public class PetsController : ControllerBase
                 dedupKey: $"pethatch:{pet.Id}");
         }
 
+        await transaction.CommitAsync();
         return ToDto(pet);
+        });
     }
 
     [HttpGet("{id}")]

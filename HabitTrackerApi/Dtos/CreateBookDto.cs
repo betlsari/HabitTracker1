@@ -1,3 +1,4 @@
+
 using System.ComponentModel.DataAnnotations;
 using Models;
 
@@ -10,10 +11,13 @@ public class CreateBookDto : IValidatableObject
     public const int MaxAuthorLength = 200;
     public const int MaxNotesLength = 1000;
 
+    
+    public const int MaxTitleLength = 300;
+
     [MinLength(1)]
+    [MaxLength(MaxTitleLength)]
     public string Title { get; set; } = string.Empty;
 
-    
     [MaxLength(MaxAuthorLength)]
     public string? Author { get; set; }
 
@@ -27,7 +31,6 @@ public class CreateBookDto : IValidatableObject
     [Range(1, MaxTotalPages)]
     public int? TotalPages { get; set; }
 
-    
     [MaxLength(MaxNotesLength)]
     public string? Notes { get; set; }
 

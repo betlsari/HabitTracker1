@@ -1,3 +1,4 @@
+// HabitTrackerApi/Controllers/HabitCompletionsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Data;
@@ -177,9 +178,23 @@ public class HabitCompletionsController : ControllerBase
         };
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): Önceden bu metod birden fazla
+    // ayrı SaveChangesAsync çağrısı yapıyordu (eski XP geri alma, yeni XP
+    // ekleme, flower/pet güncellemeleri, completion güncelleme) — aralarında
+    // bir hata olursa (ör. son SaveChangesAsync patlarsa) kullanıcının XP'si,
+    // çiçek/pet durumu ve completion kaydı tutarsız kalabiliyordu.
+    // CompleteHabit ile aynı desende CreateExecutionStrategy +
+    // BeginTransactionAsync ile sarmalandı; her şey ya birlikte COMMIT olur
+    // ya da hiçbiri kalıcı olmaz.
     [HttpPut("{id}")]
     public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId, int id, CreateCompletionDto dto)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<HabitCompletionDto>>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (completion == null || completion.HabitId != habitId)
@@ -199,22 +214,10 @@ public class HabitCompletionsController : ControllerBase
             return BadRequest("Tamamlama tarihi, alışkanlığın oluşturulma tarihinden önce olamaz.");
         }
 
-        // DÜZELTİLDİ (bug): Eski değerler (Amount / XpEarned / PetStreakBonusXp),
-        // completion nesnesine YENİ değerler atanmadan ÖNCE okunuyor. Önceki
-        // sürümde "completion.Amount = dto.Amount;" satırı burada erken
-        // çalıştırılıp hemen ardından "oldAmount = completion.Amount" ile
-        // okunduğu için oldAmount aslında zaten atanmış YENİ değeri tutuyordu.
         var oldAmount = completion.Amount;
         var oldXp = completion.XpEarned;
         var oldPetStreakBonus = completion.PetStreakBonusXp;
 
-        // DÜZELTİLDİ (concurrency): CompleteHabit'te olduğu gibi habit'in
-        // ConcurrencyToken'ı da IsModified olarak işaretleniyor. Böylece bu
-        // completion güncellenirken aynı anda habit üzerinde (ör. DailyGoal
-        // değişikliği) yapılan başka bir işlem varsa, SaveChangesAsync
-        // DbUpdateConcurrencyException fırlatarak çakışmayı tespit edebiliyor.
-        // Önceden sadece CompleteHabit'te bu koruma vardı; Update/Delete
-        // akışlarında habit sessizce değişmiş olsa bile fark edilmiyordu.
         _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
         if (HabitCategories.IsWater(habit.Category) && oldAmount != 0)
@@ -309,12 +312,23 @@ public class HabitCompletionsController : ControllerBase
                 $"goal:{habit.Id}:{periodStart:yyyy-MM-dd}");
         }
 
+        await transaction.CommitAsync();
         return ToDto(completion);
+        });
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): flower/pet XP geri alma ve
+    // completion silme işlemleri artık tek transaction içinde; aralarında
+    // hata olursa hiçbir değişiklik kalıcı olmuyor.
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteCompletion(int habitId, int id)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (completion == null || completion.HabitId != habitId)
@@ -327,9 +341,6 @@ public class HabitCompletionsController : ControllerBase
             return NotFound();
         }
 
-        // DÜZELTİLDİ (concurrency): UpdateCompletion ile aynı desende, silme
-        // işleminde de habit'in ConcurrencyToken'ı işaretleniyor; böylece
-        // eşzamanlı bir habit düzenlemesiyle çakışma tespit edilebiliyor.
         _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
         if (HabitCategories.IsWater(habit.Category) && completion.Amount != 0)
@@ -359,7 +370,10 @@ public class HabitCompletionsController : ControllerBase
 
         _context.HabitCompletions.Remove(completion);
         await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
         return NoContent();
+        });
     }
 
     private static HabitCompletionDto ToDto(HabitCompletion completion) => new()

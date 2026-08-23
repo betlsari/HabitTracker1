@@ -1,3 +1,4 @@
+// HabitTrackerApi/Controllers/AuthController.cs
 using Microsoft.AspNetCore.Identity;
 using Models;
 using Dtos;
@@ -11,15 +12,6 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Controllers;
 
-// DÜZELTİLDİ: [EnableRateLimiting("AuthPolicy")] önceden CONTROLLER seviyesinde
-// tanımlıydı; bu yüzden /me, /me/export, /sessions, /timezone, /change-password,
-// /2fa/status, /2fa/setup gibi zararsız, kimlik doğrulamalı ve zaten global
-// rate limiter'a (120 istek/dk) tabi olan endpoint'ler de dakikada 5 istekle
-// sınırlanıyordu — normal kullanımda bile 429 alınmasına yol açabiliyordu.
-// Artık bu politika sadece gerçekten hassas/istismara açık (kaba kuvvet,
-// email/SMS bombalama, token brute-force) endpoint'lere ayrı ayrı uygulanıyor:
-// register, login, 2fa/login, refresh, forgot-password, reset-password,
-// resend-confirmation.
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
@@ -102,6 +94,37 @@ public class AuthController : ControllerBase
         return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
+    // DÜZELTİLDİ: 2FA kurulum başlatma (secret/QR üretimi) artık audit
+    // trail'e yazılıyor. Kurulum tek başına 2FA'yı etkinleştirmez ama bir
+    // hesapta authenticator secret'inin sıfırlanmasını (ResetAuthenticatorKeyAsync)
+    // içerir; login/2fa-login/email-change ile tutarlı olması için izleniyor.
+    [HttpPost("2fa/setup")]
+    [Authorize]
+    public async Task<IActionResult> SetupTwoFactor()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        await _userManager.ResetAuthenticatorKeyAsync(user);
+        var unformattedKey = await _userManager.GetAuthenticatorKeyAsync(user);
+
+        const string issuer = "HabitTracker";
+        var label = user.Email ?? user.UserName ?? user.Id;
+        var authenticatorUri =
+            $"otpauth://totp/{Uri.EscapeDataString(issuer)}:{Uri.EscapeDataString(label)}" +
+            $"?secret={unformattedKey}&issuer={Uri.EscapeDataString(issuer)}&digits=6";
+
+        await _authAudit.RecordAsync(HttpContext, "two-factor-setup", true, user);
+
+        return Ok(new { SharedKey = unformattedKey, AuthenticatorUri = authenticatorUri });
+    }
+
+    // DÜZELTİLDİ: 2FA etkinleştirme başarılı/başarısız denemeleri artık
+    // audit trail'e yazılıyor.
     [HttpPost("2fa/enable")]
     [Authorize]
     public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
@@ -128,12 +151,15 @@ public class AuthController : ControllerBase
         if (!isValid)
         {
             await _twoFactorLockout.RecordFailureAsync(userId!);
+            await _authAudit.RecordAsync(HttpContext, "two-factor-enable", false, user, detail: "invalid-code");
             return BadRequest("Doğrulama kodu hatalı. Authenticator uygulamanızdaki güncel kodu girin.");
         }
 
         await _twoFactorLockout.ResetAsync(userId!);
         await _userManager.SetTwoFactorEnabledAsync(user, true);
         var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+
+        await _authAudit.RecordAsync(HttpContext, "two-factor-enable", true, user);
 
         return Ok(new
         {
@@ -167,11 +193,6 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-        // DÜZELTİLDİ: Doğrudan senkron SmtpClient çağrısı (_emailService.SendEmailAsync)
-        // yerine, ResendConfirmation'daki gibi kuyruğa (_emailQueue) yazılıyor.
-        // Böylece register request'i SMTP sunucusunun gecikmesine/anlık
-        // erişilemezliğine bağımlı kalmıyor; gönderim EmailSenderBackgroundService
-        // tarafından arka planda, üstel geri çekilme (retry/backoff) ile yapılıyor.
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         _emailQueue.Enqueue(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
@@ -234,29 +255,9 @@ public class AuthController : ControllerBase
         return Ok(new { Enabled = user.TwoFactorEnabled });
     }
 
-    [HttpPost("2fa/setup")]
-    [Authorize]
-    public async Task<IActionResult> SetupTwoFactor()
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        await _userManager.ResetAuthenticatorKeyAsync(user);
-        var unformattedKey = await _userManager.GetAuthenticatorKeyAsync(user);
-
-        const string issuer = "HabitTracker";
-        var label = user.Email ?? user.UserName ?? user.Id;
-        var authenticatorUri =
-            $"otpauth://totp/{Uri.EscapeDataString(issuer)}:{Uri.EscapeDataString(label)}" +
-            $"?secret={unformattedKey}&issuer={Uri.EscapeDataString(issuer)}&digits=6";
-
-        return Ok(new { SharedKey = unformattedKey, AuthenticatorUri = authenticatorUri });
-    }
-
+    // DÜZELTİLDİ: 2FA devre dışı bırakma başarılı/başarısız denemeleri
+    // artık audit trail'e yazılıyor. 2FA'yı kapatmak hesabın güvenlik
+    // seviyesini düşüren en hassas işlemlerden biri olduğu için önemli.
     [HttpPost("2fa/disable")]
     [Authorize]
     public async Task<IActionResult> DisableTwoFactor(DisableTwoFactorDto dto)
@@ -271,6 +272,7 @@ public class AuthController : ControllerBase
         var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
         if (!passwordValid)
         {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-disable", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı.");
         }
 
@@ -278,6 +280,8 @@ public class AuthController : ControllerBase
         await _userManager.ResetAuthenticatorKeyAsync(user);
 
         await RevokeAllRefreshTokensAsync(user.Id);
+
+        await _authAudit.RecordAsync(HttpContext, "two-factor-disable", true, user);
 
         return Ok(new { message = "İki adımlı doğrulama devre dışı bırakıldı." });
     }
@@ -395,11 +399,6 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
-    // YENİ: Kullanıcının kendi giriş/2FA/şifre güvenlik geçmişini (audit log)
-    // görebilmesi için. UserId eşleşen kayıtların yanı sıra, henüz kullanıcı
-    // tespit edilmeden (ör. şifre hatalı) kaydedilmiş ama kendi email'iyle
-    // eşleşen olayları da döndürür — böylece "hesabıma başarısız giriş
-    // denemesi oldu mu" sorusuna da cevap verir.
     [HttpGet("audit-log")]
     [Authorize]
     public async Task<ActionResult<PagedResultDto<AuthAuditEventDto>>> GetAuditLog(int page = 1, int pageSize = 50)
@@ -442,8 +441,14 @@ public class AuthController : ControllerBase
         };
     }
 
+    // DÜZELTİLDİ: Bu uç e-posta gönderimi tetiklediği için (spam/email
+    // bombing riski) AuthPolicy (5/dk) rate limitine alındı. Önceden sadece
+    // global limitere (120/dk/kullanıcı) tabiydi; yetkili herhangi bir
+    // kullanıcı, üçüncü bir kişinin adresini NewEmail olarak vererek o
+    // adrese dakikada onlarca onay kodu e-postası tetikleyebiliyordu.
     [HttpPost("email-change")]
     [Authorize]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> RequestEmailChange(RequestEmailChangeDto dto)
     {
         var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -459,14 +464,6 @@ public class AuthController : ControllerBase
         return Ok("Onay kodu yeni email adresinize gönderildi.");
     }
 
-    // DÜZELTİLDİ (güvenlik): Değişiklik onaylanıp uygulandıktan sonra ESKİ
-    // email adresine de bir bilgilendirme e-postası gönderiliyor. Önceden
-    // sadece yeni adrese onay kodu gidiyordu; hesap ele geçirilip email
-    // sessizce değiştirilseydi gerçek hesap sahibinin bundan haberi
-    // olmuyordu. Bu bildirim herhangi bir token/link İÇERMEZ (salt
-    // bilgilendirme) — bu yüzden ele geçirilse bile ekstra risk oluşturmaz.
-    // Gönderim, register/forgot-password ile aynı desende kuyruğa yazılır;
-    // SMTP gecikmesi bu isteğin yanıt süresini etkilemez.
     [HttpPost("email-change/confirm")]
     [Authorize]
     public async Task<IActionResult> ConfirmEmailChange(ConfirmEmailChangeDto dto)
@@ -536,10 +533,6 @@ public class AuthController : ControllerBase
             return Ok("Eğer bu email adresi kayıtlıysa, şifre sıfırlama linki gönderilecektir.");
         }
 
-        // DÜZELTİLDİ: Register ile aynı gerekçeyle, doğrudan senkron
-        // _emailService.SendEmailAsync çağrısı yerine kuyruğa yazılıyor.
-        // Şifre sıfırlama isteği artık SMTP gecikmesine bağımlı kalmıyor ve
-        // gönderim arka planda retry/backoff ile deneniyor.
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
         _emailQueue.Enqueue(new EmailMessage(user.Email!, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}"));
 
@@ -561,10 +554,6 @@ public class AuthController : ControllerBase
         return Ok(export);
     }
 
-    // YENİ (madde 7 - veri modeli eksikleri): Kullanıcı genelinde bir
-    // "seviye" (level) sistemi yoktu; sadece TotalXp vardı. UserLevelService
-    // XP'yi kademeli artan bir eşik tablosuna göre level'a çeviriyor ve
-    // bir sonraki seviyeye ne kadar kaldığını (ProgressPercent) hesaplıyor.
     [HttpGet("me/level")]
     [Authorize]
     public async Task<ActionResult<UserLevelDto>> GetMyLevel()

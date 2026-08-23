@@ -1,3 +1,4 @@
+// HabitTrackerApi/Controllers/HabitsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Data;
@@ -21,9 +22,6 @@ public class HabitsController : ControllerBase
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
 
-    // YENİ (madde 6): GetHabits için izin verilen sıralama alanları.
-    // Serbest metin sortBy parametresi doğrudan SQL'e yansıtılmadığı
-    // (whitelist edildiği) için SQL injection riski yok.
     private static readonly HashSet<string> AllowedSortFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "createdAt", "name", "category"
@@ -55,10 +53,6 @@ public class HabitsController : ControllerBase
         _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
     }
 
-    // DÜZELTİLDİ (madde 6 - eksik CRUD/UX): search (isimde arama),
-    // category filtresi, includeArchived ve sortBy/sortDesc parametreleri
-    // eklendi. Varsayılan davranış (parametresiz çağrı) önceki sürümle
-    // birebir aynı: arşivlenmemiş habit'ler, CreatedAt'e göre azalan sırada.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(
         int page = 1,
@@ -253,9 +247,6 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    // YENİ (madde 6): Kalıcı silme yerine geçici durdurma. Geçmiş XP/streak/
-    // rozet verisi korunur; sadece habit listelerde/hatırlatmalarda görünmez
-    // hale gelir. DeleteHabit (hard delete) davranışı DEĞİŞMEDİ, ayrıca durur.
     [HttpPut("{id:int}/archive")]
     public async Task<ActionResult<HabitDto>> ArchiveHabit(int id)
     {
@@ -296,9 +287,20 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): flower/pet XP geri alma, habit
+    // silme ve kullanıcı XP güncellemesi artık tek transaction içinde.
+    // Önceden bunlardan biri (ör. son UserManager.UpdateAsync) başarısız
+    // olursa habit silinmiş ama XP/çiçek/pet durumu güncellenmemiş
+    // kalabiliyordu.
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteHabit(int id)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var habit = await _context.Habits.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (habit == null || habit.UserId != userId)
@@ -343,7 +345,9 @@ public class HabitsController : ControllerBase
             }
         }
 
+        await transaction.CommitAsync();
         return NoContent();
+        });
     }
 
     [HttpGet("{habitId:int}/progress")]

@@ -1,3 +1,4 @@
+// HabitTrackerApi/Controllers/BooksController.cs
 using Data;
 using Dtos;
 using Microsoft.AspNetCore.Authorization;
@@ -48,8 +49,6 @@ public class BooksController : ControllerBase
         _maxBooksPerUser = limits.Value.MaxBooksPerUser;
     }
 
-    // DÜZELTİLDİ (madde 6): search (Title/Author), includeArchived, sortBy/sortDesc
-    // eklendi. Parametresiz çağrı önceki davranışla birebir aynı.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<BookDto>>> GetBooks(
         int page = 1,
@@ -180,7 +179,6 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-    // YENİ (madde 6): DeleteBook (hard delete) yerine geçici durdurma.
     [HttpPut("{id:int}/archive")]
     public async Task<ActionResult<BookDto>> ArchiveBook(int id)
     {
@@ -258,9 +256,19 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): kitap silme + geçmiş XP'yi geri
+    // alma artık tek transaction içinde. Önceden book silinip SaveChanges
+    // sonrası ApplyXpDeltaAsync başarısız olursa kitap gitmiş ama XP geri
+    // alınmamış olabiliyordu.
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteBook(int id)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -285,7 +293,9 @@ public class BooksController : ControllerBase
             await ApplyXpDeltaAsync(userId, -totalXpToRemove);
         }
 
+        await transaction.CommitAsync();
         return NoContent();
+        });
     }
 
     [HttpPost("{id:int}/reading-logs")]
@@ -386,9 +396,18 @@ public class BooksController : ControllerBase
         };
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): log güncelleme + kitap yeniden
+    // hesaplama (RecalculateBookAsync, tüm logları yeniden yazar) + XP delta
+    // uygulama artık tek transaction içinde.
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<BookReadingLogDto>>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -414,12 +433,22 @@ public class BooksController : ControllerBase
             await ApplyXpDeltaAsync(userId, xpDelta, user);
         }
 
+        await transaction.CommitAsync();
         return BookService.ToLogDto(log);
+        });
     }
 
+    // DÜZELTİLDİ (transaction eksikliği): log silme + yeniden hesaplama +
+    // XP delta uygulama artık tek transaction içinde.
     [HttpDelete("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult> DeleteReadingLog(int id, int logId)
     {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult>(async () =>
+        {
+        _context.ChangeTracker.Clear();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -443,7 +472,9 @@ public class BooksController : ControllerBase
             await ApplyXpDeltaAsync(userId, xpDelta, user);
         }
 
+        await transaction.CommitAsync();
         return NoContent();
+        });
     }
 
     [HttpGet("{id:int}/progress")]
