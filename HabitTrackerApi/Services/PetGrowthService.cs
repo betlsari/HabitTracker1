@@ -1,5 +1,7 @@
 using Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Configuration;
 using Models;
 
 namespace Services;
@@ -15,12 +17,19 @@ public class PetGrowthService
 
     private readonly PetCosmeticsService _cosmeticsService;
 
+    
+    private readonly int _maxPetLevel;
 
-    public PetGrowthService(AppDbContext context, NotificationService notifications,PetCosmeticsService cosmeticsService)
+    public PetGrowthService(
+        AppDbContext context,
+        NotificationService notifications,
+        PetCosmeticsService cosmeticsService,
+        IOptions<AppLimitsOptions> limits)
     {
         _context = context;
         _notifications = notifications;
         _cosmeticsService = cosmeticsService;
+        _maxPetLevel = limits.Value.MaxPetLevel;
     }
 
     public async Task<List<Pet>> AddFocusXpAsync(string userId, int minutes, CancellationToken cancellationToken = default)
@@ -60,7 +69,7 @@ public class PetGrowthService
         await RemoveXpAsync(userId, xpLoss, cancellationToken);
     }
 
-        public async Task<List<Pet>> AddStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
+    public async Task<List<Pet>> AddStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
     {
         if (bonusXp <= 0)
         {
@@ -79,7 +88,7 @@ public class PetGrowthService
         return await ApplyXpGainAsync(userId, pets, bonusXp, cancellationToken);
     }
 
-    
+
     public async Task RemoveStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
     {
         if (bonusXp <= 0)
@@ -103,17 +112,16 @@ public class PetGrowthService
                 justHatched.Add(pet);
             }
 
-            if (pet.Stage == PetStage.Hatched)
-            {
-                pet.Level = pet.Xp / 100;
-            }
+            // DÜZELTİLDİ: Level hesaplaması artık PetLeveling.Apply üzerinden
+            // yapılıyor; hem Xp hem Level, _maxPetLevel ile sınırlanıyor.
+            PetLeveling.Apply(pet, _maxPetLevel);
         }
 
         await _context.SaveChangesAsync(cancellationToken);
         foreach (var pet in pets.Where(p => p.Stage == PetStage.Hatched))
-{
-    await _cosmeticsService.EvaluateAccessoryUnlocksAsync(pet, cancellationToken);
-}
+        {
+            await _cosmeticsService.EvaluateAccessoryUnlocksAsync(pet, cancellationToken);
+        }
 
         foreach (var pet in justHatched)
         {
@@ -144,10 +152,10 @@ public class PetGrowthService
         foreach (var pet in pets)
         {
             pet.Xp = Math.Max(0, pet.Xp - xpLoss);
-            if (pet.Stage == PetStage.Hatched)
-            {
-                pet.Level = pet.Xp / 100;
-            }
+            // DÜZELTİLDİ: burada da PetLeveling.Apply kullanılıyor; tavan
+            // aşılmışsa (teorik olarak XP azaltılırken oluşmaz ama tutarlılık
+            // için) yine de düzeltilmiş olur.
+            PetLeveling.Apply(pet, _maxPetLevel);
         }
 
         await _context.SaveChangesAsync(cancellationToken);

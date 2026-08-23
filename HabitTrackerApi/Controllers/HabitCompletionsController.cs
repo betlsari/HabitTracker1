@@ -8,12 +8,13 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Services;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/habits/{habitId}/[controller]")]
-[Authorize]
 public class HabitCompletionsController : ControllerBase
 {
     private readonly AppDbContext _context;

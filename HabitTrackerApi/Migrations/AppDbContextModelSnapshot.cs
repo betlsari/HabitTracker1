@@ -503,6 +503,10 @@ namespace HabitTrackerApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CustomCategoryName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int>("DailyGoal")
                         .HasColumnType("integer");
 
@@ -529,6 +533,9 @@ namespace HabitTrackerApi.Migrations
 
                     b.Property<TimeOnly?>("TargetTime")
                         .HasColumnType("time without time zone");
+
+                    b.Property<int>("Unit")
+                        .HasColumnType("integer");
 
                     b.Property<string>("UserId")
                         .IsRequired()

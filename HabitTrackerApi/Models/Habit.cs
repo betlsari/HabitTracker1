@@ -42,4 +42,8 @@ public class Habit : IHasConcurrencyToken
     public string? Notes { get; set; }
 
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+
+    [MaxLength(100)]
+public string? CustomCategoryName { get; set; }
+public HabitUnit Unit { get; set; } = HabitUnit.Count;
 }

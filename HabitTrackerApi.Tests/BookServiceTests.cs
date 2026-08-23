@@ -1,5 +1,6 @@
 using Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 using Models;
 using Services;
 using Dtos;
@@ -7,14 +8,39 @@ using Xunit;
 
 namespace HabitTrackerApi.Tests;
 
-public class BookServiceTests
+public class BookServiceTests : IDisposable
 {
-    private static AppDbContext CreateContext(string dbName) =>
-        new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options);
+    private readonly List<SqliteConnection> _connections = new();
 
-    private static Book CreateBook(string userId = "user-1") => new()
+    private AppDbContext CreateContext(string dbName)
+    {
+        var connection = new SqliteConnection($"DataSource=file:{dbName}?mode=memory&cache=shared");
+        connection.Open();
+        
+        // PostgreSQL fonksiyonunu SQLite'a öğretiyoruz
+        connection.CreateFunction<string, int>("hashtext", text => text != null ? text.GetHashCode() : 0);
+
+        _connections.Add(connection);
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var context = new AppDbContext(options);
+        context.Database.EnsureCreated();
+        return context;
+    }
+
+    public void Dispose()
+    {
+        foreach (var connection in _connections)
+        {
+            connection.Close();
+            connection.Dispose();
+        }
+    }
+
+    private static Book CreateBook(string userId) => new()
     {
         Title = "Test Book",
         UserId = userId,
@@ -25,20 +51,31 @@ public class BookServiceTests
         CreatedAt = DateTime.UtcNow.AddDays(-5)
     };
 
+    // Yardımcı metod: Book eklemeden önce User eklemek için
+    private async Task<User> CreateTestUserAsync(AppDbContext context, string userId = "user-1")
+    {
+        var user = new User { Id = userId, UserName = "testuser", Email = "test@example.com" };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        return user;
+    }
+
     [Fact]
     public async Task AddReadingLogAsync_AwardsBaseXpAndTracksPage()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
         var service = new BookService(context);
 
-        var book = CreateBook();
+        var user = await CreateTestUserAsync(context);
+        var book = CreateBook(user.Id);
+        
         context.Books.Add(book);
         await context.SaveChangesAsync();
 
         var dto = new LogReadingDto { ReadDate = DateTime.UtcNow, Amount = 5 };
         var result = await service.AddReadingLogAsync(book, dto, timeZoneId: "Europe/Istanbul");
 
-        Assert.Equal(3, result.XpEarned); // sadece XpPerLog, hedef henüz tutturulmadı
+        Assert.Equal(3, result.XpEarned);
         Assert.Equal(5, book.CurrentPage);
         Assert.False(result.GoalJustReachedInPeriod);
     }
@@ -49,7 +86,8 @@ public class BookServiceTests
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
         var service = new BookService(context);
 
-        var book = CreateBook();
+        var user = await CreateTestUserAsync(context);
+        var book = CreateBook(user.Id);
         context.Books.Add(book);
         await context.SaveChangesAsync();
 
@@ -57,7 +95,7 @@ public class BookServiceTests
         var result = await service.AddReadingLogAsync(book, dto, timeZoneId: "Europe/Istanbul");
 
         Assert.True(result.GoalJustReachedInPeriod);
-        Assert.Equal(3 + 5, result.XpEarned); // XpPerLog + DailyGoalBonusXp
+        Assert.Equal(3 + 5, result.XpEarned);
     }
 
     [Fact]
@@ -66,7 +104,8 @@ public class BookServiceTests
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
         var service = new BookService(context);
 
-        var book = CreateBook();
+        var user = await CreateTestUserAsync(context);
+        var book = CreateBook(user.Id);
         book.TotalPages = 10;
         context.Books.Add(book);
         await context.SaveChangesAsync();
@@ -85,17 +124,17 @@ public class BookServiceTests
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
         var service = new BookService(context);
 
-        var book = CreateBook();
+        var user = await CreateTestUserAsync(context);
+        var book = CreateBook(user.Id);
         context.Books.Add(book);
         await context.SaveChangesAsync();
 
         await service.AddReadingLogAsync(book, new LogReadingDto { ReadDate = DateTime.UtcNow, Amount = 5 }, "Europe/Istanbul");
 
-        // Günlük hedefi düşürerek geçmiş logun artık hedefi tutturmuş olmasını sağlıyoruz.
         book.DailyGoalAmount = 5;
         var delta = await service.RecalculateBookAsync(book, "Europe/Istanbul");
 
-        Assert.Equal(5, delta); // DailyGoalBonusXp geriye dönük olarak eklendi
+        Assert.Equal(5, delta);
     }
 
     [Fact]
@@ -104,10 +143,14 @@ public class BookServiceTests
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
         var service = new BookService(context);
 
-        var strongBook = CreateBook();
+        var user = await CreateTestUserAsync(context);
+        
+        var strongBook = CreateBook(user.Id);
         strongBook.Title = "Strong";
-        var weakBook = CreateBook();
+        
+        var weakBook = CreateBook(user.Id);
         weakBook.Title = "Weak";
+        
         context.Books.AddRange(strongBook, weakBook);
         await context.SaveChangesAsync();
 

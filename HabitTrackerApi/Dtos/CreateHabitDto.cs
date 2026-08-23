@@ -1,18 +1,14 @@
-// HabitTrackerApi/Dtos/CreateHabitDto.cs
 using System.ComponentModel.DataAnnotations;
 using Models;
 
 namespace Dtos;
 
-public class CreateHabitDto
+public class CreateHabitDto : IValidatableObject
 {
     public const int MaxDailyGoal = 100_000;
     public const int MaxNotesLength = 1000;
-
-    // YENİ: Name için üst sınır yoktu; istemci keyfi büyüklükte string
-    // gönderebiliyordu. Book.Author (200) / Notes (1000) ile tutarlı bir
-    // üst sınır eklendi.
     public const int MaxNameLength = 200;
+    public const int MaxCustomCategoryNameLength = 100;
 
     [MinLength(1)]
     [MaxLength(MaxNameLength)]
@@ -24,12 +20,28 @@ public class CreateHabitDto
     [MinLength(1)]
     public string Category { get; set; } = string.Empty;
 
+    
+    [MaxLength(MaxCustomCategoryNameLength)]
+    public string? CustomCategoryName { get; set; }
+
+    
+    public HabitUnit Unit { get; set; } = HabitUnit.Count;
+
     public HabitPeriod Period { get; set; } = HabitPeriod.Daily;
-
     public TimeOnly? TargetTime { get; set; }
-
     public TimeOnly? ReminderTime { get; set; }
 
     [MaxLength(MaxNotesLength)]
     public string? Notes { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (string.Equals(Category?.Trim(), HabitCategories.Other, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(CustomCategoryName))
+        {
+            yield return new ValidationResult(
+                "\"Diğer\" kategorisi seçildiğinde CustomCategoryName (özel etiket) belirtilmelidir.",
+                new[] { nameof(CustomCategoryName) });
+        }
+    }
 }

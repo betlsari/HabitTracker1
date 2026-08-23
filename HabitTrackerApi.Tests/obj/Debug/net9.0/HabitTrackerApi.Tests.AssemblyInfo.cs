@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HabitTrackerApi.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ca2656913b7e9a3f128ab78e083e0b6afad87598")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8ed341b6789536004b1ece749aab2e4db625b6ba")]
 [assembly: System.Reflection.AssemblyProductAttribute("HabitTrackerApi.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HabitTrackerApi.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

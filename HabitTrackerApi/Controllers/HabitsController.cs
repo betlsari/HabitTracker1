@@ -1,4 +1,4 @@
-// HabitTrackerApi/Controllers/HabitsController.cs
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Data;
@@ -10,11 +10,14 @@ using Microsoft.AspNetCore.Identity;
 using Services;
 using Microsoft.Extensions.Options;
 using Configuration;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public class HabitsController : ControllerBase
 {
@@ -180,6 +183,16 @@ public class HabitsController : ControllerBase
             // DÜZELTİLDİ (madde 10): Kategori artık kanonik (Allowed
             // listesindeki doğru case'li) formda saklanıyor.
             var normalizedCategory = HabitCategories.Normalize(dto.Category)!;
+            var isOtherCategory = normalizedCategory == HabitCategories.Other;
+
+            // YENİ: "Diğer" kategorisi seçildiğinde kullanıcının serbest
+            // metin etiketi (CustomCategoryName) ve birim (Unit: dakika/saat/
+            // adet) belirtmesine izin veriliyor. DTO'nun IValidatableObject
+            // implementasyonu zaten CustomCategoryName boşsa modeli
+            // reddediyor; burada ek olarak diğer kategorilerde bu alanların
+            // sessizce yok sayılması (DB'ye yazılmaması) sağlanıyor.
+            var customCategoryName = isOtherCategory ? dto.CustomCategoryName!.Trim() : null;
+            var unit = isOtherCategory ? dto.Unit : HabitUnit.Count;
 
             var normalizedName = dto.Name.Trim();
             var normalizedNameKey = normalizedName.ToUpperInvariant();
@@ -197,6 +210,8 @@ public class HabitsController : ControllerBase
                 Name = normalizedName,
                 NormalizedName = normalizedNameKey,
                 Category = normalizedCategory,
+                CustomCategoryName = customCategoryName,
+                Unit = unit,
                 DailyGoal = dto.DailyGoal,
                 Period = dto.Period,
                 TargetTime = dto.TargetTime,
@@ -243,6 +258,7 @@ public class HabitsController : ControllerBase
             }
 
             var normalizedCategory = HabitCategories.Normalize(dto.Category)!;
+            var isOtherCategory = normalizedCategory == HabitCategories.Other;
 
             var normalizedName = dto.Name.Trim();
             var normalizedNameKey = normalizedName.ToUpperInvariant();
@@ -263,6 +279,12 @@ public class HabitsController : ControllerBase
             habit.Name = normalizedName;
             habit.NormalizedName = normalizedNameKey;
             habit.Category = normalizedCategory;
+
+            // YENİ: "Diğer" dışındaki kategorilere geçildiğinde önceki özel
+            // etiket/birim artık anlamsız kaldığı için temizleniyor.
+            habit.CustomCategoryName = isOtherCategory ? dto.CustomCategoryName!.Trim() : null;
+            habit.Unit = isOtherCategory ? dto.Unit : HabitUnit.Count;
+
             habit.DailyGoal = dto.DailyGoal;
             habit.Period = dto.Period;
             habit.TargetTime = dto.TargetTime;
@@ -525,6 +547,8 @@ public class HabitsController : ControllerBase
         Id = habit.Id,
         Name = habit.Name,
         Category = habit.Category,
+        CustomCategoryName = habit.CustomCategoryName,
+        Unit = habit.Unit,
         DailyGoal = habit.DailyGoal,
         CreatedAt = habit.CreatedAt,
         XpPerUnit = habit.XpPerUnit,
