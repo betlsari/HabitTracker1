@@ -732,11 +732,13 @@ public class AuthController : ControllerBase
 
         await _authAudit.RecordAsync(HttpContext, "account-delete", true, user);
 
-        var result = await _userManager.DeleteAsync(user);
-        if (!result.Succeeded)
-        {
-            return BadRequest(result.Errors);
-        }
+       var result = await _userManager.DeleteAsync(user);
+if (!result.Succeeded)
+{
+    return BadRequest(result.Errors);
+}
+
+_securityStampCache.Invalidate(userId!);  
 
         return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }

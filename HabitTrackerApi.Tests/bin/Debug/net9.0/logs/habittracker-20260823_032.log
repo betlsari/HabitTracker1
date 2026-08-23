@@ -1,0 +1,113 @@
+[2026-08-23 23:53:55 INF] f82a1060bdb444c99cf0cafcbba7f683 HTTP POST /api/auth/login responded 200 in 564.9304 ms
+[2026-08-23 23:53:55 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-23 23:53:55 INF] e124460800ec4f4a8c8ab2ca76f091bc Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE "h"."Id" = @__habitId_0
+LIMIT 1
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-23 23:53:55 INF] 403d50f982a94e50befcdf52d90bee37 HTTP GET /api/backgrounds responded 401 in 0.2271 ms
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-23 23:53:55 INF] e124460800ec4f4a8c8ab2ca76f091bc Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habitId_0
+[2026-08-23 23:53:55 INF] e124460800ec4f4a8c8ab2ca76f091bc Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32), @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."HabitId", "h"."CompletionDate", "h"."Amount", "h"."XpEarned", "h"."IsOnTime"
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habitId_0
+ORDER BY "h"."CompletionDate" DESC
+LIMIT @__p_2 OFFSET @__p_1
+[2026-08-23 23:53:55 INF] 17d097c3896b4006962a482a7f34a225 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-23 23:53:55 INF] e124460800ec4f4a8c8ab2ca76f091bc HTTP GET /api/habits/1/habitcompletions responded 200 in 149.1858 ms
+[2026-08-23 23:53:55 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-23 23:53:55 INF] 17d097c3896b4006962a482a7f34a225 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 40)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-23 23:53:55 INF] 17d097c3896b4006962a482a7f34a225 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Pets" AS "p"
+WHERE "p"."UserId" = @__userId_0
+[2026-08-23 23:53:55 INF] 17d097c3896b4006962a482a7f34a225 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?', @p3='?' (DbType = DateTime), @p4='?' (DbType = Int32), @p5='?' (Size = 3), @p6='?', @p7='?' (DbType = Int32), @p8='?' (Size = 3), @p9='?' (Size = 36), @p10='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Pets" ("ConcurrencyToken", "CreatedAt", "EquippedAccessory", "HatchedAt", "Level", "Mood", "Nickname", "Stage", "Type", "UserId", "Xp")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10)
+RETURNING "Id";
+[2026-08-23 23:53:55 INF] 7ab2cd3b71ab43968abfc92ab68764b2 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "r"."Id", "r"."CreatedAt", "r"."ExpiresAt", "r"."IpAddress", "r"."UserAgent"
+FROM "RefreshTokens" AS "r"
+WHERE "r"."UserId" = @__userId_0 AND "r"."RevokedAt" IS NULL AND "r"."ExpiresAt" > rtrim(rtrim(strftime('%Y-%m-%d %H:%M:%f', 'now'), '0'), '.')
+ORDER BY "r"."CreatedAt" DESC
+[2026-08-23 23:53:55 INF] de0fd7da435b496caa43425d3fdbcb7c Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-23 23:53:55 INF] 7ab2cd3b71ab43968abfc92ab68764b2 HTTP GET /api/auth/sessions responded 200 in 150.1424 ms
+[2026-08-23 23:53:55 INF] de0fd7da435b496caa43425d3fdbcb7c HTTP POST /api/sync/batch responded 400 in 22.6425 ms
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-23 23:53:55 INF] 95a29a8aed124edebee40d9344d1798a Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-23 23:53:55 INF] 17d097c3896b4006962a482a7f34a225 HTTP POST /api/pets responded 200 in 166.5609 ms
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-23 23:53:55 INF] 95a29a8aed124edebee40d9344d1798a HTTP PUT /api/notificationpreferences responded 400 in 74.0742 ms
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetRoles" (
+    "Id" TEXT NOT NULL CONSTRAINT "PK_AspNetRoles" PRIMARY KEY,
+    "Name" TEXT NULL,
+    "NormalizedName" TEXT NULL,
+    "ConcurrencyStamp" TEXT NULL
+);
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUsers" (
+    "Id" TEXT NOT NULL CONSTRAINT "PK_AspNetUsers" PRIMARY KEY,
+    "CreatedAt" TEXT NOT NULL,
+    "TotalXp" INTEGER NOT NULL,
+    "TimeZoneId" TEXT NOT NULL DEFAULT 'Europe/Istanbul',
+    "EquippedBackground" TEXT NOT NULL,
+    "UserName" TEXT NULL,
+    "NormalizedUserName" TEXT NULL,
+    "Email" TEXT NULL,
+    "NormalizedEmail" TEXT NULL,
+    "EmailConfirmed" INTEGER NOT NULL,
+    "PasswordHash" TEXT NULL,
+    "SecurityStamp" TEXT NULL,
+    "ConcurrencyStamp" TEXT NULL,
+    "PhoneNumber" TEXT NULL,
+    "PhoneNumberConfirmed" INTEGER NOT NULL,
+    "TwoFactorEnabled" INTEGER NOT NULL,
+    "LockoutEnd" TEXT NULL,
+    "LockoutEnabled" INTEGER NOT NULL,
+    "AccessFailedCount" INTEGER NOT NULL
+);
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AuthAuditEvents" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AuthAuditEvents" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NULL,
+    "Email" TEXT NOT NULL,
+    "EventType" TEXT NOT NULL,
+    "Succeeded" INTEGER NOT NULL,
+    "IpAddress" TEXT NULL,
+    "UserAgent" TEXT NULL,
+    "Detail" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-23 23:53:55 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Badges" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Badges" PRIMARY KEY AUTOINCREMENT,
+    "Code" TEXT NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Description" TEXT NOT NULL
+);

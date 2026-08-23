@@ -15,9 +15,8 @@ using Asp.Versioning;
 namespace Controllers;
 
 [ApiController]
-
 [ApiVersion("1.0")]
-[Route("api/v{version:apiVersion}/[controller]")]
+[Route("api/[controller]")]
 [Authorize]
 public class HabitsController : ControllerBase
 {

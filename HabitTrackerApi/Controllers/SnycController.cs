@@ -68,25 +68,38 @@ public class SyncController : ControllerBase
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var user = await _userManager.FindByIdAsync(userId);
 
         var result = new BatchSyncResultDto();
 
         foreach (var item in request.HabitCompletions)
         {
-            result.HabitCompletions.Add(await ProcessHabitCompletionAsync(userId, user, item));
+            result.HabitCompletions.Add(await ProcessHabitCompletionAsync(userId, item));
         }
 
         foreach (var item in request.BookReadingLogs)
         {
-            result.BookReadingLogs.Add(await ProcessBookReadingLogAsync(userId, user, item));
+            result.BookReadingLogs.Add(await ProcessBookReadingLogAsync(userId, item));
         }
 
         return Ok(result);
     }
 
+    // DÜZELTİLDİ (🔴 stale entity): Önceden 'user', dış SyncBatch metodunda,
+    // _context.ChangeTracker.Clear() çağrılmadan ÖNCE bir kez çekilip her
+    // Process*Async çağrısına parametre olarak geçiriliyordu. Ancak her
+    // Process*Async kendi transaction'ı içinde _context.ChangeTracker.Clear()
+    // çağırıyor — bu, EF Core'un o DbContext örneğinde takip ettiği TÜM
+    // entity'leri (dışarıdan geçirilen 'user' dahil) "detached" durumuna
+    // düşürüyor. Sonrasında 'user.TotalXp += xpEarned; _userManager.
+    // UpdateAsync(user)' çağrıldığında, UpdateAsync detached bir entity'yi
+    // günceller; bu EF Core'un concurrency/tracking mekanizmasıyla tutarsız
+    // davranışlara (ör. ConcurrencyStamp uyuşmazlığı nedeniyle sessiz
+    // başarısızlık ve "Success: false" dönmesi) yol açabiliyordu. Artık
+    // HabitCompletionsController/BooksController ile aynı desende: 'user'
+    // ChangeTracker.Clear()'DAN SONRA, her Process*Async içinde taze olarak
+    // çekiliyor.
     private async Task<BatchItemResultDto> ProcessHabitCompletionAsync(
-        string userId, User? user, BatchHabitCompletionItemDto item)
+        string userId, BatchHabitCompletionItemDto item)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -108,6 +121,8 @@ public class SyncController : ControllerBase
                 {
                     return Failure(item.ClientRequestId, "Alışkanlık bulunamadı.");
                 }
+
+                var user = await _userManager.FindByIdAsync(userId);
 
                 var completionUtc = DateTime.SpecifyKind(item.CompletionDate, DateTimeKind.Utc);
                 if (completionUtc.Date < habit.CreatedAt.Date)
@@ -190,13 +205,20 @@ public class SyncController : ControllerBase
             }
             catch (Exception ex)
             {
+                // DÜZELTİLDİ: Beklenmeyen hatalar artık loglanıyor. Önceden
+                // hata sessizce yutulup sadece ex.Message istemciye
+                // dönüyordu; sunucu tarafında hiçbir iz kalmıyordu ve teşhis
+                // koymak zorlaşıyordu.
+                _logger.LogError(ex,
+                    "Batch habit completion senkronizasyonu sırasında hata oluştu. UserId={UserId} HabitId={HabitId} ClientRequestId={ClientRequestId}",
+                    userId, item.HabitId, item.ClientRequestId);
                 return Failure(item.ClientRequestId, ex.Message);
             }
         });
     }
 
     private async Task<BatchItemResultDto> ProcessBookReadingLogAsync(
-        string userId, User? user, BatchBookReadingLogItemDto item)
+        string userId, BatchBookReadingLogItemDto item)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -218,6 +240,9 @@ public class SyncController : ControllerBase
                 {
                     return Failure(item.ClientRequestId, "Kitap bulunamadı.");
                 }
+
+                var user = await _userManager.FindByIdAsync(userId);
+
                 if (item.ReadDate > DateTime.UtcNow)
                 {
                     return Failure(item.ClientRequestId, "Okuma tarihi gelecekte olamaz.");
@@ -276,6 +301,11 @@ public class SyncController : ControllerBase
             }
             catch (Exception ex)
             {
+                // DÜZELTİLDİ: bkz. ProcessHabitCompletionAsync üzerindeki
+                // aynı düzeltme açıklaması.
+                _logger.LogError(ex,
+                    "Batch book reading log senkronizasyonu sırasında hata oluştu. UserId={UserId} BookId={BookId} ClientRequestId={ClientRequestId}",
+                    userId, item.BookId, item.ClientRequestId);
                 return Failure(item.ClientRequestId, ex.Message);
             }
         });
