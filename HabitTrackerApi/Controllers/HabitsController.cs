@@ -33,6 +33,7 @@ public class HabitsController : ControllerBase
     private readonly HabitProgressService _progressService;
     private readonly FlowerService _flowerService;
     private readonly PetGrowthService _petGrowthService;
+    private readonly BadgeService _badgeService;
     private readonly int _maxHabitsPerUser;
 
     public HabitsController(
@@ -42,6 +43,7 @@ public class HabitsController : ControllerBase
         HabitProgressService progressService,
         FlowerService flowerService,
         PetGrowthService petGrowthService,
+        BadgeService badgeService,
         IOptions<AppLimitsOptions> limits)
     {
         _context = context;
@@ -50,6 +52,7 @@ public class HabitsController : ControllerBase
         _progressService = progressService;
         _flowerService = flowerService;
         _petGrowthService = petGrowthService;
+        _badgeService = badgeService;
         _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
     }
 
@@ -132,56 +135,75 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
+    // DÜZELTİLDİ (🔴 race condition): "mevcut habit sayısını say -> limiti
+    // aşıyorsa reddet -> isim çakışması var mı diye kontrol et -> ekle"
+    // adımları arasında hiçbir eşzamanlılık koruması yoktu. Aynı kullanıcıdan
+    // gelen iki eşzamanlı istek hem MaxHabitsPerUser limitini aşabiliyor hem
+    // de (DB'deki unique index'e rağmen) 500 hatasıyla sonuçlanabiliyordu.
+    // PetsController.CreatePet / DevicesController.Register ile aynı desende
+    // kullanıcıya özel bir Postgres advisory lock eklendi; bu sayede aynı
+    // kullanıcının habit oluşturma istekleri serileştirilir.
     [HttpPost]
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-        if (await _context.Habits.CountAsync(h => h.UserId == userId) >= _maxHabitsPerUser)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<HabitDto>>(async () =>
         {
-            return Conflict($"En fazla {_maxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
-        }
+            _context.ChangeTracker.Clear();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        if (!HabitCategories.IsValid(dto.Category))
-        {
-            return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
-        }
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        var normalizedName = dto.Name.Trim();
-        var normalizedNameKey = normalizedName.ToUpperInvariant();
-        var habitExist = await _context.Habits.AnyAsync(h =>
-            h.UserId == userId && h.NormalizedName == normalizedNameKey);
-        if (habitExist)
-        {
-            return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
-        }
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({"habit:" + userId}))");
 
-        var habit = new Habit
-        {
-            XpPerUnit = 1,
-            XpBonusForGoal = 10,
-            Name = normalizedName,
-            NormalizedName = normalizedNameKey,
-            Category = dto.Category,
-            DailyGoal = dto.DailyGoal,
-            Period = dto.Period,
-            TargetTime = dto.TargetTime,
-            ReminderTime = dto.ReminderTime,
-            Notes = dto.Notes,
-            UserId = userId,
-            CreatedAt = DateTime.UtcNow
-        };
+            if (await _context.Habits.CountAsync(h => h.UserId == userId) >= _maxHabitsPerUser)
+            {
+                return Conflict($"En fazla {_maxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
+            }
 
-        _context.Habits.Add(habit);
-        await _context.SaveChangesAsync();
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user != null)
-        {
-            user.TotalXp += _xpService.GetHabitCreationXp();
-            await _userManager.UpdateAsync(user);
-        }
+            if (!HabitCategories.IsValid(dto.Category))
+            {
+                return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
+            }
 
-        return ToDto(habit);
+            var normalizedName = dto.Name.Trim();
+            var normalizedNameKey = normalizedName.ToUpperInvariant();
+            var habitExist = await _context.Habits.AnyAsync(h =>
+                h.UserId == userId && h.NormalizedName == normalizedNameKey);
+            if (habitExist)
+            {
+                return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
+            }
+
+            var habit = new Habit
+            {
+                XpPerUnit = 1,
+                XpBonusForGoal = 10,
+                Name = normalizedName,
+                NormalizedName = normalizedNameKey,
+                Category = dto.Category,
+                DailyGoal = dto.DailyGoal,
+                Period = dto.Period,
+                TargetTime = dto.TargetTime,
+                ReminderTime = dto.ReminderTime,
+                Notes = dto.Notes,
+                UserId = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Habits.Add(habit);
+            await _context.SaveChangesAsync();
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.TotalXp += _xpService.GetHabitCreationXp();
+                await _userManager.UpdateAsync(user);
+            }
+
+            await transaction.CommitAsync();
+            return ToDto(habit);
+        });
     }
 
     // DÜZELTİLDİ: Kategori değişimi artık transaction içinde ele alınıyor
@@ -190,6 +212,15 @@ public class HabitsController : ControllerBase
     // Önceden ör. "Su" -> "Spor" geçişinde geçmişte sulanmış çiçek asla geri
     // alınmıyor, "Spor" -> "Odaklanma" geçişinde ise geçmiş miktarlar pet'e
     // hiç XP olarak yansımıyordu.
+    //
+    // DÜZELTİLDİ (🟡 rozet tutarsızlığı): Bir habit "Su" kategorisine
+    // taşındığında ve geçmiş miktar çiçeğe toplu olarak eklendiğinde çiçek
+    // seviyesi doğrudan 5/10'a atlayabiliyordu, ama bu yol normal
+    // AddWaterAsync (tekil completion) akışının çağırdığı
+    // BadgeService.EvaluateAfterCompletionAsync'i hiç tetiklemiyordu; bu da
+    // WATER_GROWTH_5 / WATER_GROWTH_10 rozetlerinin retroaktif olarak asla
+    // verilmemesine yol açıyordu. Artık kategori "Su"ya çevrildiğinde çiçek
+    // seviyesine göre bu rozetler de değerlendiriliyor.
     [HttpPut("{id:int}")]
     public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
     {
@@ -260,7 +291,8 @@ public class HabitsController : ControllerBase
                     }
                     else if (!wasWater && isWater)
                     {
-                        await _flowerService.AddWaterAsync(userId!, totalAmount);
+                        var flower = await _flowerService.AddWaterAsync(userId!, totalAmount);
+                        await _badgeService.EvaluateFlowerBadgesAsync(userId!, flower.Level);
                     }
 
                     if (wasFocus && !isFocus)

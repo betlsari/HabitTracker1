@@ -118,34 +118,51 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
+    // DÜZELTİLDİ (🔴 race condition): "mevcut kitap sayısını say -> limiti
+    // aşıyorsa reddet -> kitabı ekle" adımları arasında hiçbir eşzamanlılık
+    // koruması yoktu. Aynı kullanıcıdan gelen iki eşzamanlı istek, ikisi de
+    // aynı anda "count < max" görüp MaxBooksPerUser limitini aşabiliyordu.
+    // PetsController.CreatePet / HabitsController.CreateHabit ile aynı
+    // desende kullanıcıya özel bir Postgres advisory lock eklendi.
     [HttpPost]
     public async Task<ActionResult<BookDto>> CreateBook(CreateBookDto dto)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-        if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<BookDto>>(async () =>
         {
-            return Conflict($"En fazla {_maxBooksPerUser} kitap oluşturabilirsiniz.");
-        }
+            _context.ChangeTracker.Clear();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        var book = new Book
-        {
-            Title = dto.Title,
-            Author = dto.Author,
-            GoalType = dto.GoalType,
-            Period = dto.Period,
-            TotalPages = dto.TotalPages,
-            DailyGoalAmount = dto.DailyGoalAmount,
-            Notes = dto.Notes,
-            CoverImageUrl = dto.CoverImageUrl,
-            UserId = userId,
-            CreatedAt = DateTime.UtcNow
-        };
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        _context.Books.Add(book);
-        await _context.SaveChangesAsync();
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({"book:" + userId}))");
 
-        return BookService.ToDto(book);
+            if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
+            {
+                return Conflict($"En fazla {_maxBooksPerUser} kitap oluşturabilirsiniz.");
+            }
+
+            var book = new Book
+            {
+                Title = dto.Title,
+                Author = dto.Author,
+                GoalType = dto.GoalType,
+                Period = dto.Period,
+                TotalPages = dto.TotalPages,
+                DailyGoalAmount = dto.DailyGoalAmount,
+                Notes = dto.Notes,
+                CoverImageUrl = dto.CoverImageUrl,
+                UserId = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Books.Add(book);
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return BookService.ToDto(book);
+        });
     }
 
     [HttpPut("{id:int}")]

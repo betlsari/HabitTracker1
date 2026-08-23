@@ -71,8 +71,7 @@ public class BadgeService
 
         if (flower != null)
         {
-            if (flower.Level >= 5) await AwardAsync(userId, WaterGrowth5, cancellationToken);
-            if (flower.Level >= 10) await AwardAsync(userId, WaterGrowth10, cancellationToken);
+            await EvaluateFlowerBadgesAsync(userId, flower.Level, cancellationToken);
         }
     }
 
@@ -91,6 +90,21 @@ public class BadgeService
         {
             await AwardAsync(userId, ReadingStreak7, cancellationToken);
         }
+    }
+
+    // YENİ (🟡 rozet tutarsızlığı düzeltmesi): Önceden çiçek seviyesine bağlı
+    // WATER_GROWTH_5 / WATER_GROWTH_10 rozetleri SADECE tekil bir habit
+    // completion sonrası EvaluateAfterCompletionAsync üzerinden veriliyordu.
+    // HabitsController.UpdateHabit içinde bir habit'in kategorisi "Su"ya
+    // çevrildiğinde geçmiş toplam miktar çiçeğe toplu olarak ekleniyor ve
+    // çiçek seviyesi doğrudan 5/10'u geçebiliyordu, ama bu yol rozet
+    // değerlendirmesini hiç tetiklemiyordu. Bu metod çağıranın (herhangi bir
+    // akışın) çiçek seviyesini bildiği her yerden çağrılabilir; idempotent
+    // (AwardAsync zaten daha önce kazanılmış rozetleri atlıyor).
+    public async Task EvaluateFlowerBadgesAsync(string userId, int flowerLevel, CancellationToken cancellationToken = default)
+    {
+        if (flowerLevel >= 5) await AwardAsync(userId, WaterGrowth5, cancellationToken);
+        if (flowerLevel >= 10) await AwardAsync(userId, WaterGrowth10, cancellationToken);
     }
 
     private async Task AwardAsync(string userId, string code, CancellationToken cancellationToken)

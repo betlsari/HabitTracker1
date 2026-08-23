@@ -582,6 +582,10 @@ public class AuthController : ControllerBase
         });
     }
 
+    // DÜZELTİLDİ (madde: eksik audit trail): Şifre sıfırlama artık başarılı
+    // ve başarısız denemelerde audit trail'e yazılıyor. Önceden bu hassas
+    // işlem hiç izlenmiyordu; kullanıcı /api/auth/audit-log üzerinden kendi
+    // şifresinin ne zaman sıfırlandığını göremiyordu.
     [HttpPost("reset-password")]
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
@@ -589,21 +593,30 @@ public class AuthController : ControllerBase
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
+            await _authAudit.RecordAsync(HttpContext, "password-reset", false, email: dto.Email, detail: "unknown-user");
             return BadRequest("Kullanıcı bulunamadı.");
         }
         var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
         if (!result.Succeeded)
         {
+            await _authAudit.RecordAsync(HttpContext, "password-reset", false, user, detail: "invalid-token-or-password");
             return BadRequest(result.Errors);
         }
 
         await RevokeAllRefreshTokensAsync(user.Id);
+        await _authAudit.RecordAsync(HttpContext, "password-reset", true, user);
 
         return Ok("Şifre başarıyla sıfırlandı.");
     }
 
+    // DÜZELTİLDİ (madde: eksik audit trail + brute-force koruması): Şifre
+    // değiştirme artık audit trail'e yazılıyor ve AuthPolicy (5/dk/IP) rate
+    // limitine alındı. Önceden sadece global limitere (120/dk/kullanıcı)
+    // tabiydi; bir saldırgan geçerli bir oturumla CurrentPassword'ü
+    // deneme-yanılma ile deneyebiliyordu.
     [HttpPost("change-password")]
     [Authorize]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -616,10 +629,12 @@ public class AuthController : ControllerBase
         var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
         if (!result.Succeeded)
         {
+            await _authAudit.RecordAsync(HttpContext, "password-change", false, user, detail: "invalid-current-password-or-policy");
             return BadRequest(result.Errors);
         }
 
         await RevokeAllRefreshTokensAsync(user.Id);
+        await _authAudit.RecordAsync(HttpContext, "password-change", true, user);
 
         return Ok("Şifre başarıyla değiştirildi.");
     }
@@ -658,8 +673,15 @@ public class AuthController : ControllerBase
         return Ok(new { user.Email, user.TotalXp, user.TimeZoneId, user.TwoFactorEnabled });
     }
 
+    // DÜZELTİLDİ (madde: eksik audit trail + brute-force koruması): Hesap
+    // silme artık AuthPolicy rate limitine alındı ve (başarılı/başarısız)
+    // audit trail'e yazılıyor. Kayıt, hesap silinmeden ÖNCE yazılıyor;
+    // AuthAuditEvent kasıtlı olarak User'a FK ile bağlı değil (bkz.
+    // Models/AuthAuditEvent.cs), bu sayede hesap silindikten sonra da bu
+    // kritik olay denetim izinde kalmaya devam eder.
     [HttpDelete("me")]
     [Authorize]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> DeleteAccount(DeleteAccountDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -672,8 +694,11 @@ public class AuthController : ControllerBase
         var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
         if (!passwordValid)
         {
+            await _authAudit.RecordAsync(HttpContext, "account-delete", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
+
+        await _authAudit.RecordAsync(HttpContext, "account-delete", true, user);
 
         var result = await _userManager.DeleteAsync(user);
         if (!result.Succeeded)

@@ -77,6 +77,14 @@ public class PetsController : ControllerBase
     // XP'sinin düşülmesi ile yeni Pet oluşturulması ayrı SaveChanges'lerdi.
     // Önceden ikinci SaveChanges başarısız olursa kullanıcı XP kaybedip
     // karşılığında pet alamayabiliyordu. Artık tek transaction.
+    //
+    // DÜZELTİLDİ (🔴 race condition): "mevcut pet sayısını say -> limiti
+    // aşıyorsa reddet -> yeni pet ekle" adımları arasında hiçbir eşzamanlılık
+    // koruması yoktu. Aynı kullanıcıdan gelen iki eşzamanlı istek, ikisi de
+    // aynı anda "count < max" görüp MaxPetsPerUser limitini aşabiliyordu
+    // (klasik check-then-act). DevicesController.Register ile aynı desende
+    // kullanıcıya özel bir Postgres advisory lock (pg_advisory_xact_lock)
+    // eklendi; kilit transaction sonunda otomatik serbest kalır.
     [HttpPost]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
@@ -87,6 +95,9 @@ public class PetsController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
 
         if (!PetTypes.IsValid(dto.Type))
         {

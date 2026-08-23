@@ -141,6 +141,23 @@ public class NotificationService
         return true;
     }
 
+    // YENİ (🟡 eksik uç nokta): Bir bildirimi yanlışlıkla "okundu" yapan
+    // kullanıcının bunu geri alabilmesinin (okunmadı işaretleme) hiçbir yolu
+    // yoktu; sadece tekil/toplu "okundu" işaretleme vardı.
+    public async Task<bool> MarkUnreadAsync(string userId, int id, CancellationToken cancellationToken = default)
+    {
+        var notification = await _context.UserNotifications
+            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, cancellationToken);
+        if (notification == null)
+        {
+            return false;
+        }
+
+        notification.IsRead = false;
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<int> MarkAllReadAsync(string userId, CancellationToken cancellationToken = default)
     {
         var unread = await _context.UserNotifications
