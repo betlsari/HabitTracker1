@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Services;
+using Services.Observability;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
@@ -16,6 +17,9 @@ using Asp.Versioning;
 using Serilog;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -97,14 +101,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
     .AddCheck<EmailQueueHealthCheck>("email-queue", tags: new[] { "dependency" })
-    .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" });
+    .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" })
+    // YENİ (madde 2): Recalculation kuyruğu için health check.
+    .AddCheck<RecalculationQueueHealthCheck>("recalculation-queue", tags: new[] { "dependency" });
 
 // Options Configuration
 builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
     .Validate(options => Encoding.UTF8.GetByteCount(options.Key) >= 32,
         "Jwt:Key en az 32 byte uzunluğunda olmalıdır.")
-   
     .Validate(options => options.AccessTokenLifetimeMinutes is > 0 and <= 1440,
         "Jwt:AccessTokenLifetimeMinutes 1 ile 1440 (24 saat) arasında olmalıdır.")
     .Validate(options => options.RefreshTokenLifetimeDays is > 0 and <= 90,
@@ -114,7 +119,14 @@ builder.Services.AddOptions<JwtOptions>()
     .ValidateOnStart();
 
 builder.Services.AddOptions<AppLimitsOptions>()
-    .Bind(builder.Configuration.GetSection(AppLimitsOptions.SectionName));
+    .Bind(builder.Configuration.GetSection(AppLimitsOptions.SectionName))
+    // YENİ (bir önceki turdan kalan eksik): MaxHistoryLookbackDays için
+    // alt/üst sınır validasyonu yoktu; biri yanlışlıkla 0 veya negatif bir
+    // değer girerse tüm istatistikler/progress hesapları sessizce boş
+    // dönebiliyordu. Artık başlangıçta fail-fast ile engelleniyor.
+    .Validate(options => options.MaxHistoryLookbackDays is > 0 and <= 3650,
+        "AppLimits:MaxHistoryLookbackDays 1 ile 3650 (10 yıl) gün arasında olmalıdır.")
+    .ValidateOnStart();
 
 // Production Validations
 if (builder.Environment.IsProduction())
@@ -171,7 +183,7 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// Memory Cache (madde 9: SecurityStampCache için gerekli)
+// Memory Cache
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SecurityStampCache>();
 
@@ -219,7 +231,6 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
-            
             var stampCache = context.HttpContext.RequestServices.GetRequiredService<SecurityStampCache>();
             if (!stampCache.TryGet(userId, out var currentStamp))
             {
@@ -246,23 +257,6 @@ builder.Services.AddAuthentication(options =>
 });
 
 // CORS
-// DÜZELTİLDİ (🔴 Development ortamı yapılandırma eksikliği): Önceden
-// Cors:AllowedOrigins hem Development hem Production'da appsettings.json'dan
-// okunuyordu ve appsettings.Development.json bu anahtarı hiç tanımlamıyordu.
-// appsettings.json'daki varsayılan da boş dizi olduğundan, Development'ta
-// hiç origin izin verilmiyordu — CORS politikası "AllowAnyOrigin" da
-// çağırmadığından policy fiilen hiçbir origin'e izin vermiyordu ve tarayıcı
-// tabanlı istemciler (web, Flutter web, Android emulator vb.) local API'ye
-// erişemiyordu.
-//
-// Çözüm: Development ortamında Cors:AllowedOrigins hâlâ boşsa, yaygın yerel
-// geliştirme adreslerine (localhost, 127.0.0.1 ve Android emulator'ün host
-// loopback adresi olan 10.0.2.2, hangi porttan gelirse gelsin) dinamik olarak
-// izin veriliyor. appsettings.Development.json içine açıkça origin
-// tanımlanırsa (bkz. güncellenmiş appsettings.Development.json), o liste
-// önceliklidir. Production davranışı DEĞİŞMEDİ: hâlâ sadece açıkça
-// tanımlanan origin'lere izin verilir ve yukarıdaki validasyon boş listeyle
-// başlamayı zaten engelliyor.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultCorsPolicy", policy =>
@@ -330,6 +324,11 @@ builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
 builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
 
+// YENİ (madde 1): Recalculation kuyruğu singleton olarak kayıtlı — hem
+// controller'lar (yazar) hem RecalculationBackgroundService (okuyucu) aynı
+// örneği paylaşmalı.
+builder.Services.AddSingleton<IRecalculationQueue, RecalculationQueue>();
+
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthAuditService>();
 builder.Services.AddScoped<EmailService>();
@@ -352,6 +351,60 @@ builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddHostedService<AuthAuditCleanupService>();
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
+// YENİ (madde 1): Habit/kitap yeniden hesaplama işlerini arka planda işler.
+builder.Services.AddHostedService<RecalculationBackgroundService>();
+
+// YENİ (madde 2 - observability): OpenTelemetry tracing + metrics.
+// Otel:OtlpEndpoint boşsa (varsayılan) hiçbir dış servise veri gönderilmez;
+// sadece Development ortamında konsola basılır. Bir collector (Jaeger,
+// Tempo, Honeycomb, Sentry'nin OTLP ingestion'ı vb.) bağlamak için
+// appsettings'te Otel:OtlpEndpoint'i veya standart
+// OTEL_EXPORTER_OTLP_ENDPOINT ortam değişkenini set etmek yeterli.
+var otlpEndpoint = builder.Configuration["Otel:OtlpEndpoint"];
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(
+        serviceName: AppDiagnostics.ServiceName,
+        serviceVersion: "1.0.0"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddSource(AppDiagnostics.ServiceName)
+            .AddAspNetCoreInstrumentation(options =>
+            {
+                // Health check endpoint'lerinin trace'leri gereksiz gürültü
+                // yaratmasın diye dışlanıyor.
+                options.Filter = httpContext =>
+                    !httpContext.Request.Path.StartsWithSegments("/health");
+            })
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+        }
+        else if (builder.Environment.IsDevelopment())
+        {
+            tracing.AddConsoleExporter();
+        }
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .AddMeter(AppDiagnostics.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation();
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            metrics.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+        }
+        else if (builder.Environment.IsDevelopment())
+        {
+            metrics.AddConsoleExporter();
+        }
+    });
 
 // Exception Handling
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

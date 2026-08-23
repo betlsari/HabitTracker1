@@ -15,6 +15,5 @@ public sealed class AppLimitsOptions
 
     public int MaxPetLevel { get; init; } = 100;
 
-    
     public int MaxHistoryLookbackDays { get; init; } = 730;
 }

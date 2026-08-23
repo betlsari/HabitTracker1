@@ -1,4 +1,3 @@
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Data;
@@ -20,7 +19,6 @@ namespace Controllers;
 [Authorize]
 public class HabitsController : ControllerBase
 {
-    
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
 
@@ -36,6 +34,7 @@ public class HabitsController : ControllerBase
     private readonly FlowerService _flowerService;
     private readonly PetGrowthService _petGrowthService;
     private readonly BadgeService _badgeService;
+    private readonly IRecalculationQueue _recalculationQueue;
     private readonly ILogger<HabitsController> _logger;
     private readonly int _maxHabitsPerUser;
 
@@ -47,6 +46,7 @@ public class HabitsController : ControllerBase
         FlowerService flowerService,
         PetGrowthService petGrowthService,
         BadgeService badgeService,
+        IRecalculationQueue recalculationQueue,
         IOptions<AppLimitsOptions> limits,
         ILogger<HabitsController> logger)
     {
@@ -57,15 +57,11 @@ public class HabitsController : ControllerBase
         _flowerService = flowerService;
         _petGrowthService = petGrowthService;
         _badgeService = badgeService;
+        _recalculationQueue = recalculationQueue;
         _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
         _logger = logger;
     }
 
-    // DÜZELTİLDİ (madde 10): categoryFilter artık DB'ye gitmeden önce
-    // HabitCategories.Normalize ile kanonik forma çevriliyor. Habit.Category
-    // artık her zaman kanonik formda saklandığı için (bkz. CreateHabit/
-    // UpdateHabit), bu normalize edilmiş filtre ile birebir (case-sensitive)
-    // eşleşme doğru sonuç verir.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(
         int page = 1,
@@ -179,17 +175,9 @@ public class HabitsController : ControllerBase
                 return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
             }
 
-            // DÜZELTİLDİ (madde 10): Kategori artık kanonik (Allowed
-            // listesindeki doğru case'li) formda saklanıyor.
             var normalizedCategory = HabitCategories.Normalize(dto.Category)!;
             var isOtherCategory = normalizedCategory == HabitCategories.Other;
 
-            // YENİ: "Diğer" kategorisi seçildiğinde kullanıcının serbest
-            // metin etiketi (CustomCategoryName) ve birim (Unit: dakika/saat/
-            // adet) belirtmesine izin veriliyor. DTO'nun IValidatableObject
-            // implementasyonu zaten CustomCategoryName boşsa modeli
-            // reddediyor; burada ek olarak diğer kategorilerde bu alanların
-            // sessizce yok sayılması (DB'ye yazılmaması) sağlanıyor.
             var customCategoryName = isOtherCategory ? dto.CustomCategoryName!.Trim() : null;
             var unit = isOtherCategory ? dto.Unit : HabitUnit.Count;
 
@@ -235,6 +223,18 @@ public class HabitsController : ControllerBase
         });
     }
 
+    // DÜZELTİLDİ (🔴 madde 1 - senkron ağır recalculation): Önceden
+    // RecalculateHabitAsync bu isteği bloklayarak habit'in TÜM completion
+    // geçmişini senkron olarak işliyordu; yıllarca geçmişi olan bir habit'te
+    // bu isteğin uzun sürmesine, hatta HTTP timeout'a yol açabiliyordu.
+    // HabitDto (dönen yanıt tipi) zaten XP delta'sını hiç içermiyordu —
+    // sadece habit alanlarını (Name, Category, DailyGoal vb.) taşıyor —
+    // bu yüzden bu işi arka plana almak API kontratını DEĞİŞTİRMİYOR:
+    // istemci XP güncellemesini zaten bu yanıttan okumuyordu, güncel
+    // TotalXp'yi bir sonraki /api/auth/me veya /api/dashboard çağrısında
+    // görecek. İş artık transaction commit edildikten SONRA
+    // RecalculationQueue'ya yazılıyor ve RecalculationBackgroundService
+    // tarafından arka planda işleniyor.
     [HttpPut("{id:int}")]
     public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
     {
@@ -279,8 +279,6 @@ public class HabitsController : ControllerBase
             habit.NormalizedName = normalizedNameKey;
             habit.Category = normalizedCategory;
 
-            // YENİ: "Diğer" dışındaki kategorilere geçildiğinde önceki özel
-            // etiket/birim artık anlamsız kaldığı için temizleniyor.
             habit.CustomCategoryName = isOtherCategory ? dto.CustomCategoryName!.Trim() : null;
             habit.Unit = isOtherCategory ? dto.Unit : HabitUnit.Count;
 
@@ -292,6 +290,9 @@ public class HabitsController : ControllerBase
 
             await _context.SaveChangesAsync();
 
+            // Kategori değişimi (Su/Odaklanma geçişleri) tek bir DB-side SUM
+            // sorgusuna dayanıyor — O(n) bellek taraması değil, senkron
+            // kalabilir.
             if (categoryChanged)
             {
                 var totalAmount = await _context.HabitCompletions
@@ -326,29 +327,23 @@ public class HabitsController : ControllerBase
                 }
             }
 
+            // DÜZELTİLDİ (🔴 madde 1): Ağır RecalculateHabitAsync çağrısı
+            // kaldırıldı; sadece kuyruğa yazmak için gereken timezone bilgisi
+            // (varsa) commit'ten önce okunuyor.
+            string? userTimeZoneId = null;
             if (goalOrScheduleChanged)
             {
                 var user = await _userManager.FindByIdAsync(userId!);
-                var recalc = await _progressService.RecalculateHabitAsync(habit, user?.TimeZoneId);
-
-                if (recalc.XpDelta != 0 && user != null)
-                {
-                    user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
-                    var updateResult = await _userManager.UpdateAsync(user);
-                    updateResult.EnsureSucceeded(_logger, "habit-update-recalc-xp", userId!);
-                }
-
-                if (recalc.PetStreakBonusDelta > 0)
-                {
-                    await _petGrowthService.AddStreakBonusXpAsync(userId!, recalc.PetStreakBonusDelta);
-                }
-                else if (recalc.PetStreakBonusDelta < 0)
-                {
-                    await _petGrowthService.RemoveStreakBonusXpAsync(userId!, -recalc.PetStreakBonusDelta);
-                }
+                userTimeZoneId = user?.TimeZoneId;
             }
 
             await transaction.CommitAsync();
+
+            if (goalOrScheduleChanged)
+            {
+                _recalculationQueue.EnqueueHabitRecalculation(habit.Id, userId!, userTimeZoneId);
+            }
+
             return ToDto(habit);
         });
     }
@@ -393,7 +388,9 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-     [HttpDelete("{id:int}")]
+    // DÜZELTİLDİ (madde 3, önceki turdan): completion toplamları artık SQL
+    // SUM() ile hesaplanıyor, tüm satırlar belleğe yüklenmiyor.
+    [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteHabit(int id)
     {
         var strategy = _context.Database.CreateExecutionStrategy();

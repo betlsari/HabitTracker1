@@ -296,3 +296,16 @@ C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Sinks.Console.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Sinks.Debug.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Sinks.File.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Google.Protobuf.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Grpc.Core.Api.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Grpc.Net.Client.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Grpc.Net.Common.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Api.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Api.ProviderBuilderExtensions.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Exporter.Console.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Exporter.OpenTelemetryProtocol.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Extensions.Hosting.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Instrumentation.AspNetCore.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Instrumentation.Http.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\OpenTelemetry.Instrumentation.Runtime.dll

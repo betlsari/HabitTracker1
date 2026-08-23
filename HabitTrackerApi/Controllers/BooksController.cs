@@ -1,4 +1,3 @@
-// HabitTrackerApi/Controllers/BooksController.cs
 using Data;
 using Dtos;
 using Microsoft.AspNetCore.Authorization;
@@ -10,10 +9,12 @@ using Services;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Configuration;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/[controller]")]
 [Authorize]
 public class BooksController : ControllerBase
@@ -31,6 +32,7 @@ public class BooksController : ControllerBase
     private readonly BookService _bookService;
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
+    private readonly IRecalculationQueue _recalculationQueue;
     private readonly ILogger<BooksController> _logger;
     private readonly int _maxBooksPerUser;
 
@@ -40,6 +42,7 @@ public class BooksController : ControllerBase
         BookService bookService,
         BadgeService badgeService,
         NotificationService notificationService,
+        IRecalculationQueue recalculationQueue,
         IOptions<AppLimitsOptions> limits,
         ILogger<BooksController> logger)
     {
@@ -48,6 +51,7 @@ public class BooksController : ControllerBase
         _bookService = bookService;
         _badgeService = badgeService;
         _notificationService = notificationService;
+        _recalculationQueue = recalculationQueue;
         _maxBooksPerUser = limits.Value.MaxBooksPerUser;
         _logger = logger;
     }
@@ -162,6 +166,10 @@ public class BooksController : ControllerBase
         });
     }
 
+    // DÜZELTİLDİ (🔴 madde 1): RecalculateBookAsync artık senkron çağrılmıyor.
+    // BookDto zaten XP delta'sını dönmüyor, bu yüzden işi arka plana almak
+    // kontratı bozmuyor (bkz. HabitsController.UpdateHabit üzerindeki
+    // açıklama).
     [HttpPut("{id:int}")]
     public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
     {
@@ -184,11 +192,7 @@ public class BooksController : ControllerBase
         await _context.SaveChangesAsync();
 
         var user = await _userManager.FindByIdAsync(userId);
-        var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
-        if (xpDelta != 0)
-        {
-            await ApplyXpDeltaAsync(userId, xpDelta, user);
-        }
+        _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, user?.TimeZoneId);
 
         return BookService.ToDto(book);
     }
@@ -253,6 +257,9 @@ public class BooksController : ControllerBase
             return BadRequest("Sayfa bazlı ve toplam sayfa sayısı belirtilmiş kitaplar, hedef sayfaya ulaşıldığında otomatik olarak tamamlanır.");
         }
 
+        // NOT: CompleteManuallyAsync O(1) — bilinen sabit bir bonus XP
+        // ekliyor, geçmişi taramıyor. Bu yüzden senkron kalıyor (recalculation
+        // kuyruğuna alınmıyor).
         var xpEarned = await _bookService.CompleteManuallyAsync(book);
         if (xpEarned != 0)
         {
@@ -334,11 +341,6 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        // DÜZELTİLDİ (🔴 tutarsızlık): HabitCompletionsController.CompleteHabit
-        // "tamamlama tarihi habit'in oluşturulma tarihinden önce olamaz" kontrolü
-        // yapıyordu, ama bu uç noktada kitabın oluşturulma tarihi için aynı
-        // kontrol hiç yoktu. Kitap oluşturulmadan önceki bir tarihe okuma
-        // kaydı eklenip geçmişe dönük sahte streak/istatistik üretilebiliyordu.
         var readDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
         if (readDateUtc.Date < book.CreatedAt.Date)
         {
@@ -349,6 +351,10 @@ public class BooksController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId);
 
+        // NOT: AddReadingLogAsync burada BİLİNÇLİ OLARAK senkron kalıyor —
+        // recalculation'ın aksine (tüm geçmişi yeniden işlemiyor), sadece
+        // TEK bir yeni log ekliyor ve o log için XP hesaplıyor. O(1)'e yakın
+        // bir işlem, arka plana alınmasına gerek yok.
         BookLogResult result;
         try
         {
@@ -467,6 +473,10 @@ public class BooksController : ControllerBase
         return BookService.ToLogDto(log);
     }
 
+    // DÜZELTİLDİ (🔴 madde 1): RecalculateBookAsync artık senkron çağrılmıyor;
+    // sadece kuyruğa yazmak için gereken timezone bilgisi commit'ten önce
+    // okunuyor, gerçek recalculation transaction dışında arka planda
+    // işleniyor.
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {
@@ -483,10 +493,6 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        // DÜZELTİLDİ (🔴 tutarsızlık): Güncelleme sırasında da yeni ReadDate
-        // için aynı "kitabın oluşturulma tarihinden önce olamaz" kontrolü
-        // uygulanıyor; aksi halde LogReading'deki kısıtlama update ile
-        // dolanılabilirdi.
         var newReadDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
         if (newReadDateUtc.Date < book.CreatedAt.Date)
         {
@@ -507,18 +513,19 @@ public class BooksController : ControllerBase
         await _context.SaveChangesAsync();
 
         var user = await _userManager.FindByIdAsync(userId);
-        var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
-        if (xpDelta != 0)
-        {
-            await ApplyXpDeltaAsync(userId, xpDelta, user);
-        }
+        var userTimeZoneId = user?.TimeZoneId;
 
         await transaction.CommitAsync();
+
+        _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, userTimeZoneId);
+
         return BookService.ToLogDto(log);
         });
     }
 
 
+    // DÜZELTİLDİ (🔴 madde 1): Silme sonrası da RecalculateBookAsync artık
+    // arka plana alınıyor.
     [HttpDelete("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult> DeleteReadingLog(int id, int logId)
     {
@@ -547,16 +554,16 @@ public class BooksController : ControllerBase
         await _context.SaveChangesAsync();
 
         var user = await _userManager.FindByIdAsync(userId);
-        var xpDelta = await _bookService.RecalculateBookAsync(book, user?.TimeZoneId);
-        if (xpDelta != 0)
-        {
-            await ApplyXpDeltaAsync(userId, xpDelta, user);
-        }
+        var userTimeZoneId = user?.TimeZoneId;
 
         await transaction.CommitAsync();
+
+        _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, userTimeZoneId);
+
         return NoContent();
         });
     }
+
     [HttpGet("{id:int}/progress")]
     public async Task<ActionResult<BookProgressDto>> GetProgress(int id)
     {
@@ -628,10 +635,6 @@ public class BooksController : ControllerBase
         return Ok(result);
     }
 
-    // DÜZELTİLDİ: UserManager.UpdateAsync sonucu artık kontrol ediliyor.
-    // Önceden bu metod XP güncellemesinin gerçekten kalıcı olup olmadığını
-    // hiç doğrulamıyordu; ConcurrencyStamp çakışmasında XP değişikliği
-    // sessizce kaybolabiliyordu.
     private async Task ApplyXpDeltaAsync(string userId, int xpDelta, User? preloadedUser = null)
     {
         var user = preloadedUser ?? await _userManager.FindByIdAsync(userId);
