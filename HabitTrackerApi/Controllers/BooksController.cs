@@ -298,7 +298,7 @@ public class BooksController : ControllerBase
         });
     }
 
-    [HttpPost("{id:int}/reading-logs")]
+   [HttpPost("{id:int}/reading-logs")]
     public async Task<ActionResult<BookReadingLogDto>> LogReading(int id, LogReadingDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -307,14 +307,45 @@ public class BooksController : ControllerBase
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        // YENİ (madde 6): Idempotency — HabitCompletionsController.CompleteHabit
+        // ile aynı desen.
+        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        {
+            var existingLog = await _context.BookReadingLogs.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.BookId == id && l.ClientRequestId == dto.ClientRequestId);
+            if (existingLog != null)
+            {
+                return BookService.ToLogDto(existingLog);
+            }
+        }
+
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
         {
             return NotFound();
         }
 
+        
+        _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
+
         var user = await _userManager.FindByIdAsync(userId);
-        var result = await _bookService.AddReadingLogAsync(book, dto, user?.TimeZoneId);
+
+        BookLogResult result;
+        try
+        {
+            result = await _bookService.AddReadingLogAsync(book, dto, user?.TimeZoneId, clientRequestId: dto.ClientRequestId);
+        }
+        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        {
+            var raced = await _context.BookReadingLogs.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.BookId == id && l.ClientRequestId == dto.ClientRequestId);
+            if (raced != null)
+            {
+                return BookService.ToLogDto(raced);
+            }
+            throw;
+        }
 
         if (user != null && result.XpEarned != 0)
         {
@@ -396,9 +427,6 @@ public class BooksController : ControllerBase
         };
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): log güncelleme + kitap yeniden
-    // hesaplama (RecalculateBookAsync, tüm logları yeniden yazar) + XP delta
-    // uygulama artık tek transaction içinde.
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {
@@ -414,6 +442,15 @@ public class BooksController : ControllerBase
         {
             return NotFound();
         }
+
+        // DÜZELTİLDİ (madde 7): Önceden bu uç noktada Book.ConcurrencyToken
+        // hiç IsModified işaretlenmiyordu; RecalculateBookAsync hesapladığı
+        // değerler eskisiyle AYNI çıkarsa (ör. CurrentPage değişmezse) EF
+        // Book'u "Modified" olarak görmüyor ve olası paralel bir Book
+        // güncellemesiyle (ör. başka bir istekte DailyGoalAmount değişmiş
+        // olması) çakışma HİÇ tespit edilemiyordu. Habit tarafındaki
+        // desenle tutarlı hale getirildi.
+        _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
         if (log == null)
@@ -438,8 +475,7 @@ public class BooksController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): log silme + yeniden hesaplama +
-    // XP delta uygulama artık tek transaction içinde.
+
     [HttpDelete("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult> DeleteReadingLog(int id, int logId)
     {
@@ -455,6 +491,9 @@ public class BooksController : ControllerBase
         {
             return NotFound();
         }
+
+        // DÜZELTİLDİ (madde 7): bkz. UpdateReadingLog açıklaması.
+        _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
         if (log == null)
@@ -476,7 +515,6 @@ public class BooksController : ControllerBase
         return NoContent();
         });
     }
-
     [HttpGet("{id:int}/progress")]
     public async Task<ActionResult<BookProgressDto>> GetProgress(int id)
     {

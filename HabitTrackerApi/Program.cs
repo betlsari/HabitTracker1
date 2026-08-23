@@ -14,8 +14,27 @@ using Configuration;
 using Microsoft.AspNetCore.HttpLogging;
 using Asp.Versioning;
 using Asp.Versioning.Conventions;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// YENİ (madde 10): Yapılandırılmış logging. Konsol + günlük dosya sink'i;
+// production'da bir log toplama servisine (Seq/ELK/Datadog vs.) yönlendirmek
+// için ek bir WriteTo eklemek yeterli olur.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {CorrelationId} {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        "logs/habittracker-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {CorrelationId} {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // Swagger Configuration
 builder.Services.AddSwaggerGen(options =>
@@ -150,6 +169,10 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+// Memory Cache (madde 9: SecurityStampCache için gerekli)
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<SecurityStampCache>();
+
 // Authentication & JWT
 builder.Services.AddAuthentication(options =>
 {
@@ -194,10 +217,32 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
-            var userManager = context.HttpContext.RequestServices
-                .GetRequiredService<UserManager<Models.User>>();
-            var user = await userManager.FindByIdAsync(userId);
-            if (user == null || user.SecurityStamp != tokenStamp)
+            // DÜZELTİLDİ (madde 9): Önceden her istekte UserManager.FindByIdAsync
+            // ile DB'ye gidip güncel SecurityStamp okunuyordu. Artık önce kısa
+            // süreli (30 sn) bellek içi cache'e bakılıyor; cache miss olursa
+            // (ilk istek veya TTL doldu) DB'den okunup cache'e yazılıyor.
+            // Şifre değiştirme / 2FA aç-kapa / email değişimi / logout-all gibi
+            // SecurityStamp'i yenileyen akışlar AuthController üzerinden
+            // cache'i anında invalidate ediyor, böylece güvenlik açısından
+            // hassas geçersiz kılma TTL kadar gecikmiyor.
+            var stampCache = context.HttpContext.RequestServices.GetRequiredService<SecurityStampCache>();
+            if (!stampCache.TryGet(userId, out var currentStamp))
+            {
+                var userManager = context.HttpContext.RequestServices
+                    .GetRequiredService<UserManager<Models.User>>();
+                var user = await userManager.FindByIdAsync(userId);
+
+                if (user == null)
+                {
+                    context.Fail("Oturum geçersiz kılınmış. Lütfen tekrar giriş yapın.");
+                    return;
+                }
+
+                currentStamp = user.SecurityStamp;
+                stampCache.Set(userId, currentStamp);
+            }
+
+            if (currentStamp != tokenStamp)
             {
                 context.Fail("Oturum geçersiz kılınmış. Lütfen tekrar giriş yapın.");
             }
@@ -300,11 +345,14 @@ app.Use(async (context, next) =>
 {
     var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N");
     context.Response.Headers["X-Correlation-ID"] = correlationId;
+    using (Serilog.Context.LogContext.PushProperty("CorrelationId", correlationId))
     using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
     {
         await next();
     }
 });
+
+app.UseSerilogRequestLogging();
 
 app.UseHttpLogging();
 
@@ -337,6 +385,20 @@ app.MapHealthChecks("/health").AddEndpointFilter(async (context, next) =>
     return await next(context);
 });
 
-app.Run();
+try
+{
+    Log.Information("HabitTrackerApi başlatılıyor...");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "HabitTrackerApi beklenmedik şekilde durdu.");
+    throw;
+}
+finally
+{
+   
+    Log.CloseAndFlush();
+}
 
 public partial class Program { }

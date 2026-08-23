@@ -28,6 +28,8 @@ public class AuthController : ControllerBase
     private readonly IEmailQueue _emailQueue;
     private readonly TwoFactorLockoutService _twoFactorLockout;
 
+       private readonly SecurityStampCache _securityStampCache;
+
     public AuthController(
         UserManager<User> userManager,
         SignInManager<User> signInManager,
@@ -37,6 +39,7 @@ public class AuthController : ControllerBase
         AuthAuditService authAudit,
         AppDbContext context,
         TwoFactorLockoutService twoFactorLockout,
+        SecurityStampCache securityStampCache,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -47,8 +50,10 @@ public class AuthController : ControllerBase
         _authAudit = authAudit;
         _context = context;
         _twoFactorLockout = twoFactorLockout;
+        _securityStampCache = securityStampCache;
         _logger = logger;
     }
+
 
     [HttpPost("2fa/login")]
     [EnableRateLimiting("AuthPolicy")]
@@ -697,7 +702,7 @@ public class AuthController : ControllerBase
         return (token, refreshToken);
     }
 
-    private async Task<int> RevokeAllRefreshTokensAsync(string userId)
+       private async Task<int> RevokeAllRefreshTokensAsync(string userId)
     {
         var activeTokens = await _context.RefreshTokens
             .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
@@ -712,6 +717,10 @@ public class AuthController : ControllerBase
         {
             await _context.SaveChangesAsync();
         }
+
+       
+       
+        _securityStampCache.Invalidate(userId);
 
         return activeTokens.Count;
     }

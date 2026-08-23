@@ -8,10 +8,12 @@ public static class HabitCategories
     public const string Sport = "Spor";
     public const string Other = "Diğer";
 
-    // YENİ: Category artık serbest metin değil, sabit bir whitelist'e karşı
-    // doğrulanıyor (PetTypes.Allowed ile aynı desen). Böylece "Su İçme" gibi
-    // varyasyonlar sessizce çiçek/pet/rozet mantığını devre dışı bırakamaz —
-    // istemci sadece bu listedeki değerlerden birini gönderebilir.
+    // DÜZELTİLDİ (madde 8): "Water"/"Reading"/"Focus"/"Sport"/"Other" gibi
+    // İngilizce alias'lar kaldırıldı. Önceden IsValid bunları sessizce kabul
+    // ediyordu ama GET /api/habits/categories sadece Türkçe Allowed listesini
+    // döndürüyordu; istemci geliştiricisi "gerçekten kabul edilen küme"yi bu
+    // endpoint'ten öğrenemiyordu. Artık kabul edilen küme == endpoint'in
+    // döndürdüğü küme (tek doğruluk kaynağı: Allowed).
     public static readonly string[] Allowed =
     {
         Water,
@@ -23,9 +25,7 @@ public static class HabitCategories
 
     public static bool IsValid(string? category) =>
         !string.IsNullOrWhiteSpace(category) &&
-        (Allowed.Contains(category, StringComparer.OrdinalIgnoreCase) ||
-         new[] { "Water", "Reading", "Focus", "Sport", "Other" }
-             .Contains(category, StringComparer.OrdinalIgnoreCase));
+        Allowed.Contains(category, StringComparer.OrdinalIgnoreCase);
 
     public static bool IsWater(string? category) => Matches(category, Water);
 
@@ -35,10 +35,5 @@ public static class HabitCategories
 
     private static bool Matches(string? category, string target) =>
         !string.IsNullOrWhiteSpace(category) &&
-        (category.Equals(target, StringComparison.OrdinalIgnoreCase) ||
-         (target == Water && category.Equals("Water", StringComparison.OrdinalIgnoreCase)) ||
-         (target == Reading && category.Equals("Reading", StringComparison.OrdinalIgnoreCase)) ||
-         (target == Focus && category.Equals("Focus", StringComparison.OrdinalIgnoreCase)) ||
-         (target == Sport && category.Equals("Sport", StringComparison.OrdinalIgnoreCase)) ||
-         (target == Other && category.Equals("Other", StringComparison.OrdinalIgnoreCase)));
+        category.Equals(target, StringComparison.OrdinalIgnoreCase);
 }

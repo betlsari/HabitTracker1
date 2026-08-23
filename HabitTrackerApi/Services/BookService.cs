@@ -33,11 +33,11 @@ public class BookService
     {
         _context = context;
     }
-
     public async Task<BookLogResult> AddReadingLogAsync(
         Book book,
         LogReadingDto dto,
         string? timeZoneId,
+        string? clientRequestId = null,
         CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -53,7 +53,9 @@ public class BookService
             BookId = book.Id,
             ReadDate = readDateUtc,
             Amount = dto.Amount,
-            PageReachedAt = dto.PageReachedAt
+            PageReachedAt = dto.PageReachedAt,
+            // YENİ (madde 6): idempotency anahtarı log ile birlikte kalıcı.
+            ClientRequestId = string.IsNullOrWhiteSpace(clientRequestId) ? null : clientRequestId
         };
 
         var wasCompleted = book.IsCompleted;

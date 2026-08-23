@@ -45,7 +45,7 @@ public class HabitCompletionsController : ControllerBase
         _petGrowthService = petGrowthService;
     }
 
-    [HttpPost]
+        [HttpPost]
     public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, CreateCompletionDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -53,6 +53,22 @@ public class HabitCompletionsController : ControllerBase
         {
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        // YENİ (madde 6): Idempotency. Aynı habit + ClientRequestId ile daha
+        // önce başarıyla işlenmiş bir completion varsa, tekrar XP/streak/badge
+        // üretmeden var olan kaydı döndür. SyncController'daki batch akışıyla
+        // aynı desen; artık normal (tekli) uç nokta da mobil çift-dokunma /
+        // otomatik retry senaryolarına karşı korunuyor.
+        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        {
+            var existing = await _context.HabitCompletions.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
+            if (existing != null)
+            {
+                return ToDto(existing);
+            }
+        }
+
         var habit = await _context.Habits.FindAsync(habitId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (habit == null || habit.UserId != userId)
@@ -78,25 +94,44 @@ public class HabitCompletionsController : ControllerBase
 
         int petStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
 
-        var newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
+        HabitCompletion newHabitCompletion;
+        try
         {
-            HabitId = habitId,
-            CompletionDate = completionUtc,
-            Amount = dto.Amount,
-            XpEarned = xpEarned,
-            PetStreakBonusXp = petStreakBonus,
-            IsOnTime = isOnTime
-        });
+            newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
+            {
+                HabitId = habitId,
+                CompletionDate = completionUtc,
+                Amount = dto.Amount,
+                XpEarned = xpEarned,
+                PetStreakBonusXp = petStreakBonus,
+                IsOnTime = isOnTime,
+                ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId
+            }).Entity;
 
-        _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
+            _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
-        if (user != null)
-        {
-            user.TotalXp += xpEarned;
-            await _userManager.UpdateAsync(user);
+            if (user != null)
+            {
+                user.TotalXp += xpEarned;
+                await _userManager.UpdateAsync(user);
+            }
+
+            await _context.SaveChangesAsync();
         }
-
-        await _context.SaveChangesAsync();
+        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        {
+            // YENİ: Aynı anda (ör. tekrar deneme + orijinal istek) iki eşzamanlı
+            // istek aynı ClientRequestId ile yarışırsa, unique index ihlali
+            // burada yakalanır — hata döndürmek yerine az önce diğer isteğin
+            // oluşturduğu kaydı bulup onu döneriz.
+            var raced = await _context.HabitCompletions.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
+            if (raced != null)
+            {
+                return ToDto(raced);
+            }
+            throw;
+        }
 
         Flower? flower = null;
         if (HabitCategories.IsWater(habit.Category) && dto.Amount > 0)
@@ -128,7 +163,7 @@ public class HabitCompletionsController : ControllerBase
         }
 
         await transaction.CommitAsync();
-        return ToDto(newHabitCompletion.Entity);
+        return ToDto(newHabitCompletion);
         });
     }
 
