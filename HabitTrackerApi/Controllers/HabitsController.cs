@@ -170,6 +170,15 @@ public HabitsController(
             return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
         }
 
+        // DÜZELTİLDİ: DailyGoal, Period veya TargetTime değişirse geçmiş
+        // HabitCompletion kayıtlarının XpEarned/PetStreakBonusXp/IsOnTime
+        // değerleri artık ESKİ kurallara göre "donmuş" kalmıyor.
+        // BookService.RecalculateBookAsync ile aynı desende, aşağıda
+        // RecalculateHabitAsync çağrılarak tüm geçmiş yeniden hesaplanıyor.
+        var goalOrScheduleChanged = habit.DailyGoal != dto.DailyGoal
+            || habit.Period != dto.Period
+            || habit.TargetTime != dto.TargetTime;
+
         habit.Name = normalizedName;
         habit.NormalizedName = normalizedNameKey;
         habit.Category = dto.Category;
@@ -179,6 +188,28 @@ public HabitsController(
         habit.ReminderTime = dto.ReminderTime;
 
         await _context.SaveChangesAsync();
+
+        if (goalOrScheduleChanged)
+        {
+            var user = await _userManager.FindByIdAsync(userId!);
+            var recalc = await _progressService.RecalculateHabitAsync(habit, user?.TimeZoneId);
+
+            if (recalc.XpDelta != 0 && user != null)
+            {
+                user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
+                await _userManager.UpdateAsync(user);
+            }
+
+            if (recalc.PetStreakBonusDelta > 0)
+            {
+                await _petGrowthService.AddStreakBonusXpAsync(userId!, recalc.PetStreakBonusDelta);
+            }
+            else if (recalc.PetStreakBonusDelta < 0)
+            {
+                await _petGrowthService.RemoveStreakBonusXpAsync(userId!, -recalc.PetStreakBonusDelta);
+            }
+        }
+
         return ToDto(habit);
     }
 

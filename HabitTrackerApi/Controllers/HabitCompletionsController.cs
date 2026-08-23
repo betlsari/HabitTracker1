@@ -67,7 +67,7 @@ public class HabitCompletionsController : ControllerBase
         }
         var tz = TimeZones.Resolve(user?.TimeZoneId);
 
-        var isOnTime = IsWithinTargetTime(habit, completionUtc, tz);
+        var isOnTime = HabitSchedule.IsWithinTargetTime(habit, completionUtc, tz);
 
         var snapshot = await _progressService.GetCompletionSnapshotAsync(
             habit, completionUtc, dto.Amount, user?.TimeZoneId);
@@ -257,7 +257,7 @@ public class HabitCompletionsController : ControllerBase
             ? HabitProgressService.CountStreak(habit, totals, periodStart, tz)
             : HabitProgressService.CountStreak(habit, totals, HabitSchedule.PeriodStartLocal(DateTime.UtcNow, habit.Period, tz), tz);
 
-        var isOnTime = IsWithinTargetTime(habit, completion.CompletionDate, tz);
+        var isOnTime = HabitSchedule.IsWithinTargetTime(habit, completion.CompletionDate, tz);
 
         var newXp = _xpService.CalculateCompletionXp(habit, completion.Amount, totalBeforeThis, streakKept, isOnTime);
         var newPetStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
@@ -360,17 +360,6 @@ public class HabitCompletionsController : ControllerBase
         _context.HabitCompletions.Remove(completion);
         await _context.SaveChangesAsync();
         return NoContent();
-    }
-
-    private static bool IsWithinTargetTime(Habit habit, DateTime completionUtc, TimeZoneInfo tz)
-    {
-        if (!habit.TargetTime.HasValue)
-        {
-            return false;
-        }
-
-        var local = TimeZones.ToLocal(completionUtc, tz);
-        return TimeOnly.FromDateTime(local) <= habit.TargetTime.Value;
     }
 
     private static HabitCompletionDto ToDto(HabitCompletion completion) => new()

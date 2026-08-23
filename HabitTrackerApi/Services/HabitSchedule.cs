@@ -63,6 +63,18 @@ public static class HabitSchedule
         return local.Date == lastDay;
     }
 
+    
+    public static bool IsWithinTargetTime(Habit habit, DateTime completionUtc, TimeZoneInfo tz)
+    {
+        if (!habit.TargetTime.HasValue)
+        {
+            return false;
+        }
+
+        var local = TimeZones.ToLocal(completionUtc, tz);
+        return TimeOnly.FromDateTime(local) <= habit.TargetTime.Value;
+    }
+
     private static DateTime StartOfWeekMonday(DateTime date)
     {
         var diff = ((int)date.DayOfWeek + 6) % 7;

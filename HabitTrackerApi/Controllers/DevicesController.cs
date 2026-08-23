@@ -29,6 +29,38 @@ public class DevicesController : ControllerBase
         _maxDeviceTokensPerUser = limits.Value.MaxDeviceTokensPerUser;
     }
 
+    // YENİ: Kullanıcının kayıtlı push bildirim cihazlarını listeleyebilmesi
+    // için. Önceden sadece POST (register) ve DELETE (unregister, token
+    // parametresiyle) vardı; kullanıcı hangi cihazların kayıtlı olduğunu
+    // görmeden bir token'ı nasıl sileceğini bilemiyordu. Ham token asla
+    // dönülmez, sadece platform/tarih ve token'ın son 4 karakteri (ayırt
+    // edici olması için) döndürülür.
+    [HttpGet]
+    public async Task<ActionResult<PagedResultDto<DeviceTokenDto>>> GetDevices(int page = 1, int pageSize = 50)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var query = _context.DeviceTokens.AsNoTracking()
+            .Where(t => t.UserId == userId)
+            .OrderByDescending(t => t.LastSeenAt);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<DeviceTokenDto>
+        {
+            Items = items.Select(ToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
+
     [HttpPost]
     public async Task<IActionResult> Register(RegisterDeviceTokenDto dto)
     {
@@ -71,6 +103,22 @@ public class DevicesController : ControllerBase
         return Ok();
     }
 
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> UnregisterById(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var existing = await _context.DeviceTokens
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+        if (existing == null)
+        {
+            return NotFound();
+        }
+
+        _context.DeviceTokens.Remove(existing);
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpDelete]
     public async Task<IActionResult> Unregister([FromQuery] string token)
     {
@@ -91,4 +139,13 @@ public class DevicesController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    private static DeviceTokenDto ToDto(DeviceToken t) => new()
+    {
+        Id = t.Id,
+        Platform = t.Platform,
+        CreatedAt = t.CreatedAt,
+        LastSeenAt = t.LastSeenAt,
+        TokenSuffix = t.Token.Length >= 4 ? t.Token[^4..] : t.Token
+    };
 }

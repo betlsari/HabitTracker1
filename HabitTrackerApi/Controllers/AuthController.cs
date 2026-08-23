@@ -11,9 +11,17 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Controllers;
 
+// DÜZELTİLDİ: [EnableRateLimiting("AuthPolicy")] önceden CONTROLLER seviyesinde
+// tanımlıydı; bu yüzden /me, /me/export, /sessions, /timezone, /change-password,
+// /2fa/status, /2fa/setup gibi zararsız, kimlik doğrulamalı ve zaten global
+// rate limiter'a (120 istek/dk) tabi olan endpoint'ler de dakikada 5 istekle
+// sınırlanıyordu — normal kullanımda bile 429 alınmasına yol açabiliyordu.
+// Artık bu politika sadece gerçekten hassas/istismara açık (kaba kuvvet,
+// email/SMS bombalama, token brute-force) endpoint'lere ayrı ayrı uygulanıyor:
+// register, login, 2fa/login, refresh, forgot-password, reset-password,
+// resend-confirmation.
 [ApiController]
 [Route("api/[controller]")]
-[EnableRateLimiting("AuthPolicy")]
 public class AuthController : ControllerBase
 {
     private readonly UserManager<User> _userManager;
@@ -51,6 +59,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("2fa/login")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
     {
         var userId = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
@@ -134,6 +143,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Register(RegisterDto registerDto)
     {
         var user = new User
@@ -168,6 +178,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Login(LoginDto loginDto)
     {
         var user = await _userManager.FindByEmailAsync(loginDto.Email);
@@ -272,6 +283,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
     {
         var hashedIncoming = TokenService.HashToken(refreshTokenDto.RefreshToken);
@@ -383,6 +395,56 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    // YENİ: Kullanıcının kendi giriş/2FA/şifre güvenlik geçmişini (audit log)
+    // görebilmesi için. AuthAuditEventDto önceden hiçbir controller'da expose
+    // edilmiyordu — kullanıcı hesabında son başarılı/başarısız giriş
+    // denemelerini göremiyordu. UserId eşleşen kayıtların yanı sıra, henüz
+    // kullanıcı tespit edilmeden (ör. şifre hatalı) kaydedilmiş ama kendi
+    // email'iyle eşleşen olayları da döndürür — böylece "hesabıma başarısız
+    // giriş denemesi oldu mu" sorusuna da cevap verir (Google/GitHub'daki
+    // "recent security activity" ile aynı mantık).
+    [HttpGet("audit-log")]
+    [Authorize]
+    public async Task<ActionResult<PagedResultDto<AuthAuditEventDto>>> GetAuditLog(int page = 1, int pageSize = 50)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var currentUser = await _userManager.FindByIdAsync(userId);
+        var email = currentUser?.Email;
+
+        var query = _context.AuthAuditEvents.AsNoTracking()
+            .Where(e => e.UserId == userId || (email != null && e.Email == email))
+            .OrderByDescending(e => e.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(e => new AuthAuditEventDto
+            {
+                Id = e.Id,
+                UserId = e.UserId,
+                Email = e.Email,
+                EventType = e.EventType,
+                Succeeded = e.Succeeded,
+                IpAddress = e.IpAddress,
+                UserAgent = e.UserAgent,
+                Detail = e.Detail,
+                CreatedAt = e.CreatedAt
+            })
+            .ToListAsync();
+
+        return new PagedResultDto<AuthAuditEventDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
+
     [HttpPost("email-change")]
     [Authorize]
     public async Task<IActionResult> RequestEmailChange(RequestEmailChangeDto dto)
@@ -433,6 +495,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("resend-confirmation")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResendConfirmation(ResendConfirmationDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
@@ -446,6 +509,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
@@ -480,6 +544,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);

@@ -8,10 +8,12 @@ namespace Services;
 public class HabitProgressService
 {
     private readonly AppDbContext _context;
+    private readonly XpService _xpService;
 
-    public HabitProgressService(AppDbContext context)
+    public HabitProgressService(AppDbContext context, XpService xpService)
     {
         _context = context;
+        _xpService = xpService;
     }
 
     public async Task<HabitProgressDto> GetProgressAsync(Habit habit, string? timeZoneId, CancellationToken cancellationToken = default)
@@ -274,6 +276,75 @@ public class HabitProgressService
         return result;
     }
 
+    // YENİ: BookService.RecalculateBookAsync ile aynı desen. Bir Habit'in
+    // DailyGoal / Period / TargetTime alanları güncellendiğinde, geçmişte
+    // kaydedilmiş HabitCompletion'ların XpEarned / PetStreakBonusXp / IsOnTime
+    // değerleri ESKİ kurallara göre hesaplanmış olarak kalıyordu (Book
+    // tarafında bu tutarlılık zaten sağlanıyordu, Habit tarafında yoktu).
+    // Bu metod tüm completion geçmişini kronolojik sırayla, YENİ habit
+    // kurallarına göre baştan hesaplar ve toplam XP/pet-streak-bonus
+    // farkını (delta) döner; caller bu delta'yı User.TotalXp ve pet XP'sine
+    // uygular.
+    public async Task<HabitRecalculationResult> RecalculateHabitAsync(
+        Habit habit,
+        string? timeZoneId,
+        CancellationToken cancellationToken = default)
+    {
+        var tz = TimeZones.Resolve(timeZoneId);
+
+        var completions = await _context.HabitCompletions
+            .Where(c => c.HabitId == habit.Id)
+            .OrderBy(c => c.CompletionDate)
+            .ThenBy(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        var oldTotalXp = completions.Sum(c => c.XpEarned);
+        var oldTotalPetStreakBonus = completions.Sum(c => c.PetStreakBonusXp);
+
+        var periodTotals = new Dictionary<DateTime, int>();
+        var periodGoalMet = new Dictionary<DateTime, bool>();
+
+        foreach (var completion in completions)
+        {
+            var periodStart = HabitSchedule.PeriodStartLocalOfCompletion(completion.CompletionDate, habit.Period, tz);
+            var totalBefore = periodTotals.TryGetValue(periodStart, out var existing) ? existing : 0;
+            var totalAfter = totalBefore + completion.Amount;
+            periodTotals[periodStart] = totalAfter;
+
+            var goalJustReached = totalBefore < habit.DailyGoal && totalAfter >= habit.DailyGoal;
+
+            var previousPeriodGoalMet = false;
+            if (goalJustReached)
+            {
+                var previousStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, habit.Period);
+                previousPeriodGoalMet = periodGoalMet.TryGetValue(previousStart, out var met) && met;
+            }
+
+            var streakKept = goalJustReached && previousPeriodGoalMet;
+            var isOnTime = HabitSchedule.IsWithinTargetTime(habit, completion.CompletionDate, tz);
+
+            completion.XpEarned = _xpService.CalculateCompletionXp(habit, completion.Amount, totalBefore, streakKept, isOnTime);
+            completion.PetStreakBonusXp = streakKept ? _xpService.GetStreakKeepBonus() : 0;
+            completion.IsOnTime = isOnTime;
+
+            if (totalAfter >= habit.DailyGoal)
+            {
+                periodGoalMet[periodStart] = true;
+            }
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var newTotalXp = completions.Sum(c => c.XpEarned);
+        var newTotalPetStreakBonus = completions.Sum(c => c.PetStreakBonusXp);
+
+        return new HabitRecalculationResult
+        {
+            XpDelta = newTotalXp - oldTotalXp,
+            PetStreakBonusDelta = newTotalPetStreakBonus - oldTotalPetStreakBonus
+        };
+    }
+
     private static string GetDateTruncUnit(HabitPeriod period) => period switch
     {
         HabitPeriod.Daily => "day",
@@ -357,4 +428,12 @@ public sealed class CompletionSnapshot
     public bool PreviousPeriodGoalMet { get; init; }
     public int StreakAfter { get; init; }
     public DateTime PeriodStartLocal { get; init; }
+}
+
+// YENİ: RecalculateHabitAsync'in sonucu. Caller (HabitsController) bu delta'ları
+// User.TotalXp ve PetGrowthService'e (streak bonus) uygular.
+public sealed class HabitRecalculationResult
+{
+    public int XpDelta { get; init; }
+    public int PetStreakBonusDelta { get; init; }
 }
