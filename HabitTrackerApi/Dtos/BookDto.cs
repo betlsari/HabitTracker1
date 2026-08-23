@@ -9,8 +9,6 @@ public class BookDto
     public string? Author { get; set; }
     public BookGoalType GoalType { get; set; }
 
-    // YENİ: Kitabın hedefinin hangi döneme (Daily/Weekly/Monthly) göre
-    // değerlendirildiğini istemciye bildirmek için eklendi.
     public HabitPeriod Period { get; set; }
 
     public int? TotalPages { get; set; }
@@ -19,9 +17,14 @@ public class BookDto
     public int TotalMinutesRead { get; set; }
     public bool IsCompleted { get; set; }
 
-    
     public double? PercentageCompleted { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+   
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? Notes { get; set; }
+    public string? CoverImageUrl { get; set; }
 }

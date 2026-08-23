@@ -10,16 +10,7 @@ public interface IPushNotificationSender
     Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// DÜZELTİLDİ: Google'ın kapattığı FCM Legacy HTTP API (fcm.googleapis.com/fcm/send
-/// + "key={serverKey}" header'ı) yerine FCM HTTP v1 API kullanılıyor. v1 API,
-/// server key değil OAuth2 access token (servis hesabı üzerinden) gerektiriyor —
-/// bkz. FcmAccessTokenProvider. Endpoint artık proje bazlı:
-/// https://fcm.googleapis.com/v1/projects/{projectId}/messages:send ve her
-/// mesaj ayrı ayrı, tek bir "message" nesnesiyle gönderiliyor (v1'de toplu
-/// gönderim yok, batching gerekiyorsa Admin SDK'daki sendEachForMulticast
-/// dengi ayrıca eklenmeli).
-/// </summary>
+
 public class FcmPushNotificationSender : IPushNotificationSender
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -48,9 +39,7 @@ public class FcmPushNotificationSender : IPushNotificationSender
 
         if (!_tokenProvider.IsConfigured)
         {
-            // FCM yapılandırılmamışsa (ör. local/dev ortamı) sessizce çık —
-            // bildirim kaydı zaten UserNotifications tablosuna yazıldı, sadece
-            // push gönderimi atlanıyor.
+            
             return;
         }
 

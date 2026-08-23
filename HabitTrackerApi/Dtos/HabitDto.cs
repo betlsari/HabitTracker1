@@ -22,4 +22,9 @@ public class HabitDto
     public TimeOnly? TargetTime { get; set; }
 
     public TimeOnly? ReminderTime { get; set; }
+
+  
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? Notes { get; set; }
 }

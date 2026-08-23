@@ -38,11 +38,7 @@ public class ReminderBackgroundService : BackgroundService
                 await SendRemindersAsync(db, notifications, progress, stoppingToken);
                 await SendMissedAsync(db, notifications, progress, missedHour, stoppingToken);
 
-                // YENİ: Kitaplar için de dönem sonunda hedef tutturulamadığında
-                // missed/streak-broken bildirimi gönderiliyor (habit'lerdeki
-                // SendMissedAsync ile aynı desen). Önceden kitaplarda sadece
-                // reading-log eklenince (goal reached) bildirim gidiyordu;
-                // hiç okumayınca veya seri kırılınca herhangi bir bildirim yoktu.
+                
                 await SendBookMissedAsync(db, notifications, bookService, missedHour, stoppingToken);
             }
             catch (Exception ex)
@@ -68,9 +64,9 @@ public class ReminderBackgroundService : BackgroundService
     {
         var now = DateTime.UtcNow;
         var habits = await db.Habits.AsNoTracking()
-            .Include(h => h.User)
-            .Where(h => h.ReminderTime != null)
-            .ToListAsync(cancellationToken);
+    .Include(h => h.User)
+    .Where(h => h.ReminderTime != null && !h.IsArchived)
+    .ToListAsync(cancellationToken);
 
         foreach (var habit in habits)
         {
@@ -111,8 +107,9 @@ public class ReminderBackgroundService : BackgroundService
     {
         var now = DateTime.UtcNow;
         var habits = await db.Habits.AsNoTracking()
-            .Include(h => h.User)
-            .ToListAsync(cancellationToken);
+    .Include(h => h.User)
+    .Where(h => !h.IsArchived)
+    .ToListAsync(cancellationToken);
 
         foreach (var habit in habits)
         {
@@ -165,13 +162,7 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
-    // YENİ: Habit'lerdeki SendMissedAsync'in kitap karşılığı. Bir kitabın
-    // Period'una göre dönem sonu penceresine (missedHour) girildiğinde, o
-    // dönemde DailyGoalAmount tutturulmadıysa:
-    //  - Bir önceki dönemde streak varsa "BookStreakBroken" (zincir koptu),
-    //  - Yoksa "BookMissed" (bu dönem hiç okunmadı/kaçırıldı)
-    // bildirimi gönderilir. Dedup key dönem başlangıcına göre kurulduğundan
-    // aynı dönem için birden fazla bildirim gitmez.
+   
     private static async Task SendBookMissedAsync(
         AppDbContext db,
         NotificationService notifications,
@@ -181,9 +172,9 @@ public class ReminderBackgroundService : BackgroundService
     {
         var now = DateTime.UtcNow;
         var books = await db.Books.AsNoTracking()
-            .Include(b => b.User)
-            .Where(b => !b.IsCompleted && b.DailyGoalAmount > 0)
-            .ToListAsync(cancellationToken);
+    .Include(b => b.User)
+    .Where(b => !b.IsCompleted && !b.IsArchived && b.DailyGoalAmount > 0)
+    .ToListAsync(cancellationToken);
 
         foreach (var book in books)
         {

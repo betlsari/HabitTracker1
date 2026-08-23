@@ -28,15 +28,17 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<DeviceToken> DeviceTokens { get; set; }
 
-    
     public DbSet<Book> Books { get; set; }
 
     public DbSet<BookReadingLog> BookReadingLogs { get; set; }
     public DbSet<PetAccessoryUnlock> PetAccessoryUnlocks { get; set; }
-public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
+    public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
 
     public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
     public DbSet<TwoFactorAttempt> TwoFactorAttempts { get; set; }
+
+    // YENİ (madde 6): Bildirim tercihleri.
+    public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -49,13 +51,17 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
                 .HasDefaultValue("Europe/Istanbul");
         });
         builder.Entity<Habit>(entity =>
-{
-    entity.HasIndex(h => new { h.UserId, h.NormalizedName }).IsUnique();
-});
+        {
+            entity.HasIndex(h => new { h.UserId, h.NormalizedName }).IsUnique();
+            // YENİ (madde 6): Arşivlenmiş/aktif habit'leri filtrelerken
+            // (GetHabits, GetSummary, GetComparison, ReminderBackgroundService)
+            // sık kullanılan bir kombinasyon.
+            entity.HasIndex(h => new { h.UserId, h.IsArchived });
+        });
         builder.Entity<RefreshToken>(entity =>
-{
-    entity.HasIndex(rt => rt.Token).IsUnique();
-});
+        {
+            entity.HasIndex(rt => rt.Token).IsUnique();
+        });
 
         builder.Entity<Badge>(entity =>
         {
@@ -71,9 +77,9 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
             );
         });
         builder.Entity<TwoFactorAttempt>(entity =>
-{
-    entity.HasIndex(t => t.UserId).IsUnique();
-});
+        {
+            entity.HasIndex(t => t.UserId).IsUnique();
+        });
 
         builder.Entity<UserBadge>(entity =>
         {
@@ -107,6 +113,16 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // YENİ (madde 6): Bildirim tercihi - kullanıcı başına tek satır.
+        builder.Entity<NotificationPreference>(entity =>
+        {
+            entity.HasIndex(p => p.UserId).IsUnique();
+            entity.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<DeviceToken>(entity =>
         {
             entity.HasIndex(d => new { d.UserId, d.Token }).IsUnique();
@@ -122,11 +138,12 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
             entity.HasIndex(e => new { e.Email, e.CreatedAt });
         });
 
-        
         builder.Entity<Book>(entity =>
         {
             entity.HasIndex(b => b.UserId);
             entity.HasIndex(b => b.CreatedAt);
+            // YENİ (madde 6): arşiv filtresi için.
+            entity.HasIndex(b => new { b.UserId, b.IsArchived });
             entity.HasOne(b => b.User)
                 .WithMany(u => u.Books)
                 .HasForeignKey(b => b.UserId)
@@ -137,6 +154,12 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
         {
             entity.HasIndex(l => new { l.BookId, l.ReadDate });
             entity.HasIndex(l => l.ReadDate);
+            // YENİ (madde 6 - batch sync): idempotency. ClientRequestId null
+            // olabileceği için partial unique index (sadece dolu olanlarda
+            // benzersizlik uygulanır).
+            entity.HasIndex(l => new { l.BookId, l.ClientRequestId })
+                .IsUnique()
+                .HasFilter("\"ClientRequestId\" IS NOT NULL");
             entity.HasOne(l => l.Book)
                 .WithMany(b => b.ReadingLogs)
                 .HasForeignKey(l => l.BookId)
@@ -147,28 +170,31 @@ public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
         {
             entity.HasIndex(c => new { c.HabitId, c.CompletionDate });
             entity.HasIndex(c => c.CompletionDate);
+            // YENİ (madde 6 - batch sync): idempotency, BookReadingLog ile aynı desen.
+            entity.HasIndex(c => new { c.HabitId, c.ClientRequestId })
+                .IsUnique()
+                .HasFilter("\"ClientRequestId\" IS NOT NULL");
         });
 
         builder.Entity<Pet>(entity => entity.HasIndex(p => p.CreatedAt));
 
-        
-builder.Entity<PetAccessoryUnlock>(entity =>
-{
-    entity.HasIndex(u => new { u.PetId, u.Accessory }).IsUnique();
-    entity.HasOne(u => u.Pet)
-        .WithMany(p => p.AccessoryUnlocks)
-        .HasForeignKey(u => u.PetId)
-        .OnDelete(DeleteBehavior.Cascade);
-});
+        builder.Entity<PetAccessoryUnlock>(entity =>
+        {
+            entity.HasIndex(u => new { u.PetId, u.Accessory }).IsUnique();
+            entity.HasOne(u => u.Pet)
+                .WithMany(p => p.AccessoryUnlocks)
+                .HasForeignKey(u => u.PetId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
-builder.Entity<UserBackgroundUnlock>(entity =>
-{
-    entity.HasIndex(u => new { u.UserId, u.Background }).IsUnique();
-    entity.HasOne(u => u.User)
-        .WithMany(u => u.BackgroundUnlocks)
-        .HasForeignKey(u => u.UserId)
-        .OnDelete(DeleteBehavior.Cascade);
-});
+        builder.Entity<UserBackgroundUnlock>(entity =>
+        {
+            entity.HasIndex(u => new { u.UserId, u.Background }).IsUnique();
+            entity.HasOne(u => u.User)
+                .WithMany(u => u.BackgroundUnlocks)
+                .HasForeignKey(u => u.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IHasConcurrencyToken).IsAssignableFrom(t.ClrType)))

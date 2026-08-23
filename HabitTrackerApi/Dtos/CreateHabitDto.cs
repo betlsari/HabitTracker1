@@ -6,6 +6,8 @@ namespace Dtos;
 public class CreateHabitDto
 {
     public const int MaxDailyGoal = 100_000;
+    public const int MaxNotesLength = 1000;
+
     [MinLength(1)]
     public string Name { get; set; } = string.Empty;
     [Range(1, MaxDailyGoal)]
@@ -18,4 +20,8 @@ public class CreateHabitDto
     public TimeOnly? TargetTime { get; set; }
 
     public TimeOnly? ReminderTime { get; set; }
+
+    
+    [MaxLength(MaxNotesLength)]
+    public string? Notes { get; set; }
 }

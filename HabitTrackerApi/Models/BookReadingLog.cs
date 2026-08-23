@@ -13,8 +13,10 @@ public class BookReadingLog : IHasConcurrencyToken
 
     public int? PageReachedAt { get; set; }
 
-    
     public int XpEarned { get; set; }
+
+    
+    public string? ClientRequestId { get; set; }
 
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

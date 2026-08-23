@@ -20,42 +20,87 @@ public class HabitsController : ControllerBase
     private const int MaxHabitsPerUser = 100;
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
+
+    // YENİ (madde 6): GetHabits için izin verilen sıralama alanları.
+    // Serbest metin sortBy parametresi doğrudan SQL'e yansıtılmadığı
+    // (whitelist edildiği) için SQL injection riski yok.
+    private static readonly HashSet<string> AllowedSortFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "createdAt", "name", "category"
+    };
+
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly XpService _xpService;
     private readonly HabitProgressService _progressService;
     private readonly FlowerService _flowerService;
     private readonly PetGrowthService _petGrowthService;
-private readonly int _maxHabitsPerUser;
+    private readonly int _maxHabitsPerUser;
 
-public HabitsController(
-    AppDbContext context,
-    UserManager<User> userManager,
-    XpService xpService,
-    HabitProgressService progressService,
-    FlowerService flowerService,
-    PetGrowthService petGrowthService,
-    IOptions<AppLimitsOptions> limits)
-{
-    _context = context;
-    _userManager = userManager;
-    _xpService = xpService;
-    _progressService = progressService;
-    _flowerService = flowerService;
-    _petGrowthService = petGrowthService;
-    _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
-}
+    public HabitsController(
+        AppDbContext context,
+        UserManager<User> userManager,
+        XpService xpService,
+        HabitProgressService progressService,
+        FlowerService flowerService,
+        PetGrowthService petGrowthService,
+        IOptions<AppLimitsOptions> limits)
+    {
+        _context = context;
+        _userManager = userManager;
+        _xpService = xpService;
+        _progressService = progressService;
+        _flowerService = flowerService;
+        _petGrowthService = petGrowthService;
+        _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
+    }
 
+    // DÜZELTİLDİ (madde 6 - eksik CRUD/UX): search (isimde arama),
+    // category filtresi, includeArchived ve sortBy/sortDesc parametreleri
+    // eklendi. Varsayılan davranış (parametresiz çağrı) önceki sürümle
+    // birebir aynı: arşivlenmemiş habit'ler, CreatedAt'e göre azalan sırada.
     [HttpGet]
-    public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(int page = 1, int pageSize = 50)
+    public async Task<ActionResult<PagedResultDto<HabitDto>>> GetHabits(
+        int page = 1,
+        int pageSize = 50,
+        string? search = null,
+        string? category = null,
+        bool includeArchived = false,
+        string sortBy = "createdAt",
+        bool sortDesc = true)
     {
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 200) pageSize = 50;
+        if (!AllowedSortFields.Contains(sortBy)) sortBy = "createdAt";
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var query = _context.Habits.AsNoTracking()
-            .Where(h => h.UserId == userId)
-            .OrderByDescending(h => h.CreatedAt);
+        var query = _context.Habits.AsNoTracking().Where(h => h.UserId == userId);
+
+        if (!includeArchived)
+        {
+            query = query.Where(h => !h.IsArchived);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(h => EF.Functions.ILike(h.Name, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            query = query.Where(h => h.Category == category);
+        }
+
+        query = (sortBy.ToLowerInvariant(), sortDesc) switch
+        {
+            ("name", true) => query.OrderByDescending(h => h.Name),
+            ("name", false) => query.OrderBy(h => h.Name),
+            ("category", true) => query.OrderByDescending(h => h.Category),
+            ("category", false) => query.OrderBy(h => h.Category),
+            (_, false) => query.OrderBy(h => h.CreatedAt),
+            _ => query.OrderByDescending(h => h.CreatedAt)
+        };
 
         var totalCount = await query.CountAsync();
         var habits = await query
@@ -75,7 +120,6 @@ public HabitsController(
     [HttpGet("categories")]
     public ActionResult<IEnumerable<string>> GetAllowedCategories()
     {
-        
         return Ok(HabitCategories.Allowed);
     }
 
@@ -100,11 +144,10 @@ public HabitsController(
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         if (await _context.Habits.CountAsync(h => h.UserId == userId) >= _maxHabitsPerUser)
-{
-    return Conflict($"En fazla {_maxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
-}
+        {
+            return Conflict($"En fazla {_maxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
+        }
 
-        
         if (!HabitCategories.IsValid(dto.Category))
         {
             return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
@@ -130,6 +173,7 @@ public HabitsController(
             Period = dto.Period,
             TargetTime = dto.TargetTime,
             ReminderTime = dto.ReminderTime,
+            Notes = dto.Notes,
             UserId = userId,
             CreatedAt = DateTime.UtcNow
         };
@@ -170,11 +214,6 @@ public HabitsController(
             return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
         }
 
-        // DÜZELTİLDİ: DailyGoal, Period veya TargetTime değişirse geçmiş
-        // HabitCompletion kayıtlarının XpEarned/PetStreakBonusXp/IsOnTime
-        // değerleri artık ESKİ kurallara göre "donmuş" kalmıyor.
-        // BookService.RecalculateBookAsync ile aynı desende, aşağıda
-        // RecalculateHabitAsync çağrılarak tüm geçmiş yeniden hesaplanıyor.
         var goalOrScheduleChanged = habit.DailyGoal != dto.DailyGoal
             || habit.Period != dto.Period
             || habit.TargetTime != dto.TargetTime;
@@ -186,6 +225,7 @@ public HabitsController(
         habit.Period = dto.Period;
         habit.TargetTime = dto.TargetTime;
         habit.ReminderTime = dto.ReminderTime;
+        habit.Notes = dto.Notes;
 
         await _context.SaveChangesAsync();
 
@@ -208,6 +248,49 @@ public HabitsController(
             {
                 await _petGrowthService.RemoveStreakBonusXpAsync(userId!, -recalc.PetStreakBonusDelta);
             }
+        }
+
+        return ToDto(habit);
+    }
+
+    // YENİ (madde 6): Kalıcı silme yerine geçici durdurma. Geçmiş XP/streak/
+    // rozet verisi korunur; sadece habit listelerde/hatırlatmalarda görünmez
+    // hale gelir. DeleteHabit (hard delete) davranışı DEĞİŞMEDİ, ayrıca durur.
+    [HttpPut("{id:int}/archive")]
+    public async Task<ActionResult<HabitDto>> ArchiveHabit(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var habit = await _context.Habits.FindAsync(id);
+        if (habit == null || habit.UserId != userId)
+        {
+            return NotFound();
+        }
+
+        if (!habit.IsArchived)
+        {
+            habit.IsArchived = true;
+            habit.ArchivedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        return ToDto(habit);
+    }
+
+    [HttpPut("{id:int}/unarchive")]
+    public async Task<ActionResult<HabitDto>> UnarchiveHabit(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var habit = await _context.Habits.FindAsync(id);
+        if (habit == null || habit.UserId != userId)
+        {
+            return NotFound();
+        }
+
+        if (habit.IsArchived)
+        {
+            habit.IsArchived = false;
+            habit.ArchivedAt = null;
+            await _context.SaveChangesAsync();
         }
 
         return ToDto(habit);
@@ -311,21 +394,23 @@ public HabitsController(
     }
 
     [HttpGet("summary")]
-    public async Task<ActionResult<IEnumerable<HabitProgressDto>>> GetSummary()
+    public async Task<ActionResult<IEnumerable<HabitProgressDto>>> GetSummary(bool includeArchived = false)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var habits = await _context.Habits.AsNoTracking()
-            .Where(h => h.UserId == userId)
-            .ToListAsync();
+        var query = _context.Habits.AsNoTracking().Where(h => h.UserId == userId);
+        if (!includeArchived)
+        {
+            query = query.Where(h => !h.IsArchived);
+        }
+        var habits = await query.ToListAsync();
 
         var user = await _userManager.FindByIdAsync(userId!);
         var result = await _progressService.GetSummaryAsync(habits, user?.TimeZoneId);
         return Ok(result);
     }
 
-
     [HttpGet("comparison")]
-    public async Task<ActionResult<IEnumerable<HabitComparisonDto>>> GetComparison(int lookbackPeriods = 30)
+    public async Task<ActionResult<IEnumerable<HabitComparisonDto>>> GetComparison(int lookbackPeriods = 30, bool includeArchived = false)
     {
         if (lookbackPeriods is <= 0 or > MaxComparisonPeriods)
         {
@@ -333,9 +418,12 @@ public HabitsController(
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var habits = await _context.Habits.AsNoTracking()
-            .Where(h => h.UserId == userId)
-            .ToListAsync();
+        var query = _context.Habits.AsNoTracking().Where(h => h.UserId == userId);
+        if (!includeArchived)
+        {
+            query = query.Where(h => !h.IsArchived);
+        }
+        var habits = await query.ToListAsync();
 
         if (habits.Count == 0)
         {
@@ -358,6 +446,9 @@ public HabitsController(
         XpBonusForGoal = habit.XpBonusForGoal,
         Period = habit.Period,
         TargetTime = habit.TargetTime,
-        ReminderTime = habit.ReminderTime
+        ReminderTime = habit.ReminderTime,
+        IsArchived = habit.IsArchived,
+        ArchivedAt = habit.ArchivedAt,
+        Notes = habit.Notes
     };
 }

@@ -19,16 +19,17 @@ public class BooksController : ControllerBase
 {
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
+
+    private static readonly HashSet<string> AllowedSortFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "createdAt", "title", "author"
+    };
+
     private readonly AppDbContext _context;
     private readonly UserManager<User> _userManager;
     private readonly BookService _bookService;
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
-
-    // DÜZELTİLDİ: Sabit (hardcoded) "MaxBooksPerUser = 200" yerine, HabitsController
-    // ve DevicesController ile aynı desende IOptions<AppLimitsOptions> üzerinden
-    // config'ten okunuyor. Böylece appsettings.json'daki AppLimits:MaxBooksPerUser
-    // artık gerçekten etkili oluyor.
     private readonly int _maxBooksPerUser;
 
     public BooksController(
@@ -47,16 +48,46 @@ public class BooksController : ControllerBase
         _maxBooksPerUser = limits.Value.MaxBooksPerUser;
     }
 
+    // DÜZELTİLDİ (madde 6): search (Title/Author), includeArchived, sortBy/sortDesc
+    // eklendi. Parametresiz çağrı önceki davranışla birebir aynı.
     [HttpGet]
-    public async Task<ActionResult<PagedResultDto<BookDto>>> GetBooks(int page = 1, int pageSize = 50)
+    public async Task<ActionResult<PagedResultDto<BookDto>>> GetBooks(
+        int page = 1,
+        int pageSize = 50,
+        string? search = null,
+        bool includeArchived = false,
+        string sortBy = "createdAt",
+        bool sortDesc = true)
     {
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 200) pageSize = 50;
+        if (!AllowedSortFields.Contains(sortBy)) sortBy = "createdAt";
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var query = _context.Books.AsNoTracking()
-            .Where(b => b.UserId == userId)
-            .OrderByDescending(b => b.CreatedAt);
+        var query = _context.Books.AsNoTracking().Where(b => b.UserId == userId);
+
+        if (!includeArchived)
+        {
+            query = query.Where(b => !b.IsArchived);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(b =>
+                EF.Functions.ILike(b.Title, $"%{term}%") ||
+                (b.Author != null && EF.Functions.ILike(b.Author, $"%{term}%")));
+        }
+
+        query = (sortBy.ToLowerInvariant(), sortDesc) switch
+        {
+            ("title", true) => query.OrderByDescending(b => b.Title),
+            ("title", false) => query.OrderBy(b => b.Title),
+            ("author", true) => query.OrderByDescending(b => b.Author),
+            ("author", false) => query.OrderBy(b => b.Author),
+            (_, false) => query.OrderBy(b => b.CreatedAt),
+            _ => query.OrderByDescending(b => b.CreatedAt)
+        };
 
         var totalCount = await query.CountAsync();
         var books = await query
@@ -106,6 +137,8 @@ public class BooksController : ControllerBase
             Period = dto.Period,
             TotalPages = dto.TotalPages,
             DailyGoalAmount = dto.DailyGoalAmount,
+            Notes = dto.Notes,
+            CoverImageUrl = dto.CoverImageUrl,
             UserId = userId,
             CreatedAt = DateTime.UtcNow
         };
@@ -132,6 +165,8 @@ public class BooksController : ControllerBase
         book.Period = dto.Period;
         book.TotalPages = dto.TotalPages;
         book.DailyGoalAmount = dto.DailyGoalAmount;
+        book.Notes = dto.Notes;
+        book.CoverImageUrl = dto.CoverImageUrl;
 
         await _context.SaveChangesAsync();
 
@@ -140,6 +175,47 @@ public class BooksController : ControllerBase
         if (xpDelta != 0)
         {
             await ApplyXpDeltaAsync(userId, xpDelta, user);
+        }
+
+        return BookService.ToDto(book);
+    }
+
+    // YENİ (madde 6): DeleteBook (hard delete) yerine geçici durdurma.
+    [HttpPut("{id:int}/archive")]
+    public async Task<ActionResult<BookDto>> ArchiveBook(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        if (!book.IsArchived)
+        {
+            book.IsArchived = true;
+            book.ArchivedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        return BookService.ToDto(book);
+    }
+
+    [HttpPut("{id:int}/unarchive")]
+    public async Task<ActionResult<BookDto>> UnarchiveBook(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        if (book.IsArchived)
+        {
+            book.IsArchived = false;
+            book.ArchivedAt = null;
+            await _context.SaveChangesAsync();
         }
 
         return BookService.ToDto(book);
@@ -416,7 +492,7 @@ public class BooksController : ControllerBase
     }
 
     [HttpGet("comparison")]
-    public async Task<ActionResult<IEnumerable<BookComparisonDto>>> GetComparison(int lookbackDays = 30)
+    public async Task<ActionResult<IEnumerable<BookComparisonDto>>> GetComparison(int lookbackDays = 30, bool includeArchived = false)
     {
         if (lookbackDays is <= 0 or > MaxComparisonPeriods)
         {
@@ -424,9 +500,12 @@ public class BooksController : ControllerBase
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var books = await _context.Books.AsNoTracking()
-            .Where(b => b.UserId == userId)
-            .ToListAsync();
+        var query = _context.Books.AsNoTracking().Where(b => b.UserId == userId);
+        if (!includeArchived)
+        {
+            query = query.Where(b => !b.IsArchived);
+        }
+        var books = await query.ToListAsync();
 
         if (books.Count == 0)
         {

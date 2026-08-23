@@ -14,8 +14,10 @@ public class HabitCompletion : IHasConcurrencyToken
 
     public int PetStreakBonusXp { get; set; }
 
-  
     public bool IsOnTime { get; set; }
+
+    
+    public string? ClientRequestId { get; set; }
 
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

@@ -9,7 +9,6 @@ public class Habit : IHasConcurrencyToken
     [MinLength(1)]
     public string Name { get; set; } = string.Empty;
 
-    
     public string NormalizedName { get; set; } = string.Empty;
 
     [Range(1, CreateHabitDto.MaxDailyGoal)]
@@ -33,6 +32,14 @@ public class Habit : IHasConcurrencyToken
     public TimeOnly? TargetTime { get; set; }
 
     public TimeOnly? ReminderTime { get; set; }
+
+    
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+
+    
+    [MaxLength(1000)]
+    public string? Notes { get; set; }
 
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

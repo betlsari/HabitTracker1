@@ -396,13 +396,10 @@ public class AuthController : ControllerBase
     }
 
     // YENİ: Kullanıcının kendi giriş/2FA/şifre güvenlik geçmişini (audit log)
-    // görebilmesi için. AuthAuditEventDto önceden hiçbir controller'da expose
-    // edilmiyordu — kullanıcı hesabında son başarılı/başarısız giriş
-    // denemelerini göremiyordu. UserId eşleşen kayıtların yanı sıra, henüz
-    // kullanıcı tespit edilmeden (ör. şifre hatalı) kaydedilmiş ama kendi
-    // email'iyle eşleşen olayları da döndürür — böylece "hesabıma başarısız
-    // giriş denemesi oldu mu" sorusuna da cevap verir (Google/GitHub'daki
-    // "recent security activity" ile aynı mantık).
+    // görebilmesi için. UserId eşleşen kayıtların yanı sıra, henüz kullanıcı
+    // tespit edilmeden (ör. şifre hatalı) kaydedilmiş ama kendi email'iyle
+    // eşleşen olayları da döndürür — böylece "hesabıma başarısız giriş
+    // denemesi oldu mu" sorusuna da cevap verir.
     [HttpGet("audit-log")]
     [Authorize]
     public async Task<ActionResult<PagedResultDto<AuthAuditEventDto>>> GetAuditLog(int page = 1, int pageSize = 50)
@@ -462,6 +459,14 @@ public class AuthController : ControllerBase
         return Ok("Onay kodu yeni email adresinize gönderildi.");
     }
 
+    // DÜZELTİLDİ (güvenlik): Değişiklik onaylanıp uygulandıktan sonra ESKİ
+    // email adresine de bir bilgilendirme e-postası gönderiliyor. Önceden
+    // sadece yeni adrese onay kodu gidiyordu; hesap ele geçirilip email
+    // sessizce değiştirilseydi gerçek hesap sahibinin bundan haberi
+    // olmuyordu. Bu bildirim herhangi bir token/link İÇERMEZ (salt
+    // bilgilendirme) — bu yüzden ele geçirilse bile ekstra risk oluşturmaz.
+    // Gönderim, register/forgot-password ile aynı desende kuyruğa yazılır;
+    // SMTP gecikmesi bu isteğin yanıt süresini etkilemez.
     [HttpPost("email-change/confirm")]
     [Authorize]
     public async Task<IActionResult> ConfirmEmailChange(ConfirmEmailChangeDto dto)
@@ -469,12 +474,25 @@ public class AuthController : ControllerBase
         var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         if (user == null) return NotFound();
 
+        var oldEmail = user.Email;
+
         var result = await _userManager.ChangeEmailAsync(user, dto.NewEmail, dto.Token);
         if (!result.Succeeded) return BadRequest(result.Errors);
 
         await _userManager.SetUserNameAsync(user, dto.NewEmail);
         await RevokeAllRefreshTokensAsync(user.Id);
         await _authAudit.RecordAsync(HttpContext, "email-change-confirm", true, user, detail: dto.NewEmail);
+
+        if (!string.IsNullOrWhiteSpace(oldEmail) &&
+            !string.Equals(oldEmail, dto.NewEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            _emailQueue.Enqueue(new EmailMessage(
+                oldEmail,
+                "Hesap email adresiniz değiştirildi",
+                $"Hesabınızın email adresi '{dto.NewEmail}' olarak değiştirildi. " +
+                "Bu işlemi siz yapmadıysanız, lütfen derhal şifrenizi sıfırlayın ve bizimle iletişime geçin."));
+        }
+
         return Ok("Email adresiniz güncellendi. Lütfen tekrar giriş yapın.");
     }
 
@@ -541,6 +559,33 @@ public class AuthController : ControllerBase
 
         var export = await exportService.ExportAsync(user);
         return Ok(export);
+    }
+
+    // YENİ (madde 7 - veri modeli eksikleri): Kullanıcı genelinde bir
+    // "seviye" (level) sistemi yoktu; sadece TotalXp vardı. UserLevelService
+    // XP'yi kademeli artan bir eşik tablosuna göre level'a çeviriyor ve
+    // bir sonraki seviyeye ne kadar kaldığını (ProgressPercent) hesaplıyor.
+    [HttpGet("me/level")]
+    [Authorize]
+    public async Task<ActionResult<UserLevelDto>> GetMyLevel()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var (level, currentLevelXp, xpForNextLevel, progress) = UserLevelService.GetLevelProgress(user.TotalXp);
+
+        return Ok(new UserLevelDto
+        {
+            TotalXp = user.TotalXp,
+            Level = level,
+            CurrentLevelXp = currentLevelXp,
+            XpForNextLevel = xpForNextLevel,
+            ProgressPercent = progress
+        });
     }
 
     [HttpPost("reset-password")]

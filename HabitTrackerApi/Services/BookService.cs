@@ -484,24 +484,30 @@ public class BookService
         return streak;
     }
 
-    public static BookDto ToDto(Book book) => new()
-    {
-        Id = book.Id,
-        Title = book.Title,
-        Author = book.Author,
-        GoalType = book.GoalType,
-        Period = book.Period,
-        TotalPages = book.TotalPages,
-        DailyGoalAmount = book.DailyGoalAmount,
-        CurrentPage = book.CurrentPage,
-        TotalMinutesRead = book.TotalMinutesRead,
-        IsCompleted = book.IsCompleted,
-        PercentageCompleted = book.GoalType == BookGoalType.Pages && book.TotalPages is > 0
-            ? Math.Min(100, (double)book.CurrentPage / book.TotalPages.Value * 100)
-            : null,
-        CreatedAt = book.CreatedAt,
-        CompletedAt = book.CompletedAt
-    };
+    
+
+public static BookDto ToDto(Book book) => new()
+{
+    Id = book.Id,
+    Title = book.Title,
+    Author = book.Author,
+    GoalType = book.GoalType,
+    Period = book.Period,
+    TotalPages = book.TotalPages,
+    DailyGoalAmount = book.DailyGoalAmount,
+    CurrentPage = book.CurrentPage,
+    TotalMinutesRead = book.TotalMinutesRead,
+    IsCompleted = book.IsCompleted,
+    PercentageCompleted = book.GoalType == BookGoalType.Pages && book.TotalPages is > 0
+        ? Math.Min(100, (double)book.CurrentPage / book.TotalPages.Value * 100)
+        : null,
+    CreatedAt = book.CreatedAt,
+    CompletedAt = book.CompletedAt,
+    IsArchived = book.IsArchived,
+    ArchivedAt = book.ArchivedAt,
+    Notes = book.Notes,
+    CoverImageUrl = book.CoverImageUrl
+};
 
     public static BookReadingLogDto ToLogDto(BookReadingLog log) => new()
     {

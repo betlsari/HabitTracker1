@@ -2,14 +2,6 @@ using System.Threading.Channels;
 
 namespace Services;
 
-/// <summary>
-/// Sınırsız kapasiteli, thread-safe in-memory kuyruk. E-posta gönderimini
-/// istek işleme akışından ayırır: enqueue anlık döner, gerçek SMTP çağrısı
-/// EmailSenderBackgroundService tarafından arka planda yapılır.
-/// Not: In-memory olduğu için process restart'ında bekleyen mesajlar kaybolur;
-/// production'da bu kritikse Postgres tablosu / Redis / gerçek bir message
-/// broker (RabbitMQ, Azure Service Bus) tercih edilmeli.
-/// </summary>
 public sealed class EmailQueue : IEmailQueue
 {
     private readonly Channel<EmailMessage> _channel =
@@ -18,6 +10,11 @@ public sealed class EmailQueue : IEmailQueue
             SingleReader = true,
             SingleWriter = false
         });
+
+    // YENİ (madde 9): EmailQueueHealthCheck'in kuyrukta biriken mesaj
+    // sayısını okuyabilmesi için. .NET'in standart Unbounded channel
+    // implementasyonu Reader.Count'u destekler (CanCount == true).
+    public int PendingCount => _channel.Reader.CanCount ? _channel.Reader.Count : -1;
 
     public void Enqueue(EmailMessage message)
     {

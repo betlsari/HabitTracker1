@@ -31,6 +31,20 @@ public class NotificationService
             return false;
         }
 
+        // YENİ (madde 6): Kullanıcı bu türü kapattıysa bildirim kaydı hiç
+        // oluşturulmaz (madde 6 - "hangi bildirim türünü almak istediğini
+        // kapatamıyor" eksikliğini giderir). Bildirim geçmişinde de
+        // görünmesini istemeyen kullanıcılar için bu davranış tercih edildi;
+        // sadece push'u susturmak isteyenler DisabledTypes yerine sadece
+        // QuietHoursStart/End kullanabilir.
+        var preference = await _context.NotificationPreferences.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
+
+        if (preference != null && IsTypeDisabled(preference, type))
+        {
+            return false;
+        }
+
         _context.UserNotifications.Add(new UserNotification
         {
             UserId = userId,
@@ -52,6 +66,14 @@ public class NotificationService
             return false;
         }
 
+        // YENİ (madde 6): Sessiz saatler içindeyse bildirim kaydı DB'ye
+        // yazılır (kullanıcı uygulamayı açtığında görsün diye) ama anlık
+        // push gönderimi atlanır.
+        if (preference != null && await IsWithinQuietHoursAsync(userId, preference, cancellationToken))
+        {
+            return true;
+        }
+
         var tokens = await _context.DeviceTokens
             .AsNoTracking()
             .Where(t => t.UserId == userId)
@@ -62,9 +84,6 @@ public class NotificationService
         return true;
     }
 
-    // DÜZELTİLDİ: Sayfalama eklendi. Önceden en fazla son 100 bildirim sabit
-    // olarak dönüyordu ve daha eskilere erişmenin bir yolu yoktu. HabitsController/
-    // BooksController'daki page/pageSize deseniyle tutarlı hale getirildi.
     public async Task<PagedResultDto<NotificationDto>> ListAsync(
         string userId,
         bool unreadOnly,
@@ -137,8 +156,6 @@ public class NotificationService
         return unread.Count;
     }
 
-    // YENİ: Tek bir bildirimi siler. Kullanıcının kendi bildirimi olduğu
-    // (userId eşleşmesi) kontrol edilir.
     public async Task<bool> DeleteAsync(string userId, int id, CancellationToken cancellationToken = default)
     {
         var notification = await _context.UserNotifications
@@ -153,9 +170,6 @@ public class NotificationService
         return true;
     }
 
-    // YENİ: Kullanıcının okunmuş (IsRead = true) tüm bildirimlerini temizler.
-    // Önceden sadece "okundu işaretleme" vardı, bildirim geçmişini temizlemenin
-    // hiçbir yolu yoktu.
     public async Task<int> DeleteAllReadAsync(string userId, CancellationToken cancellationToken = default)
     {
         var read = await _context.UserNotifications
@@ -170,5 +184,40 @@ public class NotificationService
         _context.UserNotifications.RemoveRange(read);
         await _context.SaveChangesAsync(cancellationToken);
         return read.Count;
+    }
+
+    private static bool IsTypeDisabled(NotificationPreference preference, string type)
+    {
+        if (string.IsNullOrWhiteSpace(preference.DisabledTypes))
+        {
+            return false;
+        }
+
+        return preference.DisabledTypes
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Contains(type, StringComparer.Ordinal);
+    }
+
+    private async Task<bool> IsWithinQuietHoursAsync(
+        string userId, NotificationPreference preference, CancellationToken cancellationToken)
+    {
+        if (preference.QuietHoursStart is not { } start || preference.QuietHoursEnd is not { } end)
+        {
+            return false;
+        }
+
+        var user = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.TimeZoneId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var tz = TimeZones.Resolve(user?.TimeZoneId);
+        var localNow = TimeZones.ToLocal(DateTime.UtcNow, tz);
+        var localTime = TimeOnly.FromDateTime(localNow);
+
+        // start > end => aralık gece yarısını geçiyor (ör. 22:00 - 08:00).
+        return start <= end
+            ? localTime >= start && localTime < end
+            : localTime >= start || localTime < end;
     }
 }

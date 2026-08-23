@@ -12,10 +12,12 @@ using System.Text.Json.Serialization;
 using System.Security.Claims;
 using Configuration;
 using Microsoft.AspNetCore.HttpLogging;
+using Asp.Versioning;
+using Asp.Versioning.Conventions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
+// Swagger Configuration
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -43,20 +45,47 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
+// Controllers & JSON Options
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+
+// API Versioning (Tekrar eden blok temizlendi)
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+    options.ApiVersionReader = ApiVersionReader.Combine(
+        new UrlSegmentApiVersionReader(),
+        new HeaderApiVersionReader("X-Api-Version"));
+})
+.AddMvc(options =>
+{
+    options.Conventions.Add(new VersionByNamespaceConvention());
+})
+.AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
+
+// Database Configuration
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
-
+// Health Checks
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<AppDbContext>("database");
+    .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
+    .AddCheck<EmailQueueHealthCheck>("email-queue", tags: new[] { "dependency" })
+    .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" });
 
+// Options Configuration
 builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
     .Validate(options => Encoding.UTF8.GetByteCount(options.Key) >= 32,
@@ -66,8 +95,7 @@ builder.Services.AddOptions<JwtOptions>()
 builder.Services.AddOptions<AppLimitsOptions>()
     .Bind(builder.Configuration.GetSection(AppLimitsOptions.SectionName));
 
-// Production'da eksik bırakılırsa uygulamanın sessizce yanlış/güvensiz
-// ayarlarla ayağa kalkmasını önlemek için erken (startup sırasında) fail-fast.
+// Production Validations
 if (builder.Environment.IsProduction())
 {
     var allowedOriginsCheck = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
@@ -89,11 +117,6 @@ if (builder.Environment.IsProduction())
             "Production ortamında Email:SmtpHost, Email:SenderEmail ve Email:SenderPassword tanımlanmalıdır (ortam değişkeni veya secret store üzerinden).");
     }
 
-    // DÜZELTİLDİ: HealthCheck:ApiKey production'da boş bırakılırsa,
-    // /health endpoint'i aşağıdaki filtre yüzünden HERKESE (monitoring/load
-    // balancer dahil) 404 dönüyordu ve bu durum fark edilmeden deploy
-    // edilebiliyordu. Diğer production zorunlu ayarlarla (Cors, Email) aynı
-    // desende, eksikse uygulama başlarken fail-fast ile durduruluyor.
     var healthCheckApiKey = builder.Configuration["HealthCheck:ApiKey"];
     if (string.IsNullOrWhiteSpace(healthCheckApiKey))
     {
@@ -102,11 +125,13 @@ if (builder.Environment.IsProduction())
     }
 }
 
+// HTTP Logging
 builder.Services.AddHttpLogging(options =>
 {
     options.LoggingFields = HttpLoggingFields.RequestProperties | HttpLoggingFields.ResponseStatusCode | HttpLoggingFields.Duration;
 });
 
+// Identity Configuration
 builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
 {
     options.SignIn.RequireConfirmedEmail = true;
@@ -114,7 +139,6 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.AllowedForNewUsers = true;
-
 
     options.Password.RequiredLength = 12;
     options.Password.RequireDigit = true;
@@ -126,6 +150,7 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+// Authentication & JWT
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -143,10 +168,6 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
     };
 
-    // (1) purpose=2fa-pending token'ları (TokenService.GeneratePreAuthToken ile
-    // üretilenler) normal [Authorize] endpoint'lerinde ASLA kabul edilmesin.
-    // (2) sstamp claim'i kullanıcının güncel SecurityStamp'i ile eşleşmezse
-    // (şifre değişti / 2FA açıldı-kapandı / logout-all yapıldı) token reddedilsin.
     options.Events = new JwtBearerEvents
     {
         OnTokenValidated = async context =>
@@ -184,6 +205,7 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultCorsPolicy", policy =>
@@ -200,13 +222,11 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Rate Limiting
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    // IP bazlı partition: her IP kendi 5-istek/dakika sayacına sahip,
-    // tek bir global sayaç tüm kullanıcılar için auth endpoint'lerini
-    // kilitleyemesin diye.
     options.AddPolicy("AuthPolicy", httpContext =>
     {
         var partitionKey = $"auth-ip:{httpContext.Connection.RemoteIpAddress}";
@@ -218,7 +238,6 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
-
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
@@ -236,40 +255,47 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// HTTP Clients
 builder.Services.AddHttpClient(nameof(FcmPushNotificationSender));
 builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
+
+// Dependency Injection (Services)
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
+builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
+
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthAuditService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<XpService>();
 builder.Services.AddScoped<HabitProgressService>();
 builder.Services.AddScoped<FlowerService>();
-
 builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BadgeService>();
 builder.Services.AddScoped<PetMoodService>();
-
 builder.Services.AddScoped<BookService>();
-
 builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddScoped<PetCosmeticsService>();
 builder.Services.AddScoped<TwoFactorLockoutService>();
+builder.Services.AddScoped<UserDataExportService>();
 
+// Hosted Services (Background Tasks)
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddHostedService<AuthAuditCleanupService>();
+builder.Services.AddHostedService<EmailSenderBackgroundService>();
 
+// Exception Handling
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
-builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
-builder.Services.AddHostedService<EmailSenderBackgroundService>();
-builder.Services.AddScoped<UserDataExportService>();
 
 var app = builder.Build();
+
+// Middleware Pipeline
 app.UseExceptionHandler();
+
+// Correlation ID Middleware
 app.Use(async (context, next) =>
 {
     var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N");
@@ -279,8 +305,8 @@ app.Use(async (context, next) =>
         await next();
     }
 });
-app.UseHttpLogging();
 
+app.UseHttpLogging();
 
 if (app.Environment.IsDevelopment())
 {
@@ -296,8 +322,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Production'da health check endpoint'i açık bırakılmıyor; sadece doğru
-// X-Health-Key header'ı ile erişilebiliyor (ör. load balancer/monitoring).
+// Health Check Endpoint
 app.MapHealthChecks("/health").AddEndpointFilter(async (context, next) =>
 {
     if (app.Environment.IsProduction())
@@ -314,4 +339,4 @@ app.MapHealthChecks("/health").AddEndpointFilter(async (context, next) =>
 
 app.Run();
 
-public partial class Program;
+public partial class Program { }
