@@ -363,29 +363,45 @@ public class BookService
         return ranked;
     }
 
-    // DÜZELTİLDİ: public yapıldı — ReminderBackgroundService.SendBookMissedAsync
-    // kitapların dönemsel toplamlarını okuyabilmek için buna ihtiyaç duyuyor
-    // (HabitProgressService.LoadPeriodTotalsAsync'in zaten public olmasıyla
-    // aynı desen).
+    // DÜZELTİLDİ (🔴 SQL provider bağımlılığı): Bu metod önceden ham SQL
+    // içinde Postgres'e özgü `date_trunc(unit, "ReadDate" AT TIME ZONE tzId)`
+    // sözdizimini kullanıyordu. `AT TIME ZONE` SQLite'ta hiç desteklenmiyor
+    // ("near \"AT\": syntax error") — bu yüzden testlerde (SQLite kullanan
+    // BookServiceTests, ApiFactory) bu metodu çağıran her akış patlıyordu.
+    // Artık dönem toplamları DB'den ham (BookId, ReadDate, Amount) satırları
+    // çekilip bellekte, projenin zaten sahip olduğu tek doğruluk kaynağı olan
+    // HabitSchedule.PeriodStartLocal ile bucketleniyor. Bu hem Postgres hem
+    // SQLite (hem de ileride başka bir provider) ile aynı sonucu üretir ve
+    // saat dilimi/dönem başlangıcı mantığı artık tek bir yerde (HabitSchedule)
+    // yaşıyor.
     public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int bookId,
         HabitPeriod period,
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _context.Database.SqlQuery<PeriodTotal>($"""
-            SELECT date_trunc({GetDateTruncUnit(period)}, "ReadDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
-                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
-            FROM "BookReadingLogs"
-            WHERE "BookId" = {bookId}
-            GROUP BY 1
-            """).ToListAsync(cancellationToken);
+        var rows = await _context.BookReadingLogs
+            .AsNoTracking()
+            .Where(l => l.BookId == bookId)
+            .Select(l => new { l.ReadDate, l.Amount })
+            .ToListAsync(cancellationToken);
 
-        return rows.ToDictionary(row => row.PeriodStart, row => row.Total);
+        var result = new Dictionary<DateTime, int>();
+        foreach (var row in rows)
+        {
+            var periodStart = HabitSchedule.PeriodStartLocal(row.ReadDate, period, tz);
+            result[periodStart] = result.TryGetValue(periodStart, out var existing)
+                ? existing + row.Amount
+                : row.Amount;
+        }
+
+        return result;
     }
 
     // YENİ: Birden fazla kitap için TEK sorguda dönemsel toplamları yükler.
-    // HabitProgressService.LoadPeriodTotalsBatchAsync ile birebir aynı desen.
+    // HabitProgressService.LoadPeriodTotalsBatchAsync ile aynı desen; artık
+    // ikisi de bellek içi bucketing kullanıyor (bkz. LoadPeriodTotalsAsync
+    // üzerindeki açıklama).
     public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
         IReadOnlyList<int> bookIds,
         HabitPeriod period,
@@ -399,14 +415,11 @@ public class BookService
         }
 
         var idsArray = bookIds.ToArray();
-        var rows = await _context.Database.SqlQuery<BookPeriodTotal>($"""
-            SELECT "BookId",
-                   date_trunc({GetDateTruncUnit(period)}, "ReadDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
-                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
-            FROM "BookReadingLogs"
-            WHERE "BookId" = ANY({idsArray})
-            GROUP BY "BookId", 2
-            """).ToListAsync(cancellationToken);
+        var rows = await _context.BookReadingLogs
+            .AsNoTracking()
+            .Where(l => idsArray.Contains(l.BookId))
+            .Select(l => new { l.BookId, l.ReadDate, l.Amount })
+            .ToListAsync(cancellationToken);
 
         foreach (var row in rows)
         {
@@ -416,31 +429,13 @@ public class BookService
                 result[row.BookId] = dict;
             }
 
-            dict[row.PeriodStart] = row.Total;
+            var periodStart = HabitSchedule.PeriodStartLocal(row.ReadDate, period, tz);
+            dict[periodStart] = dict.TryGetValue(periodStart, out var existing)
+                ? existing + row.Amount
+                : row.Amount;
         }
 
         return result;
-    }
-
-    private static string GetDateTruncUnit(HabitPeriod period) => period switch
-    {
-        HabitPeriod.Daily => "day",
-        HabitPeriod.Weekly => "week",
-        HabitPeriod.Monthly => "month",
-        _ => throw new ArgumentOutOfRangeException(nameof(period))
-    };
-
-    private sealed class PeriodTotal
-    {
-        public DateTime PeriodStart { get; init; }
-        public int Total { get; init; }
-    }
-
-    private sealed class BookPeriodTotal
-    {
-        public int BookId { get; init; }
-        public DateTime PeriodStart { get; init; }
-        public int Total { get; init; }
     }
 
     private async Task<int> CountStreakPeriodsAsync(Book book, TimeZoneInfo tz, DateTime fromPeriodStart, CancellationToken cancellationToken)
@@ -486,7 +481,7 @@ public class BookService
         return streak;
     }
 
-    
+
 
 public static BookDto ToDto(Book book) => new()
 {

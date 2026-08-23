@@ -25,6 +25,15 @@ public class StatsController : ControllerBase
         _userManager = userManager;
     }
 
+    // DÜZELTİLDİ (🔴 SQL provider bağımlılığı): Bu uç nokta önceden ham SQL
+    // içinde Postgres'e özgü `date_trunc('month', "CompletionDate" AT TIME
+    // ZONE tzId)` sözdizimini kullanıyordu. `AT TIME ZONE` SQLite'ta
+    // desteklenmediği için testlerde "near \"AT\": syntax error" ile
+    // patlıyordu. Artık habit completion'lar ve book reading log'lar ham
+    // (tarih, miktar, xp) olarak çekilip kullanıcının saat diliminde ay
+    // başlangıcına (bkz. HabitSchedule.PeriodStartLocal ile aynı mantık,
+    // burada doğrudan yıl/ay bazında) bellek içinde bucketleniyor —
+    // Postgres/SQLite arasında davranış farkı kalmıyor.
     [HttpGet("monthly")]
     public async Task<ActionResult<MonthlySummaryDto>> GetMonthlySummary(int monthsBack = 12)
     {
@@ -52,27 +61,11 @@ public class StatsController : ControllerBase
 
         var habitMonthly = habitIds.Length == 0
             ? new Dictionary<DateTime, (int Count, int Xp)>()
-            : (await _context.Database.SqlQuery<MonthlyRow>($"""
-                SELECT date_trunc('month', "CompletionDate" AT TIME ZONE {tz.Id}) AS "Month",
-                       COUNT(*)::integer AS "Count",
-                       COALESCE(SUM("XpEarned"), 0)::integer AS "Xp"
-                FROM "HabitCompletions"
-                WHERE "HabitId" = ANY({habitIds})
-                GROUP BY 1
-                """).ToListAsync())
-                .ToDictionary(r => r.Month, r => (r.Count, r.Xp));
+            : await LoadHabitMonthlyTotalsAsync(habitIds, tz);
 
         var bookMonthly = bookIds.Length == 0
             ? new Dictionary<DateTime, (int Count, int Xp)>()
-            : (await _context.Database.SqlQuery<MonthlyRow>($"""
-                SELECT date_trunc('month', "ReadDate" AT TIME ZONE {tz.Id}) AS "Month",
-                       COUNT(*)::integer AS "Count",
-                       COALESCE(SUM("XpEarned"), 0)::integer AS "Xp"
-                FROM "BookReadingLogs"
-                WHERE "BookId" = ANY({bookIds})
-                GROUP BY 1
-                """).ToListAsync())
-                .ToDictionary(r => r.Month, r => (r.Count, r.Xp));
+            : await LoadBookMonthlyTotalsAsync(bookIds, tz);
 
         var months = new List<MonthlyStatDto>(monthsBack);
         var cursor = cursorMonth;
@@ -106,10 +99,43 @@ public class StatsController : ControllerBase
         };
     }
 
-    private sealed class MonthlyRow
+    private async Task<Dictionary<DateTime, (int Count, int Xp)>> LoadHabitMonthlyTotalsAsync(
+        int[] habitIds, TimeZoneInfo tz)
     {
-        public DateTime Month { get; init; }
-        public int Count { get; init; }
-        public int Xp { get; init; }
+        var rows = await _context.HabitCompletions.AsNoTracking()
+            .Where(c => habitIds.Contains(c.HabitId))
+            .Select(c => new { c.CompletionDate, c.XpEarned })
+            .ToListAsync();
+
+        var result = new Dictionary<DateTime, (int Count, int Xp)>();
+        foreach (var row in rows)
+        {
+            var local = TimeZones.ToLocal(row.CompletionDate, tz);
+            var monthKey = new DateTime(local.Year, local.Month, 1);
+            var current = result.TryGetValue(monthKey, out var existing) ? existing : (0, 0);
+            result[monthKey] = (current.Item1 + 1, current.Item2 + row.XpEarned);
+        }
+
+        return result;
+    }
+
+    private async Task<Dictionary<DateTime, (int Count, int Xp)>> LoadBookMonthlyTotalsAsync(
+        int[] bookIds, TimeZoneInfo tz)
+    {
+        var rows = await _context.BookReadingLogs.AsNoTracking()
+            .Where(l => bookIds.Contains(l.BookId))
+            .Select(l => new { l.ReadDate, l.XpEarned })
+            .ToListAsync();
+
+        var result = new Dictionary<DateTime, (int Count, int Xp)>();
+        foreach (var row in rows)
+        {
+            var local = TimeZones.ToLocal(row.ReadDate, tz);
+            var monthKey = new DateTime(local.Year, local.Month, 1);
+            var current = result.TryGetValue(monthKey, out var existing) ? existing : (0, 0);
+            result[monthKey] = (current.Item1 + 1, current.Item2 + row.XpEarned);
+        }
+
+        return result;
     }
 }

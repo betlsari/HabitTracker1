@@ -195,28 +195,41 @@ public class HabitProgressService
         return totals.TryGetValue(periodStartLocal, out var total) && total >= habit.DailyGoal;
     }
 
+    // DÜZELTİLDİ (🔴 SQL provider bağımlılığı): Önceden ham SQL içinde
+    // Postgres'e özgü `date_trunc(unit, "CompletionDate" AT TIME ZONE tzId)`
+    // sözdizimi kullanılıyordu. `AT TIME ZONE` SQLite'ta desteklenmiyor ve
+    // testlerde "near \"AT\": syntax error" ile patlıyordu. Artık ham
+    // (HabitId, CompletionDate, Amount) satırları çekilip HabitSchedule.
+    // PeriodStartLocal ile bellek içinde bucketleniyor — Postgres/SQLite
+    // arasında davranış farkı kalmıyor.
     public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int habitId,
         HabitPeriod period,
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
     {
-        var rows = await _context.Database.SqlQuery<PeriodTotal>($"""
-            SELECT date_trunc({GetDateTruncUnit(period)}, "CompletionDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
-                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
-            FROM "HabitCompletions"
-            WHERE "HabitId" = {habitId}
-            GROUP BY 1
-            """).ToListAsync(cancellationToken);
+        var rows = await _context.HabitCompletions
+            .AsNoTracking()
+            .Where(c => c.HabitId == habitId)
+            .Select(c => new { c.CompletionDate, c.Amount })
+            .ToListAsync(cancellationToken);
 
-        return rows.ToDictionary(row => row.PeriodStart, row => row.Total);
+        var result = new Dictionary<DateTime, int>();
+        foreach (var row in rows)
+        {
+            var periodStart = HabitSchedule.PeriodStartLocal(row.CompletionDate, period, tz);
+            result[periodStart] = result.TryGetValue(periodStart, out var existing)
+                ? existing + row.Amount
+                : row.Amount;
+        }
+
+        return result;
     }
 
     // YENİ: Birden fazla habit için TEK sorguda dönemsel toplamları yükler.
-    // Aynı Period'a sahip habit'ler tek bir "WHERE HabitId = ANY(...)" sorgusu
-    // ile gruplanır (date_trunc unit'i habit'in Period'una bağlı olduğundan
-    // farklı Period'lar ayrı sorgu gerektirir — ama toplamda habit sayısı
-    // kadar değil, en fazla 3 (Daily/Weekly/Monthly) sorgu koşar).
+    // Aynı Period'a sahip habit'ler tek bir sorgu ile gruplanır (bkz.
+    // LoadPeriodTotalsAsync üzerindeki açıklama — artık bellek içi bucketing
+    // kullanıyor, ham SQL yok).
     public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
         IReadOnlyList<int> habitIds,
         HabitPeriod period,
@@ -230,14 +243,11 @@ public class HabitProgressService
         }
 
         var idsArray = habitIds.ToArray();
-        var rows = await _context.Database.SqlQuery<HabitPeriodTotal>($"""
-            SELECT "HabitId",
-                   date_trunc({GetDateTruncUnit(period)}, "CompletionDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
-                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
-            FROM "HabitCompletions"
-            WHERE "HabitId" = ANY({idsArray})
-            GROUP BY "HabitId", 2
-            """).ToListAsync(cancellationToken);
+        var rows = await _context.HabitCompletions
+            .AsNoTracking()
+            .Where(c => idsArray.Contains(c.HabitId))
+            .Select(c => new { c.HabitId, c.CompletionDate, c.Amount })
+            .ToListAsync(cancellationToken);
 
         foreach (var row in rows)
         {
@@ -247,7 +257,10 @@ public class HabitProgressService
                 result[row.HabitId] = dict;
             }
 
-            dict[row.PeriodStart] = row.Total;
+            var periodStart = HabitSchedule.PeriodStartLocal(row.CompletionDate, period, tz);
+            dict[periodStart] = dict.TryGetValue(periodStart, out var existing)
+                ? existing + row.Amount
+                : row.Amount;
         }
 
         return result;
@@ -343,27 +356,6 @@ public class HabitProgressService
             XpDelta = newTotalXp - oldTotalXp,
             PetStreakBonusDelta = newTotalPetStreakBonus - oldTotalPetStreakBonus
         };
-    }
-
-    private static string GetDateTruncUnit(HabitPeriod period) => period switch
-    {
-        HabitPeriod.Daily => "day",
-        HabitPeriod.Weekly => "week",
-        HabitPeriod.Monthly => "month",
-        _ => throw new ArgumentOutOfRangeException(nameof(period))
-    };
-
-    private sealed class PeriodTotal
-    {
-        public DateTime PeriodStart { get; init; }
-        public int Total { get; init; }
-    }
-
-    private sealed class HabitPeriodTotal
-    {
-        public int HabitId { get; init; }
-        public DateTime PeriodStart { get; init; }
-        public int Total { get; init; }
     }
 
     private static HabitProgressDto BuildProgress(
