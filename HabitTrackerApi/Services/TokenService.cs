@@ -3,24 +3,35 @@ using Microsoft.IdentityModel.Tokens;
 using Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using Configuration;
 using System.Text;
 using System.Security.Cryptography;
 
 
 public class TokenService
 {
-
     private readonly IConfiguration _configuration;
+    private readonly JwtOptions _jwtOptions;
 
-    
     private const string TwoFactorPurposeClaim = "purpose";
     private const string TwoFactorPurposeValue = "2fa-pending";
-    private static readonly TimeSpan PreAuthTokenLifetime = TimeSpan.FromMinutes(5);
 
-    public TokenService(IConfiguration configuration)
+    // DÜZELTİLDİ (madde 8): PreAuthTokenLifetime artık sabit değil,
+    // JwtOptions.PreAuthTokenLifetimeMinutes üzerinden konfigüre ediliyor.
+    private TimeSpan PreAuthTokenLifetime => TimeSpan.FromMinutes(_jwtOptions.PreAuthTokenLifetimeMinutes);
+
+    // DÜZELTİLDİ (madde 8): Access token ömrü artık JwtOptions'tan geliyor.
+    public TimeSpan AccessTokenLifetime => TimeSpan.FromMinutes(_jwtOptions.AccessTokenLifetimeMinutes);
+
+    // DÜZELTİLDİ (madde 8): Refresh token ömrü artık JwtOptions'tan geliyor;
+    // AuthController bu değeri IssueTokensAsync/Refresh içinde kullanıyor.
+    public TimeSpan RefreshTokenLifetime => TimeSpan.FromDays(_jwtOptions.RefreshTokenLifetimeDays);
+
+    public TokenService(IConfiguration configuration, IOptions<JwtOptions> jwtOptions)
     {
         _configuration = configuration;
+        _jwtOptions = jwtOptions.Value;
     }
 
     public string GenerateToken(User user)
@@ -29,7 +40,6 @@ public class TokenService
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email!),
-            
             new Claim("sstamp", user.SecurityStamp ?? string.Empty)
         };
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
@@ -38,7 +48,7 @@ public class TokenService
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(2),
+            expires: DateTime.UtcNow.Add(AccessTokenLifetime),
             signingCredentials: credentials
 );
         return new JwtSecurityTokenHandler().WriteToken(token);

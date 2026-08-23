@@ -1,6 +1,8 @@
 using Data;
 using Dtos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Configuration;
 using Models;
 
 namespace Services;
@@ -28,10 +30,12 @@ public class BookService
     private const int DailyGoalBonusXp = 5;
 
     private readonly AppDbContext _context;
+    private readonly int _maxHistoryLookbackDays;
 
-    public BookService(AppDbContext context)
+    public BookService(AppDbContext context, IOptions<AppLimitsOptions> limits)
     {
         _context = context;
+        _maxHistoryLookbackDays = limits.Value.MaxHistoryLookbackDays;
     }
     public async Task<BookLogResult> AddReadingLogAsync(
         Book book,
@@ -54,7 +58,6 @@ public class BookService
             ReadDate = readDateUtc,
             Amount = dto.Amount,
             PageReachedAt = dto.PageReachedAt,
-            // YENİ (madde 6): idempotency anahtarı log ile birlikte kalıcı.
             ClientRequestId = string.IsNullOrWhiteSpace(clientRequestId) ? null : clientRequestId
         };
 
@@ -142,6 +145,10 @@ public class BookService
         return xpEarned;
     }
 
+    // NOT (madde 1): RecalculateBookAsync BİLİNÇLİ OLARAK
+    // LoadPeriodTotalsAsync KULLANMIYOR — kendi sorgusuyla TÜM geçmişi
+    // okuyor. XP'yi doğru yeniden hesaplamak için bu şart;
+    // MaxHistoryLookbackDays sınırı burada uygulanmıyor.
     public async Task<int> RecalculateBookAsync(Book book, string? timeZoneId = null, CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -285,10 +292,6 @@ public class BookService
         return stats;
     }
 
-    // DÜZELTİLDİ (N+1): Önceden her kitap için ayrı LoadPeriodTotalsAsync
-    // çağrılıyordu. Artık kitaplar Period'a göre gruplanıp her grup için TEK
-    // toplu sorgu atılıyor (HabitProgressService.GetComparisonAsync ile aynı
-    // desen) — 200 kitap olsa bile en fazla 3 sorgu koşar.
     public async Task<List<BookComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Book> books,
         string? timeZoneId,
@@ -363,26 +366,20 @@ public class BookService
         return ranked;
     }
 
-    // DÜZELTİLDİ (🔴 SQL provider bağımlılığı): Bu metod önceden ham SQL
-    // içinde Postgres'e özgü `date_trunc(unit, "ReadDate" AT TIME ZONE tzId)`
-    // sözdizimini kullanıyordu. `AT TIME ZONE` SQLite'ta hiç desteklenmiyor
-    // ("near \"AT\": syntax error") — bu yüzden testlerde (SQLite kullanan
-    // BookServiceTests, ApiFactory) bu metodu çağıran her akış patlıyordu.
-    // Artık dönem toplamları DB'den ham (BookId, ReadDate, Amount) satırları
-    // çekilip bellekte, projenin zaten sahip olduğu tek doğruluk kaynağı olan
-    // HabitSchedule.PeriodStartLocal ile bucketleniyor. Bu hem Postgres hem
-    // SQLite (hem de ileride başka bir provider) ile aynı sonucu üretir ve
-    // saat dilimi/dönem başlangıcı mantığı artık tek bir yerde (HabitSchedule)
-    // yaşıyor.
+    // DÜZELTİLDİ (🔴 madde 1): MaxHistoryLookbackDays sınırı eklendi (bkz.
+    // HabitProgressService.LoadPeriodTotalsAsync üzerindeki açıklama — aynı
+    // gerekçe/desen burada da geçerli).
     public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int bookId,
         HabitPeriod period,
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
     {
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+
         var rows = await _context.BookReadingLogs
             .AsNoTracking()
-            .Where(l => l.BookId == bookId)
+            .Where(l => l.BookId == bookId && l.ReadDate >= cutoffUtc)
             .Select(l => new { l.ReadDate, l.Amount })
             .ToListAsync(cancellationToken);
 
@@ -398,10 +395,7 @@ public class BookService
         return result;
     }
 
-    // YENİ: Birden fazla kitap için TEK sorguda dönemsel toplamları yükler.
-    // HabitProgressService.LoadPeriodTotalsBatchAsync ile aynı desen; artık
-    // ikisi de bellek içi bucketing kullanıyor (bkz. LoadPeriodTotalsAsync
-    // üzerindeki açıklama).
+    // DÜZELTİLDİ (🔴 madde 1): MaxHistoryLookbackDays sınırı eklendi.
     public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
         IReadOnlyList<int> bookIds,
         HabitPeriod period,
@@ -414,10 +408,11 @@ public class BookService
             return result;
         }
 
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
         var idsArray = bookIds.ToArray();
         var rows = await _context.BookReadingLogs
             .AsNoTracking()
-            .Where(l => idsArray.Contains(l.BookId))
+            .Where(l => idsArray.Contains(l.BookId) && l.ReadDate >= cutoffUtc)
             .Select(l => new { l.BookId, l.ReadDate, l.Amount })
             .ToListAsync(cancellationToken);
 
@@ -444,9 +439,6 @@ public class BookService
         return CountStreakFromTotals(totals, fromPeriodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz);
     }
 
-    // DÜZELTİLDİ: public static yapıldı — ReminderBackgroundService'in bir
-    // önceki dönemdeki streak'i (bozulan zincir uzunluğunu) hesaplayabilmesi
-    // için (HabitProgressService.CountStreak ile aynı desen).
     public static int CountStreakFromTotals(
         IReadOnlyDictionary<DateTime, int> totals,
         DateTime fromPeriodStart,

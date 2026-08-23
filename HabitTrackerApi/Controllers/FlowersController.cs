@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Services;
 using System.Security.Claims;
 using Dtos;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[ApiVersion("1.0")]
 [Authorize]
 public class FlowersController : ControllerBase
 {

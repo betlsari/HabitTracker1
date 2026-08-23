@@ -1,4 +1,4 @@
-// HabitTrackerApi/Controllers/AuthController.cs
+
 using Microsoft.AspNetCore.Identity;
 using Models;
 using Dtos;
@@ -9,13 +9,16 @@ using Microsoft.AspNetCore.Authorization;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+
 using Filters;
 
 namespace Controllers;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
+
 {
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
@@ -341,7 +344,7 @@ public class AuthController : ControllerBase
             Token = TokenService.HashToken(newRefreshToken),
             UserId = storedToken.UserId,
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime),
             RevokedAt = null,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
             UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
@@ -576,8 +579,10 @@ public class AuthController : ControllerBase
         return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
     }
 
+       
     [HttpGet("me/export")]
     [Authorize]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ExportMyData([FromServices] UserDataExportService exportService)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -742,7 +747,6 @@ _securityStampCache.Invalidate(userId!);
 
         return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }
-
     private async Task<(string AccessToken, string RefreshToken)> IssueTokensAsync(User user)
     {
         var token = _tokenService.GenerateToken(user);
@@ -752,7 +756,9 @@ _securityStampCache.Invalidate(userId!);
             Token = TokenService.HashToken(refreshToken),
             UserId = user.Id,
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            // DÜZELTİLDİ (madde 8): hardcoded AddDays(7) yerine konfigüre
+            // edilebilir TokenService.RefreshTokenLifetime kullanılıyor.
+            ExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime),
             RevokedAt = null,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
             UserAgent = HttpContext.Request.Headers.UserAgent.ToString()

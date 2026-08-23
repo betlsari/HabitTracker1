@@ -104,6 +104,13 @@ builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
     .Validate(options => Encoding.UTF8.GetByteCount(options.Key) >= 32,
         "Jwt:Key en az 32 byte uzunluğunda olmalıdır.")
+   
+    .Validate(options => options.AccessTokenLifetimeMinutes is > 0 and <= 1440,
+        "Jwt:AccessTokenLifetimeMinutes 1 ile 1440 (24 saat) arasında olmalıdır.")
+    .Validate(options => options.RefreshTokenLifetimeDays is > 0 and <= 90,
+        "Jwt:RefreshTokenLifetimeDays 1 ile 90 arasında olmalıdır.")
+    .Validate(options => options.PreAuthTokenLifetimeMinutes is > 0 and <= 30,
+        "Jwt:PreAuthTokenLifetimeMinutes 1 ile 30 arasında olmalıdır.")
     .ValidateOnStart();
 
 builder.Services.AddOptions<AppLimitsOptions>()

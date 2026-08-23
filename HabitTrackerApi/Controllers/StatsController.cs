@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Asp.Versioning;
 using Data;
 using Models;
 using Dtos;
@@ -11,6 +12,7 @@ using System.Security.Claims;
 namespace Controllers;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/[controller]")]
 [Authorize]
 public class StatsController : ControllerBase
@@ -25,15 +27,6 @@ public class StatsController : ControllerBase
         _userManager = userManager;
     }
 
-    // DÜZELTİLDİ (🔴 SQL provider bağımlılığı): Bu uç nokta önceden ham SQL
-    // içinde Postgres'e özgü `date_trunc('month', "CompletionDate" AT TIME
-    // ZONE tzId)` sözdizimini kullanıyordu. `AT TIME ZONE` SQLite'ta
-    // desteklenmediği için testlerde "near \"AT\": syntax error" ile
-    // patlıyordu. Artık habit completion'lar ve book reading log'lar ham
-    // (tarih, miktar, xp) olarak çekilip kullanıcının saat diliminde ay
-    // başlangıcına (bkz. HabitSchedule.PeriodStartLocal ile aynı mantık,
-    // burada doğrudan yıl/ay bazında) bellek içinde bucketleniyor —
-    // Postgres/SQLite arasında davranış farkı kalmıyor.
     [HttpGet("monthly")]
     public async Task<ActionResult<MonthlySummaryDto>> GetMonthlySummary(int monthsBack = 12)
     {
@@ -59,13 +52,25 @@ public class StatsController : ControllerBase
         var nowLocal = TimeZones.ToLocal(DateTime.UtcNow, tz);
         var cursorMonth = new DateTime(nowLocal.Year, nowLocal.Month, 1);
 
+        // DÜZELTİLDİ (🔴 madde 2 — sınırsız geçmiş yükleme): Önceden
+        // LoadHabitMonthlyTotalsAsync/LoadBookMonthlyTotalsAsync
+        // habitIds/bookIds'e ait TÜM completion/log geçmişini (tarih
+        // filtresi olmadan) çekiyordu; monthsBack=1 istense bile kullanıcının
+        // yıllarca birikmiş tüm geçmişi belleğe yükleniyordu. Artık istenen
+        // monthsBack kadar bir alt sınır (biraz payla — ay başı yuvarlama
+        // hatalarına karşı) SQL seviyesinde hesaplanıp filtre olarak
+        // veriliyor. Bu, davranışı DEĞİŞTİRMİYOR (zaten sadece bu aralık
+        // gösteriliyordu), sadece gereksiz veri transferini engelliyor.
+        var earliestMonthLocal = cursorMonth.AddMonths(-(monthsBack - 1));
+        var earliestUtc = TimeZones.ToUtc(earliestMonthLocal, tz);
+
         var habitMonthly = habitIds.Length == 0
             ? new Dictionary<DateTime, (int Count, int Xp)>()
-            : await LoadHabitMonthlyTotalsAsync(habitIds, tz);
+            : await LoadHabitMonthlyTotalsAsync(habitIds, tz, earliestUtc);
 
         var bookMonthly = bookIds.Length == 0
             ? new Dictionary<DateTime, (int Count, int Xp)>()
-            : await LoadBookMonthlyTotalsAsync(bookIds, tz);
+            : await LoadBookMonthlyTotalsAsync(bookIds, tz, earliestUtc);
 
         var months = new List<MonthlyStatDto>(monthsBack);
         var cursor = cursorMonth;
@@ -100,10 +105,10 @@ public class StatsController : ControllerBase
     }
 
     private async Task<Dictionary<DateTime, (int Count, int Xp)>> LoadHabitMonthlyTotalsAsync(
-        int[] habitIds, TimeZoneInfo tz)
+        int[] habitIds, TimeZoneInfo tz, DateTime earliestUtc)
     {
         var rows = await _context.HabitCompletions.AsNoTracking()
-            .Where(c => habitIds.Contains(c.HabitId))
+            .Where(c => habitIds.Contains(c.HabitId) && c.CompletionDate >= earliestUtc)
             .Select(c => new { c.CompletionDate, c.XpEarned })
             .ToListAsync();
 
@@ -120,10 +125,10 @@ public class StatsController : ControllerBase
     }
 
     private async Task<Dictionary<DateTime, (int Count, int Xp)>> LoadBookMonthlyTotalsAsync(
-        int[] bookIds, TimeZoneInfo tz)
+        int[] bookIds, TimeZoneInfo tz, DateTime earliestUtc)
     {
         var rows = await _context.BookReadingLogs.AsNoTracking()
-            .Where(l => bookIds.Contains(l.BookId))
+            .Where(l => bookIds.Contains(l.BookId) && l.ReadDate >= earliestUtc)
             .Select(l => new { l.ReadDate, l.XpEarned })
             .ToListAsync();
 

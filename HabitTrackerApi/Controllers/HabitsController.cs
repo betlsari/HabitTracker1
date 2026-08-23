@@ -20,7 +20,7 @@ namespace Controllers;
 [Authorize]
 public class HabitsController : ControllerBase
 {
-    private const int MaxHabitsPerUser = 100;
+    
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
 
@@ -393,7 +393,7 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    [HttpDelete("{id:int}")]
+     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteHabit(int id)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -409,13 +409,11 @@ public class HabitsController : ControllerBase
             return NotFound();
         }
 
-        var completions = await _context.HabitCompletions
-            .Where(c => c.HabitId == id)
-            .ToListAsync();
+        var completionQuery = _context.HabitCompletions.Where(c => c.HabitId == id);
 
-        var totalXpFromCompletions = completions.Sum(c => c.XpEarned);
-        var totalPetStreakBonus = completions.Sum(c => c.PetStreakBonusXp);
-        var totalAmount = completions.Sum(c => c.Amount);
+        var totalXpFromCompletions = await completionQuery.SumAsync(c => (int?)c.XpEarned) ?? 0;
+        var totalPetStreakBonus = await completionQuery.SumAsync(c => (int?)c.PetStreakBonusXp) ?? 0;
+        var totalAmount = await completionQuery.SumAsync(c => (int?)c.Amount) ?? 0;
 
         if (HabitCategories.IsWater(habit.Category) && totalAmount != 0)
         {

@@ -9,6 +9,7 @@ public class CreateHabitDto : IValidatableObject
     public const int MaxNotesLength = 1000;
     public const int MaxNameLength = 200;
     public const int MaxCustomCategoryNameLength = 100;
+    public const int MaxCategoryLength = 50;
 
     [MinLength(1)]
     [MaxLength(MaxNameLength)]
@@ -17,14 +18,14 @@ public class CreateHabitDto : IValidatableObject
     [Range(1, MaxDailyGoal)]
     public int DailyGoal { get; set; }
 
+    
     [MinLength(1)]
+    [MaxLength(MaxCategoryLength)]
     public string Category { get; set; } = string.Empty;
 
-    
     [MaxLength(MaxCustomCategoryNameLength)]
     public string? CustomCategoryName { get; set; }
 
-    
     public HabitUnit Unit { get; set; } = HabitUnit.Count;
 
     public HabitPeriod Period { get; set; } = HabitPeriod.Daily;

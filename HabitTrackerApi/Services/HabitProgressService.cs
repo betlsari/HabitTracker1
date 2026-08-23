@@ -1,6 +1,8 @@
 using Data;
 using Dtos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Configuration;
 using Models;
 
 namespace Services;
@@ -9,11 +11,13 @@ public class HabitProgressService
 {
     private readonly AppDbContext _context;
     private readonly XpService _xpService;
+    private readonly int _maxHistoryLookbackDays;
 
-    public HabitProgressService(AppDbContext context, XpService xpService)
+    public HabitProgressService(AppDbContext context, XpService xpService, IOptions<AppLimitsOptions> limits)
     {
         _context = context;
         _xpService = xpService;
+        _maxHistoryLookbackDays = limits.Value.MaxHistoryLookbackDays;
     }
 
     public async Task<HabitProgressDto> GetProgressAsync(Habit habit, string? timeZoneId, CancellationToken cancellationToken = default)
@@ -23,10 +27,6 @@ public class HabitProgressService
         return BuildProgress(habit, tz, totals, DateTime.UtcNow);
     }
 
-    // DÜZELTİLDİ (N+1): Önceden her habit için ayrı ayrı LoadPeriodTotalsAsync
-    // çağrılıyordu (habit sayısı kadar SQL sorgusu). Artık habit'ler Period'a
-    // (Daily/Weekly/Monthly) göre gruplanıp her grup için TEK toplu sorgu
-    // atılıyor — kullanıcının 100 habit'i olsa bile en fazla 3 sorgu koşuyor.
     public async Task<List<HabitProgressDto>> GetSummaryAsync(IReadOnlyList<Habit> habits, string? timeZoneId, CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -49,8 +49,6 @@ public class HabitProgressService
         return result;
     }
 
-    // DÜZELTİLDİ (N+1): GetComparisonAsync da artık toplu yüklenen totals
-    // sözlüğünü kullanıyor; döngü içinde DB'ye gitmiyor.
     public async Task<List<HabitComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Habit> habits,
         string? timeZoneId,
@@ -195,22 +193,26 @@ public class HabitProgressService
         return totals.TryGetValue(periodStartLocal, out var total) && total >= habit.DailyGoal;
     }
 
-    // DÜZELTİLDİ (🔴 SQL provider bağımlılığı): Önceden ham SQL içinde
-    // Postgres'e özgü `date_trunc(unit, "CompletionDate" AT TIME ZONE tzId)`
-    // sözdizimi kullanılıyordu. `AT TIME ZONE` SQLite'ta desteklenmiyor ve
-    // testlerde "near \"AT\": syntax error" ile patlıyordu. Artık ham
-    // (HabitId, CompletionDate, Amount) satırları çekilip HabitSchedule.
-    // PeriodStartLocal ile bellek içinde bucketleniyor — Postgres/SQLite
-    // arasında davranış farkı kalmıyor.
+    // DÜZELTİLDİ (🔴 madde 1 — sınırsız geçmiş yükleme): Önceden bu metod
+    // habitId'ye ait TÜM completion geçmişini (tarih filtresi olmadan)
+    // çekiyordu. Artık AppLimits:MaxHistoryLookbackDays (varsayılan 730 gün)
+    // öncesine ait satırlar SQL seviyesinde filtreleniyor — hem çekilen
+    // veri hacmi hem de bellek içi bucketing maliyeti sabit bir üst sınıra
+    // bağlanmış oluyor. Bu metod GetProgressAsync, GetSummaryAsync,
+    // GetComparisonAsync, GetStatsAsync ve ReminderBackgroundService (HER
+    // DAKİKA çalışıyor) tarafından ortak kullanıldığı için en çok kazanç
+    // sağlayan yer burası.
     public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int habitId,
         HabitPeriod period,
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
     {
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+
         var rows = await _context.HabitCompletions
             .AsNoTracking()
-            .Where(c => c.HabitId == habitId)
+            .Where(c => c.HabitId == habitId && c.CompletionDate >= cutoffUtc)
             .Select(c => new { c.CompletionDate, c.Amount })
             .ToListAsync(cancellationToken);
 
@@ -226,10 +228,8 @@ public class HabitProgressService
         return result;
     }
 
-    // YENİ: Birden fazla habit için TEK sorguda dönemsel toplamları yükler.
-    // Aynı Period'a sahip habit'ler tek bir sorgu ile gruplanır (bkz.
-    // LoadPeriodTotalsAsync üzerindeki açıklama — artık bellek içi bucketing
-    // kullanıyor, ham SQL yok).
+    // DÜZELTİLDİ (🔴 madde 1): aynı MaxHistoryLookbackDays sınırı toplu
+    // (batch) sorguya da uygulandı.
     public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
         IReadOnlyList<int> habitIds,
         HabitPeriod period,
@@ -242,10 +242,11 @@ public class HabitProgressService
             return result;
         }
 
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
         var idsArray = habitIds.ToArray();
         var rows = await _context.HabitCompletions
             .AsNoTracking()
-            .Where(c => idsArray.Contains(c.HabitId))
+            .Where(c => idsArray.Contains(c.HabitId) && c.CompletionDate >= cutoffUtc)
             .Select(c => new { c.HabitId, c.CompletionDate, c.Amount })
             .ToListAsync(cancellationToken);
 
@@ -266,9 +267,6 @@ public class HabitProgressService
         return result;
     }
 
-    // YENİ: Farklı Period'lara sahip habit'leri gruplayıp her grup için
-    // LoadPeriodTotalsBatchAsync çağıran yardımcı metod. GetSummaryAsync ve
-    // GetComparisonAsync tarafından ortak kullanılır.
     private async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsForHabitsAsync(
         IReadOnlyList<Habit> habits,
         TimeZoneInfo tz,
@@ -289,15 +287,10 @@ public class HabitProgressService
         return result;
     }
 
-    // YENİ: BookService.RecalculateBookAsync ile aynı desen. Bir Habit'in
-    // DailyGoal / Period / TargetTime alanları güncellendiğinde, geçmişte
-    // kaydedilmiş HabitCompletion'ların XpEarned / PetStreakBonusXp / IsOnTime
-    // değerleri ESKİ kurallara göre hesaplanmış olarak kalıyordu (Book
-    // tarafında bu tutarlılık zaten sağlanıyordu, Habit tarafında yoktu).
-    // Bu metod tüm completion geçmişini kronolojik sırayla, YENİ habit
-    // kurallarına göre baştan hesaplar ve toplam XP/pet-streak-bonus
-    // farkını (delta) döner; caller bu delta'yı User.TotalXp ve pet XP'sine
-    // uygular.
+    // NOT (madde 1): RecalculateHabitAsync BİLİNÇLİ OLARAK
+    // LoadPeriodTotalsAsync/LoadPeriodTotalsBatchAsync KULLANMIYOR — kendi
+    // sorgusuyla TÜM geçmişi okuyor. XP'yi doğru yeniden hesaplamak için bu
+    // şart; MaxHistoryLookbackDays sınırı burada uygulanmıyor.
     public async Task<HabitRecalculationResult> RecalculateHabitAsync(
         Habit habit,
         string? timeZoneId,
@@ -385,8 +378,6 @@ public class HabitProgressService
         };
     }
 
-    // Public: ReminderBackgroundService gibi dışarıdan da (örn. kırılan streak
-    // uzunluğunu bildirime yansıtmak için) çağrılabilmesi için erişilebilir.
     public static int CountStreak(Habit habit, IReadOnlyDictionary<DateTime, int> totals, DateTime currentPeriodStart, TimeZoneInfo tz)
     {
         int streak = 0;
@@ -422,8 +413,6 @@ public sealed class CompletionSnapshot
     public DateTime PeriodStartLocal { get; init; }
 }
 
-// YENİ: RecalculateHabitAsync'in sonucu. Caller (HabitsController) bu delta'ları
-// User.TotalXp ve PetGrowthService'e (streak bonus) uygular.
 public sealed class HabitRecalculationResult
 {
     public int XpDelta { get; init; }

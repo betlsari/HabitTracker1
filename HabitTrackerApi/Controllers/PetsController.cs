@@ -10,11 +10,13 @@ using Microsoft.AspNetCore.Identity;
 using Services;
 using Microsoft.Extensions.Options;
 using Configuration;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[ApiVersion("1.0")]
 [Authorize]
 public class PetsController : ControllerBase
 {

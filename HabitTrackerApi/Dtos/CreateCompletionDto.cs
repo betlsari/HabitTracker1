@@ -13,23 +13,23 @@ public class CreateCompletionDto : IValidatableObject
     [Range(0, MaxAmount)]
     public int Amount { get; set; }
 
-    
     [MaxLength(MaxClientRequestIdLength)]
     public string? ClientRequestId { get; set; }
 
+  
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CompletionDate > DateTime.UtcNow)
         {
             yield return new ValidationResult(
-                "Completion date cannot be in the future.",
+                "Tamamlama tarihi gelecekte olamaz.",
                 new[] { nameof(CompletionDate) });
         }
 
         if (CompletionDate < DateTime.UtcNow.AddDays(-MaxPastDays))
         {
             yield return new ValidationResult(
-                $"Completion date cannot be more than {MaxPastDays} days in the past.",
+                $"Tamamlama tarihi en fazla {MaxPastDays} gün öncesine ait olabilir.",
                 new[] { nameof(CompletionDate) });
         }
     }

@@ -13,6 +13,8 @@ public sealed class AppLimitsOptions
     public int PetFeedCostXp { get; init; } = 3;
     public int PetFeedXpGain { get; init; } = 20;
 
-    
     public int MaxPetLevel { get; init; } = 100;
+
+    
+    public int MaxHistoryLookbackDays { get; init; } = 730;
 }

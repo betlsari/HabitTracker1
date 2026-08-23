@@ -7,11 +7,13 @@ using Models;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Configuration;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[ApiVersion("1.0")]
 [Authorize]
 public class DevicesController : ControllerBase
 {
