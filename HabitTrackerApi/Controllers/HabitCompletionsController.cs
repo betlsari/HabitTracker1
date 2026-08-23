@@ -61,10 +61,13 @@ public class HabitCompletionsController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId!);
         var completionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
+        if (completionUtc.Date < habit.CreatedAt.Date)
+{
+    return BadRequest("Tamamlama tarihi, alışkanlığın oluşturulma tarihinden önce olamaz.");
+}
         var tz = TimeZones.Resolve(user?.TimeZoneId);
 
-        // YENİ: Habit.TargetTime tanımlıysa, tamamlamanın o saatte/öncesinde
-        // yapılıp yapılmadığı hesaplanır.
+        
         var isOnTime = IsWithinTargetTime(habit, completionUtc, tz);
 
         var snapshot = await _progressService.GetCompletionSnapshotAsync(
@@ -85,8 +88,7 @@ public class HabitCompletionsController : ControllerBase
             IsOnTime = isOnTime
         });
 
-        // A completion changes period totals. Touching the aggregate root makes
-        // competing completions observe the optimistic concurrency token too.
+        
         _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
 
         if (user != null)
@@ -117,8 +119,7 @@ public class HabitCompletionsController : ControllerBase
 
         if (snapshot.GoalJustReached)
         {
-            // DÜZELTİLDİ: Sabit tek bir mesaj yerine çeşitlendirilmiş
-            // motivasyon mesajlarından biri rastgele seçiliyor.
+            
             await _notificationService.TryEnqueueAsync(
                 userId!,
                 NotificationTypes.GoalReached,
@@ -175,8 +176,17 @@ public class HabitCompletionsController : ControllerBase
         }
 
         var user = await _userManager.FindByIdAsync(userId!);
+        var newCompletionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
+        if (newCompletionUtc.Date < habit.CreatedAt.Date)
+        {
+            return BadRequest("Tamamlama tarihi, alışkanlığın oluşturulma tarihinden önce olamaz.");
+        }
 
-        // 1) ESKİ etkileri geri al (flower/focus/pet-streak-bonus/kullanıcı XP'si).
+
+completion.Amount = dto.Amount;
+completion.CompletionDate = newCompletionUtc; 
+
+        
         var oldAmount = completion.Amount;
         var oldXp = completion.XpEarned;
         var oldPetStreakBonus = completion.PetStreakBonusXp;
@@ -199,7 +209,7 @@ public class HabitCompletionsController : ControllerBase
             await _userManager.UpdateAsync(user);
         }
 
-        // 2) Yeni ham değerleri kaydet.
+        
         completion.Amount = dto.Amount;
         completion.CompletionDate = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
         completion.XpEarned = 0;
@@ -207,7 +217,7 @@ public class HabitCompletionsController : ControllerBase
         completion.IsOnTime = false;
         await _context.SaveChangesAsync();
 
-        // 3) YENİ değerlerle snapshot'ı yeniden hesapla.
+        
         var tz = TimeZones.Resolve(user?.TimeZoneId);
         var periodStart = HabitSchedule.PeriodStartLocalOfCompletion(completion.CompletionDate, habit.Period, tz);
         var totals = await _progressService.LoadPeriodTotalsAsync(habit.Id, habit.Period, tz);
@@ -223,13 +233,13 @@ public class HabitCompletionsController : ControllerBase
             ? HabitProgressService.CountStreak(habit, totals, periodStart, tz)
             : HabitProgressService.CountStreak(habit, totals, HabitSchedule.PeriodStartLocal(DateTime.UtcNow, habit.Period, tz), tz);
 
-        // YENİ: Güncellenen tarih üzerinden TargetTime kontrolü yeniden yapılır.
+        
         var isOnTime = IsWithinTargetTime(habit, completion.CompletionDate, tz);
 
         var newXp = _xpService.CalculateCompletionXp(habit, completion.Amount, totalBeforeThis, streakKept, isOnTime);
         var newPetStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
 
-        // 4) YENİ etkileri uygula.
+        
         Flower? flower = null;
         if (HabitCategories.IsWater(habit.Category) && completion.Amount > 0)
         {
@@ -325,9 +335,7 @@ public class HabitCompletionsController : ControllerBase
         return NoContent();
     }
 
-    // YENİ: Habit.TargetTime tanımlıysa, verilen tamamlama zamanının (UTC) o
-    // saatte veya öncesinde olup olmadığını kullanıcının yerel saatine göre
-    // kontrol eder. TargetTime tanımlı değilse her zaman false döner.
+    
     private static bool IsWithinTargetTime(Habit habit, DateTime completionUtc, TimeZoneInfo tz)
     {
         if (!habit.TargetTime.HasValue)

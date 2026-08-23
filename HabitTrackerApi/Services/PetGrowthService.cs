@@ -13,10 +13,14 @@ public class PetGrowthService
     private readonly AppDbContext _context;
     private readonly NotificationService _notifications;
 
-    public PetGrowthService(AppDbContext context, NotificationService notifications)
+    private readonly PetCosmeticsService _cosmeticsService;
+
+
+    public PetGrowthService(AppDbContext context, NotificationService notifications,PetCosmeticsService cosmeticsService)
     {
         _context = context;
         _notifications = notifications;
+        _cosmeticsService = cosmeticsService;
     }
 
     public async Task<List<Pet>> AddFocusXpAsync(string userId, int minutes, CancellationToken cancellationToken = default)
@@ -51,14 +55,7 @@ public class PetGrowthService
         await RemoveXpAsync(userId, xpLoss, cancellationToken);
     }
 
-    /// <summary>
-    /// YENİ: Bir alışkanlığın dönemsel serisi (streak) korunduğunda, kategorisi ne
-    /// olursa olsun (sadece Focus/Odaklanma değil), kullanıcının TÜM pet'lerine
-    /// düz bir bonus XP verir. Böylece "günlük seri bozulmazsa ekstra XP kazanma"
-    /// (dokümandaki 🔥 maddesi) artık pet büyütme sistemine de genel olarak
-    /// bağlanmış olur.
-    /// </summary>
-    public async Task<List<Pet>> AddStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
+        public async Task<List<Pet>> AddStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
     {
         if (bonusXp <= 0)
         {
@@ -77,11 +74,7 @@ public class PetGrowthService
         return await ApplyXpGainAsync(userId, pets, bonusXp, cancellationToken);
     }
 
-    /// <summary>
-    /// YENİ: AddStreakBonusXpAsync ile verilmiş bir bonusun geri alınması
-    /// (örn. ilgili HabitCompletion güncellenip artık streak korunmuyorsa,
-    /// ya da tamamen silinmişse).
-    /// </summary>
+    
     public async Task RemoveStreakBonusXpAsync(string userId, int bonusXp, CancellationToken cancellationToken = default)
     {
         if (bonusXp <= 0)
@@ -112,6 +105,10 @@ public class PetGrowthService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        foreach (var pet in pets.Where(p => p.Stage == PetStage.Hatched))
+{
+    await _cosmeticsService.EvaluateAccessoryUnlocksAsync(pet, cancellationToken);
+}
 
         foreach (var pet in justHatched)
         {

@@ -225,6 +225,7 @@ builder.Services.AddScoped<PetMoodService>();
 builder.Services.AddScoped<BookService>();
 
 builder.Services.AddScoped<PetGrowthService>();
+builder.Services.AddScoped<PetCosmeticsService>(); 
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 

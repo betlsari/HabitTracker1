@@ -100,18 +100,16 @@ public class HabitsController : ControllerBase
             return Conflict($"En fazla {MaxHabitsPerUser} alışkanlık oluşturabilirsiniz.");
         }
 
-        // YENİ: Category artık sabit bir whitelist'e karşı doğrulanıyor.
-        // Geçersiz bir değer gönderilirse Su/Kitap/Odaklanma özel davranışları
-        // (çiçek büyütme, pet XP, okuma rozeti) sessizce devre dışı kalmak
-        // yerine istek doğrudan reddediliyor.
+        
         if (!HabitCategories.IsValid(dto.Category))
         {
             return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
         }
 
         var normalizedName = dto.Name.Trim();
+        var normalizedNameKey = normalizedName.ToUpperInvariant();
         var habitExist = await _context.Habits.AnyAsync(h =>
-            h.UserId == userId && h.Name.ToLower() == normalizedName.ToLower());
+            h.UserId == userId && h.NormalizedName == normalizedNameKey);
         if (habitExist)
         {
             return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
@@ -122,6 +120,7 @@ public class HabitsController : ControllerBase
             XpPerUnit = 1,
             XpBonusForGoal = 10,
             Name = normalizedName,
+            NormalizedName = normalizedNameKey,
             Category = dto.Category,
             DailyGoal = dto.DailyGoal,
             Period = dto.Period,
@@ -159,14 +158,16 @@ public class HabitsController : ControllerBase
         }
 
         var normalizedName = dto.Name.Trim();
+        var normalizedNameKey = normalizedName.ToUpperInvariant();
         var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
-            h.UserId == userId && h.Id != id && h.Name.ToLower() == normalizedName.ToLower());
+             h.UserId == userId && h.Id != id && h.NormalizedName == normalizedNameKey);
         if (nameTakenByAnother)
         {
             return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
         }
 
         habit.Name = normalizedName;
+        habit.NormalizedName = normalizedNameKey;
         habit.Category = dto.Category;
         habit.DailyGoal = dto.DailyGoal;
         habit.Period = dto.Period;

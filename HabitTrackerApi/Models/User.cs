@@ -23,4 +23,9 @@ public class User : IdentityUser
     public Flower? Flower { get; set; }
 
     public List<Book> Books { get; set; } = new List<Book>();
+
+    
+    public string EquippedBackground { get; set; } = PetBackgrounds.Home;
+
+    public List<UserBackgroundUnlock> BackgroundUnlocks { get; set; } = new();
 }

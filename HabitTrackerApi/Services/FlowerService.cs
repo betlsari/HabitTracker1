@@ -10,16 +10,17 @@ public class FlowerService
     public const int UnitsPerLevel = 10;
 
     private readonly AppDbContext _context;
+    private readonly PetCosmeticsService _cosmeticsService;
 
-    // YENİ: Çiçek yeni bir evreye (Seed/Seedling/Sprout/Bloom) geçtiğinde
-    // bildirim göndermek için eklendi.
+   
     private readonly NotificationService _notifications;
 
-    public FlowerService(AppDbContext context, NotificationService notifications)
-    {
-        _context = context;
-        _notifications = notifications;
-    }
+    public FlowerService(AppDbContext context, NotificationService notifications, PetCosmeticsService cosmeticsService)
+{
+    _context = context;
+    _notifications = notifications;
+    _cosmeticsService = cosmeticsService;
+}
 
     public async Task<Flower> GetOrCreateAsync(string userId, CancellationToken cancellationToken = default)
     {
@@ -42,11 +43,7 @@ public class FlowerService
         return flower;
     }
 
-    // DÜZELTİLDİ: Level yükselip yeni bir evreye (StageName değişimi) geçildiğinde
-    // FlowerStageUp bildirimi gönderiliyor. amount negatifse (ör. bir habit
-    // completion'ı silinirken suyun geri alınması) Level artamayacağı için bu
-    // durumda hiçbir bildirim tetiklenmez — koşul zaten "yeni seviye eski
-    // seviyeden büyükse" olduğundan ayrı bir "sadece artışta" bayrağına gerek yok.
+   
     public async Task<Flower> AddWaterAsync(string userId, int amount, CancellationToken cancellationToken = default)
     {
         var flower = await GetOrCreateAsync(userId, cancellationToken);
@@ -59,8 +56,11 @@ public class FlowerService
 
         if (flower.Level > oldLevel)
         {
+             await _cosmeticsService.EvaluateBackgroundUnlocksAsync(userId, flower.Level, cancellationToken);
+             
             var oldStage = StageName(oldLevel);
             var newStage = StageName(flower.Level);
+            
             if (!string.Equals(oldStage, newStage, StringComparison.Ordinal))
             {
                 await _notifications.TryEnqueueAsync(

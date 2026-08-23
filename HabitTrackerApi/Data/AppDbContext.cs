@@ -32,6 +32,8 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<Book> Books { get; set; }
 
     public DbSet<BookReadingLog> BookReadingLogs { get; set; }
+    public DbSet<PetAccessoryUnlock> PetAccessoryUnlocks { get; set; }
+public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
 
     public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
 
@@ -45,6 +47,14 @@ public class AppDbContext : IdentityDbContext<User>
                 .HasMaxLength(100)
                 .HasDefaultValue("Europe/Istanbul");
         });
+        builder.Entity<Habit>(entity =>
+{
+    entity.HasIndex(h => new { h.UserId, h.NormalizedName }).IsUnique();
+});
+        builder.Entity<RefreshToken>(entity =>
+{
+    entity.HasIndex(rt => rt.Token).IsUnique();
+});
 
         builder.Entity<Badge>(entity =>
         {
@@ -107,7 +117,7 @@ public class AppDbContext : IdentityDbContext<User>
             entity.HasIndex(e => new { e.Email, e.CreatedAt });
         });
 
-        // YENİ: Book / BookReadingLog ilişkileri
+        
         builder.Entity<Book>(entity =>
         {
             entity.HasIndex(b => b.UserId);
@@ -135,6 +145,25 @@ public class AppDbContext : IdentityDbContext<User>
         });
 
         builder.Entity<Pet>(entity => entity.HasIndex(p => p.CreatedAt));
+
+        
+builder.Entity<PetAccessoryUnlock>(entity =>
+{
+    entity.HasIndex(u => new { u.PetId, u.Accessory }).IsUnique();
+    entity.HasOne(u => u.Pet)
+        .WithMany(p => p.AccessoryUnlocks)
+        .HasForeignKey(u => u.PetId)
+        .OnDelete(DeleteBehavior.Cascade);
+});
+
+builder.Entity<UserBackgroundUnlock>(entity =>
+{
+    entity.HasIndex(u => new { u.UserId, u.Background }).IsUnique();
+    entity.HasOne(u => u.User)
+        .WithMany(u => u.BackgroundUnlocks)
+        .HasForeignKey(u => u.UserId)
+        .OnDelete(DeleteBehavior.Cascade);
+});
 
         foreach (var entityType in builder.Model.GetEntityTypes()
                      .Where(t => typeof(IHasConcurrencyToken).IsAssignableFrom(t.ClrType)))

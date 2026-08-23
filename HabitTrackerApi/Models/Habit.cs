@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Dtos;
 
 namespace Models;
 
@@ -7,6 +8,10 @@ public class Habit : IHasConcurrencyToken
     public int Id { get; set; }
     [MinLength(1)]
     public string Name { get; set; } = string.Empty;
+
+    
+    public string NormalizedName { get; set; } = string.Empty;
+
     [Range(1, CreateHabitDto.MaxDailyGoal)]
     public int DailyGoal { get; set; }
     [MinLength(1)]

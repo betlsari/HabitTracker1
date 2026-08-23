@@ -9,17 +9,20 @@ public class Pet : IHasConcurrencyToken
     public int Level { get; set; }
     public int Xp { get; set; }
 
-    
     public string Mood { get; set; } = "Happy";
 
     public DateTime CreatedAt { get; set; }
 
     public string? Nickname { get; set; }
 
-    
     public PetStage Stage { get; set; } = PetStage.Egg;
 
     public DateTime? HatchedAt { get; set; }
+
+    
+    public string? EquippedAccessory { get; set; }
+
+    public List<PetAccessoryUnlock> AccessoryUnlocks { get; set; } = new();
 
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }

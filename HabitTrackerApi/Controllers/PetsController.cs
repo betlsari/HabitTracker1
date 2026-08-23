@@ -20,16 +20,17 @@ public class PetsController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly NotificationService _notificationService;
 
-    // YENİ: Kullanıcı başına maksimum pet sayısı. Önceden hiçbir üst sınır
-    // yoktu; eggCost sadece XP maliyeti getiriyordu ama teorik olarak kullanıcı
-    // XP'si yettiği sürece sınırsız pet biriktirebiliyordu.
+    private readonly PetCosmeticsService _petCosmeticsService;
+
+    
     private const int MaxPetsPerUser = 5;
 
-    public PetsController(AppDbContext context, UserManager<User> userManager, NotificationService notificationService)
+    public PetsController(AppDbContext context, UserManager<User> userManager, NotificationService notificationService,PetCosmeticsService petCosmeticsService)
     {
         _context = context;
         _userManager = userManager;
         _notificationService = notificationService;
+        _petCosmeticsService = petCosmeticsService;
     }
 
     [HttpGet]
@@ -137,6 +138,7 @@ public class PetsController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
+        await _petCosmeticsService.EvaluateAccessoryUnlocksAsync(pet);
 
         if (justHatched)
         {
@@ -195,18 +197,50 @@ public class PetsController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
-
-    private static PetDto ToDto(Pet pet) => new()
+    [HttpGet("{id}/accessories")]
+public async Task<ActionResult<List<PetAccessoryDto>>> GetAccessories(int id)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var pet = await _context.Pets.FindAsync(id);
+    if (pet == null || pet.UserId != userId)
     {
-        Id = pet.Id,
-        Type = pet.Type,
-        Level = pet.Level,
-        Xp = pet.Xp,
-        Mood = pet.Mood,
-        CreatedAt = pet.CreatedAt,
-        Nickname = pet.Nickname,
-        Stage = pet.Stage.ToString(),
-        HatchedAt = pet.HatchedAt,
-        IsEgg = pet.Stage == PetStage.Egg
-    };
+        return NotFound();
+    }
+
+    return await _petCosmeticsService.GetCatalogForPetAsync(pet);
+}
+
+[HttpPut("{id}/accessory")]
+public async Task<ActionResult<PetDto>> EquipAccessory(int id, EquipAccessoryDto dto)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var pet = await _context.Pets.FindAsync(id);
+    if (pet == null || pet.UserId != userId)
+    {
+        return NotFound();
+    }
+
+    var ok = await _petCosmeticsService.TryEquipAccessoryAsync(pet, dto.Accessory);
+    if (!ok)
+    {
+        return BadRequest("Bu aksesuar henüz açılmamış veya geçersiz.");
+    }
+
+    return ToDto(pet);
+}
+
+   private static PetDto ToDto(Pet pet) => new()
+{
+    Id = pet.Id,
+    Type = pet.Type,
+    Level = pet.Level,
+    Xp = pet.Xp,
+    Mood = pet.Mood,
+    CreatedAt = pet.CreatedAt,
+    Nickname = pet.Nickname,
+    Stage = pet.Stage.ToString(),
+    HatchedAt = pet.HatchedAt,
+    IsEgg = pet.Stage == PetStage.Egg,
+    EquippedAccessory = pet.EquippedAccessory 
+};
 }
