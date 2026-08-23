@@ -18,10 +18,14 @@ public class BadgeService
     private readonly AppDbContext _context;
     private readonly NotificationService _notifications;
 
-    public BadgeService(AppDbContext context, NotificationService notifications)
+    // YENİ: Rozet kazanıldığında ilgili pet aksesuarını da açabilmek için.
+    private readonly PetCosmeticsService _petCosmeticsService;
+
+    public BadgeService(AppDbContext context, NotificationService notifications, PetCosmeticsService petCosmeticsService)
     {
         _context = context;
         _notifications = notifications;
+        _petCosmeticsService = petCosmeticsService;
     }
 
     public async Task<List<BadgeDto>> GetCatalogForUserAsync(string userId, CancellationToken cancellationToken = default)
@@ -73,7 +77,7 @@ public class BadgeService
     }
 
     /// <summary>
-    /// YENİ: Book/BookReadingLog akışı için rozet değerlendirmesi. Böylece
+    /// Book/BookReadingLog akışı için rozet değerlendirmesi. Böylece
     /// "Kitap kurdu" (READING_STREAK_7) rozeti artık sadece Habit tabanlı
     /// "Okuma" kategorisine değil, gerçek kitap okuma günlük hedefine bağlı
     /// olarak da kazanılabiliyor.
@@ -120,5 +124,8 @@ public class BadgeService
             habitId: null,
             dedupKey: $"badge:{userId}:{badge.Code}",
             cancellationToken);
+
+        
+        await _petCosmeticsService.EvaluateAccessoryUnlocksForBadgeAsync(userId, code, cancellationToken);
     }
 }

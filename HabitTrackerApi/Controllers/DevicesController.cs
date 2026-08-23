@@ -10,11 +10,6 @@ using Configuration;
 
 namespace Controllers;
 
-// DÜZELTİLDİ: [ApiController], [Route("api/[controller]")] ve [Authorize]
-// eksikti. Attribute routing olmadan endpoint'ler beklenen şekilde
-// eşlenmeyebiliyordu; [Authorize] olmadan da anonim bir istek
-// User.FindFirstValue(ClaimTypes.NameIdentifier)! çağrısında null
-// döndürüp NullReferenceException'a ya da kimliksiz erişime yol açabiliyordu.
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -29,12 +24,6 @@ public class DevicesController : ControllerBase
         _maxDeviceTokensPerUser = limits.Value.MaxDeviceTokensPerUser;
     }
 
-    // YENİ: Kullanıcının kayıtlı push bildirim cihazlarını listeleyebilmesi
-    // için. Önceden sadece POST (register) ve DELETE (unregister, token
-    // parametresiyle) vardı; kullanıcı hangi cihazların kayıtlı olduğunu
-    // görmeden bir token'ı nasıl sileceğini bilemiyordu. Ham token asla
-    // dönülmez, sadece platform/tarih ve token'ın son 4 karakteri (ayırt
-    // edici olması için) döndürülür.
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<DeviceTokenDto>>> GetDevices(int page = 1, int pageSize = 50)
     {
@@ -61,46 +50,67 @@ public class DevicesController : ControllerBase
         };
     }
 
+    // DÜZELTİLDİ: Önceden "mevcut kayıt sayısını say -> limit aşılıyorsa
+    // en eskiyi sil -> yenisini ekle" adımları ayrı ayrı SaveChanges'lerdi
+    // ve hiçbir eşzamanlılık koruması yoktu. Aynı kullanıcıdan gelen iki
+    // eşzamanlı istek, ikisi de aynı anda "count < max" görüp limiti
+    // aşabiliyordu (klasik check-then-act race condition). Artık tüm akış
+    // tek bir transaction içinde ve bu kullanıcıya özel bir Postgres
+    // advisory lock (pg_advisory_xact_lock) ile korunuyor; kilit transaction
+    // sonunda (commit/rollback) otomatik serbest kalıyor, ayrı bir "unlock"
+    // çağrısına gerek yok.
     [HttpPost]
     public async Task<IActionResult> Register(RegisterDeviceTokenDto dto)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var existing = await _context.DeviceTokens
-            .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == dto.Token);
-
-        if (existing != null)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<IActionResult>(async () =>
         {
-            existing.Platform = dto.Platform;
-            existing.LastSeenAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-            return Ok();
-        }
+            _context.ChangeTracker.Clear();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        var currentCount = await _context.DeviceTokens.CountAsync(t => t.UserId == userId);
-        if (currentCount >= _maxDeviceTokensPerUser)
-        {
-            // En eski kaydı silip yerine yenisini ekleyerek kullanıcıyı
-            // engellemek yerine "en fazla N cihaz" politikasını uygula.
-            var oldest = await _context.DeviceTokens
-                .Where(t => t.UserId == userId)
-                .OrderBy(t => t.LastSeenAt)
-                .FirstOrDefaultAsync();
-            if (oldest != null)
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({userId}))");
+
+            var existing = await _context.DeviceTokens
+                .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == dto.Token);
+
+            if (existing != null)
             {
-                _context.DeviceTokens.Remove(oldest);
+                existing.Platform = dto.Platform;
+                existing.LastSeenAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok();
             }
-        }
 
-        _context.DeviceTokens.Add(new DeviceToken
-        {
-            UserId = userId,
-            Token = dto.Token,
-            Platform = dto.Platform,
-            CreatedAt = DateTime.UtcNow,
-            LastSeenAt = DateTime.UtcNow
+            var currentCount = await _context.DeviceTokens.CountAsync(t => t.UserId == userId);
+            if (currentCount >= _maxDeviceTokensPerUser)
+            {
+                var oldest = await _context.DeviceTokens
+                    .Where(t => t.UserId == userId)
+                    .OrderBy(t => t.LastSeenAt)
+                    .FirstOrDefaultAsync();
+                if (oldest != null)
+                {
+                    _context.DeviceTokens.Remove(oldest);
+                }
+            }
+
+            _context.DeviceTokens.Add(new DeviceToken
+            {
+                UserId = userId,
+                Token = dto.Token,
+                Platform = dto.Platform,
+                CreatedAt = DateTime.UtcNow,
+                LastSeenAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return Ok();
         });
-        await _context.SaveChangesAsync();
-        return Ok();
     }
 
     [HttpDelete("{id:int}")]

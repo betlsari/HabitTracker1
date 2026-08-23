@@ -13,14 +13,13 @@ using System.Security.Claims;
 using Configuration;
 using Microsoft.AspNetCore.HttpLogging;
 using Asp.Versioning;
-using Asp.Versioning.Conventions;
 using Serilog;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// YENİ (madde 10): Yapılandırılmış logging. Konsol + günlük dosya sink'i;
-// production'da bir log toplama servisine (Seq/ELK/Datadog vs.) yönlendirmek
-// için ek bir WriteTo eklemek yeterli olur.
+
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
@@ -72,7 +71,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-// API Versioning (Tekrar eden blok temizlendi)
+
 builder.Services.AddApiVersioning(options =>
 {
     options.DefaultApiVersion = new ApiVersion(1, 0);
@@ -81,10 +80,6 @@ builder.Services.AddApiVersioning(options =>
     options.ApiVersionReader = ApiVersionReader.Combine(
         new UrlSegmentApiVersionReader(),
         new HeaderApiVersionReader("X-Api-Version"));
-})
-.AddMvc(options =>
-{
-    options.Conventions.Add(new VersionByNamespaceConvention());
 })
 .AddApiExplorer(options =>
 {
@@ -98,7 +93,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
-// Health Checks
+
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
     .AddCheck<EmailQueueHealthCheck>("email-queue", tags: new[] { "dependency" })
@@ -217,14 +212,7 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
-            // DÜZELTİLDİ (madde 9): Önceden her istekte UserManager.FindByIdAsync
-            // ile DB'ye gidip güncel SecurityStamp okunuyordu. Artık önce kısa
-            // süreli (30 sn) bellek içi cache'e bakılıyor; cache miss olursa
-            // (ilk istek veya TTL doldu) DB'den okunup cache'e yazılıyor.
-            // Şifre değiştirme / 2FA aç-kapa / email değişimi / logout-all gibi
-            // SecurityStamp'i yenileyen akışlar AuthController üzerinden
-            // cache'i anında invalidate ediyor, böylece güvenlik açısından
-            // hassas geçersiz kılma TTL kadar gecikmiyor.
+            
             var stampCache = context.HttpContext.RequestServices.GetRequiredService<SecurityStampCache>();
             if (!stampCache.TryGet(userId, out var currentStamp))
             {
@@ -340,6 +328,24 @@ var app = builder.Build();
 // Middleware Pipeline
 app.UseExceptionHandler();
 
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers["X-XSS-Protection"] = "0";
+    headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+    headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+    await next();
+});
+
 // Correlation ID Middleware
 app.Use(async (context, next) =>
 {
@@ -370,8 +376,8 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Health Check Endpoint
-app.MapHealthChecks("/health").AddEndpointFilter(async (context, next) =>
+
+async ValueTask<object?> HealthCheckApiKeyFilter(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
 {
     if (app.Environment.IsProduction())
     {
@@ -383,7 +389,22 @@ app.MapHealthChecks("/health").AddEndpointFilter(async (context, next) =>
         }
     }
     return await next(context);
-});
+}
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+}).AddEndpointFilter(HealthCheckApiKeyFilter);
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = _ => true
+}).AddEndpointFilter(HealthCheckApiKeyFilter);
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true
+}).AddEndpointFilter(HealthCheckApiKeyFilter);
 
 try
 {

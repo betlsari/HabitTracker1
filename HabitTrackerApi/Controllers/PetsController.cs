@@ -24,6 +24,12 @@ public class PetsController : ControllerBase
     private readonly PetCosmeticsService _petCosmeticsService;
     private readonly int _maxPetsPerUser;
 
+    // DÜZELTİLDİ (🟡 magic number): eggCost/feedCost/petXpGain artık
+    // AppLimitsOptions üzerinden konfigüre edilebiliyor.
+    private readonly int _eggCostXp;
+    private readonly int _feedCostXp;
+    private readonly int _feedXpGain;
+
     public PetsController(
         AppDbContext context,
         UserManager<User> userManager,
@@ -36,6 +42,9 @@ public class PetsController : ControllerBase
         _notificationService = notificationService;
         _petCosmeticsService = petCosmeticsService;
         _maxPetsPerUser = limits.Value.MaxPetsPerUser;
+        _eggCostXp = limits.Value.PetEggCostXp;
+        _feedCostXp = limits.Value.PetFeedCostXp;
+        _feedXpGain = limits.Value.PetFeedXpGain;
     }
 
     [HttpGet]
@@ -93,13 +102,12 @@ public class PetsController : ControllerBase
 
         if (existingPetCount > 0)
         {
-            const int eggCost = 50;
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null || user.TotalXp < eggCost)
+            if (user == null || user.TotalXp < _eggCostXp)
             {
-                return BadRequest($"Yeterli XP'niz yok. Yeni bir yumurta {eggCost} XP gerektirir.");
+                return BadRequest($"Yeterli XP'niz yok. Yeni bir yumurta {_eggCostXp} XP gerektirir.");
             }
-            user.TotalXp -= eggCost;
+            user.TotalXp -= _eggCostXp;
             await _userManager.UpdateAsync(user);
         }
 
@@ -140,19 +148,16 @@ public class PetsController : ControllerBase
             return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
         }
 
-        const int feedCost = 3;
-        const int petXpGain = 20;
-
         var user = await _userManager.FindByIdAsync(userId);
-        if (user == null || user.TotalXp < feedCost)
+        if (user == null || user.TotalXp < _feedCostXp)
         {
-            return BadRequest($"Yeterli XP'niz yok. Beslemek için {feedCost} XP gereklidir.");
+            return BadRequest($"Yeterli XP'niz yok. Beslemek için {_feedCostXp} XP gereklidir.");
         }
 
-        user.TotalXp -= feedCost;
+        user.TotalXp -= _feedCostXp;
         await _userManager.UpdateAsync(user);
 
-        pet.Xp += petXpGain;
+        pet.Xp += _feedXpGain;
 
         var justHatched = PetHatching.TryHatch(pet);
         if (pet.Stage == PetStage.Hatched)

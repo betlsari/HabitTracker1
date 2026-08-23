@@ -43,7 +43,12 @@ public class PetGrowthService
         return await ApplyXpGainAsync(userId, pets, xpGain, cancellationToken);
     }
 
-    
+    // DÜZELTİLDİ: AddFocusXpAsync'te olduğu gibi checked aritmetiğe alındı.
+    // Önceden burada düz (unchecked) çarpma kullanılıyordu; AddFocusXpAsync
+    // int.MaxValue civarında bir minutes değerinde OverflowException fırlatıp
+    // isteği reddederken, RemoveFocusXpAsync aynı senaryoda sessizce taşıp
+    // (wrap-around) yanlış/negatif bir xpLoss üretebiliyordu — iki yöndeki
+    // davranış tutarsızdı.
     public async Task RemoveFocusXpAsync(string userId, int minutes, CancellationToken cancellationToken = default)
     {
         if (minutes <= 0)
@@ -51,7 +56,7 @@ public class PetGrowthService
             return;
         }
 
-        var xpLoss = minutes * XpPerFocusMinute;
+        var xpLoss = checked(minutes * XpPerFocusMinute);
         await RemoveXpAsync(userId, xpLoss, cancellationToken);
     }
 

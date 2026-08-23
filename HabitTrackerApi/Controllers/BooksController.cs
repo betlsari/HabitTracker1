@@ -427,6 +427,30 @@ public class BooksController : ControllerBase
         };
     }
 
+    // YENİ (🟡 eksik uç nokta): Tekil bir BookReadingLog kaydını id ile
+    // getiren uç nokta yoktu (HabitCompletionsController.GetHabitCompletion
+    // ile aynı ihtiyaç/desen).
+    [HttpGet("{id:int}/reading-logs/{logId:int}")]
+    public async Task<ActionResult<BookReadingLogDto>> GetReadingLog(int id, int logId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        var log = await _context.BookReadingLogs.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
+        if (log == null)
+        {
+            return NotFound();
+        }
+
+        return BookService.ToLogDto(log);
+    }
+
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {

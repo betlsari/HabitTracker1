@@ -287,3 +287,12 @@ C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Http.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Mvc.dll
 C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Asp.Versioning.Mvc.ApiExplorer.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.AspNetCore.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Extensions.Hosting.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Extensions.Logging.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Formatting.Compact.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Settings.Configuration.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Sinks.Console.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Sinks.Debug.dll
+C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\bin\Debug\net9.0\Serilog.Sinks.File.dll

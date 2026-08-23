@@ -37,7 +37,7 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
     public DbSet<TwoFactorAttempt> TwoFactorAttempts { get; set; }
 
-    // YENİ (madde 6): Bildirim tercihleri.
+    // Bildirim tercihleri.
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -53,9 +53,6 @@ public class AppDbContext : IdentityDbContext<User>
         builder.Entity<Habit>(entity =>
         {
             entity.HasIndex(h => new { h.UserId, h.NormalizedName }).IsUnique();
-            // YENİ (madde 6): Arşivlenmiş/aktif habit'leri filtrelerken
-            // (GetHabits, GetSummary, GetComparison, ReminderBackgroundService)
-            // sık kullanılan bir kombinasyon.
             entity.HasIndex(h => new { h.UserId, h.IsArchived });
         });
         builder.Entity<RefreshToken>(entity =>
@@ -76,9 +73,20 @@ public class AppDbContext : IdentityDbContext<User>
                 new Badge { Id = 7, Code = "WATER_GROWTH_10", Name = "Çiçek bahçesi", Description = "Su çiçeğin 10. seviyeye ulaştı." }
             );
         });
+
+        // DÜZELTİLDİ: TwoFactorAttempt artık User'a FK'li. Önceden bu
+        // entity'nin hiçbir navigasyonu/FK'si yoktu; hesap silindiğinde
+        // (UserManager.DeleteAsync) bu satır veritabanında UserId'si artık
+        // var olmayan bir kullanıcıya işaret eden öksüz bir kayıt olarak
+        // kalıyordu. Cascade delete ile artık User silinince otomatik
+        // temizleniyor.
         builder.Entity<TwoFactorAttempt>(entity =>
         {
             entity.HasIndex(t => t.UserId).IsUnique();
+            entity.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<UserBadge>(entity =>
@@ -113,7 +121,6 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // YENİ (madde 6): Bildirim tercihi - kullanıcı başına tek satır.
         builder.Entity<NotificationPreference>(entity =>
         {
             entity.HasIndex(p => p.UserId).IsUnique();
@@ -132,6 +139,11 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // NOT: AuthAuditEvent kasıtlı olarak User'a FK ile bağlanmıyor.
+        // Sebebi için bkz. Models/AuthAuditEvent.cs üzerindeki açıklama:
+        // bu kayıtlar hesap silindikten sonra da denetim izi (audit trail)
+        // olarak saklanmalı; cascade delete ile birlikte silinmemeli.
+        // Süresiz büyümeyi AuthAuditCleanupService zaman bazlı temizliyor.
         builder.Entity<AuthAuditEvent>(entity =>
         {
             entity.HasIndex(e => new { e.UserId, e.CreatedAt });
@@ -142,7 +154,6 @@ public class AppDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(b => b.UserId);
             entity.HasIndex(b => b.CreatedAt);
-            // YENİ (madde 6): arşiv filtresi için.
             entity.HasIndex(b => new { b.UserId, b.IsArchived });
             entity.HasOne(b => b.User)
                 .WithMany(u => u.Books)
@@ -154,9 +165,6 @@ public class AppDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(l => new { l.BookId, l.ReadDate });
             entity.HasIndex(l => l.ReadDate);
-            // YENİ (madde 6 - batch sync): idempotency. ClientRequestId null
-            // olabileceği için partial unique index (sadece dolu olanlarda
-            // benzersizlik uygulanır).
             entity.HasIndex(l => new { l.BookId, l.ClientRequestId })
                 .IsUnique()
                 .HasFilter("\"ClientRequestId\" IS NOT NULL");
@@ -170,7 +178,6 @@ public class AppDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(c => new { c.HabitId, c.CompletionDate });
             entity.HasIndex(c => c.CompletionDate);
-            // YENİ (madde 6 - batch sync): idempotency, BookReadingLog ile aynı desen.
             entity.HasIndex(c => new { c.HabitId, c.ClientRequestId })
                 .IsUnique()
                 .HasFilter("\"ClientRequestId\" IS NOT NULL");

@@ -13,6 +13,13 @@ public class UserDataExportDto
     public required List<NotificationExportDto> Notifications { get; set; }
     public FlowerExportDto? Flower { get; set; }
     public required List<DeviceTokenExportDto> DeviceTokens { get; set; }
+
+    // YENİ: GDPR/KVKK veri taşınabilirliği kapsamında önceden export'a hiç
+    // dahil edilmeyen veri türleri eklendi.
+    public required List<PetAccessoryUnlockExportDto> PetAccessoryUnlocks { get; set; }
+    public required List<string> BackgroundUnlocks { get; set; }
+    public NotificationPreferenceExportDto? NotificationPreference { get; set; }
+    public required List<AuthAuditEventExportDto> AuthAuditEvents { get; set; }
 }
 
 public class UserAccountExportDto
@@ -103,4 +110,31 @@ public class DeviceTokenExportDto
     public required string Platform { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime LastSeenAt { get; set; }
+}
+
+// YENİ
+public class PetAccessoryUnlockExportDto
+{
+    public int PetId { get; set; }
+    public required string Accessory { get; set; }
+    public DateTime UnlockedAt { get; set; }
+}
+
+// YENİ
+public class NotificationPreferenceExportDto
+{
+    public required List<string> DisabledTypes { get; set; }
+    public TimeOnly? QuietHoursStart { get; set; }
+    public TimeOnly? QuietHoursEnd { get; set; }
+}
+
+// YENİ: Sadece bu kullanıcıya ait audit olayları (login, 2FA, şifre işlemleri vb.)
+public class AuthAuditEventExportDto
+{
+    public required string EventType { get; set; }
+    public bool Succeeded { get; set; }
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+    public string? Detail { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

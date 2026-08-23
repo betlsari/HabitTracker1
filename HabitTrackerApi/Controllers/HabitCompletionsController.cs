@@ -213,6 +213,32 @@ public class HabitCompletionsController : ControllerBase
         };
     }
 
+    // YENİ (🟡 eksik uç nokta): Önceden sadece liste + update/delete vardı;
+    // tek bir completion kaydını doğrudan id ile getiren bir uç nokta yoktu.
+    // İstemcinin (ör. bildirimden derin link ile) tek bir kaydı sayfalama
+    // yapmadan çekebilmesi için eklendi.
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<HabitCompletionDto>> GetHabitCompletion(int habitId, int id)
+    {
+        var habit = await _context.Habits.AsNoTracking().FirstOrDefaultAsync(h => h.Id == habitId);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (habit == null || habit.UserId != userId)
+        {
+            return NotFound();
+        }
+
+        var completion = await _context.HabitCompletions.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == id && c.HabitId == habitId);
+
+        if (completion == null)
+        {
+            return NotFound();
+        }
+
+        return ToDto(completion);
+    }
+
     // DÜZELTİLDİ (transaction eksikliği): Önceden bu metod birden fazla
     // ayrı SaveChangesAsync çağrısı yapıyordu (eski XP geri alma, yeni XP
     // ekleme, flower/pet güncellemeleri, completion güncelleme) — aralarında
@@ -353,8 +379,7 @@ public class HabitCompletionsController : ControllerBase
     }
 
     // DÜZELTİLDİ (transaction eksikliği): flower/pet XP geri alma ve
-    // completion silme işlemleri artık tek transaction içinde; aralarında
-    // hata olursa hiçbir değişiklik kalıcı olmuyor.
+    // completion silme işlemleri artık tek transaction içinde.
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteCompletion(int habitId, int id)
     {

@@ -58,6 +58,29 @@ public class NotificationPreferencesController : ControllerBase
         return ToDto(pref);
     }
 
+    // YENİ (🟡 eksik uç nokta): Kullanıcının bildirim tercihini (kapatılmış
+    // türler + sessiz saatler) varsayılana döndürmesinin hiçbir yolu yoktu;
+    // istemci tek tek DisabledTypes'ı boşaltıp QuietHours alanlarını null
+    // göndererek PUT çağırmak zorundaydı. DELETE artık tercih kaydını
+    // tamamen kaldırıp GET'in zaten döndürdüğü "hiçbir şey yapılandırılmamış"
+    // varsayılan durumuna (tüm bildirimler açık, sessiz saat yok) geri
+    // döndürüyor.
+    [HttpDelete]
+    public async Task<ActionResult<NotificationPreferenceDto>> ResetToDefault()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var pref = await _context.NotificationPreferences
+            .FirstOrDefaultAsync(p => p.UserId == userId);
+
+        if (pref != null)
+        {
+            _context.NotificationPreferences.Remove(pref);
+            await _context.SaveChangesAsync();
+        }
+
+        return new NotificationPreferenceDto();
+    }
+
     private static NotificationPreferenceDto ToDto(NotificationPreference pref) => new()
     {
         DisabledTypes = string.IsNullOrWhiteSpace(pref.DisabledTypes)

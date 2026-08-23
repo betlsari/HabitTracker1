@@ -1,5 +1,6 @@
 namespace Models;
 
+
 public class AuthAuditEvent : IHasConcurrencyToken
 {
     public long Id { get; set; }

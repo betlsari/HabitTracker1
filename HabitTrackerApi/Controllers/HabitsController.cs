@@ -184,67 +184,120 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
+    // DÜZELTİLDİ: Kategori değişimi artık transaction içinde ele alınıyor
+    // ve geçmiş tamamlamalardan kaynaklanan çiçek suyu / pet odaklanma XP'si
+    // eski kategoriden geri alınıp yeni kategoriye göre yeniden uygulanıyor.
+    // Önceden ör. "Su" -> "Spor" geçişinde geçmişte sulanmış çiçek asla geri
+    // alınmıyor, "Spor" -> "Odaklanma" geçişinde ise geçmiş miktarlar pet'e
+    // hiç XP olarak yansımıyordu.
     [HttpPut("{id:int}")]
     public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
     {
-        var habit = await _context.Habits.FindAsync(id);
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (habit == null || habit.UserId != userId)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<ActionResult<HabitDto>>(async () =>
         {
-            return NotFound();
-        }
+            _context.ChangeTracker.Clear();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        if (!HabitCategories.IsValid(dto.Category))
-        {
-            return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
-        }
-
-        var normalizedName = dto.Name.Trim();
-        var normalizedNameKey = normalizedName.ToUpperInvariant();
-        var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
-             h.UserId == userId && h.Id != id && h.NormalizedName == normalizedNameKey);
-        if (nameTakenByAnother)
-        {
-            return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
-        }
-
-        var goalOrScheduleChanged = habit.DailyGoal != dto.DailyGoal
-            || habit.Period != dto.Period
-            || habit.TargetTime != dto.TargetTime;
-
-        habit.Name = normalizedName;
-        habit.NormalizedName = normalizedNameKey;
-        habit.Category = dto.Category;
-        habit.DailyGoal = dto.DailyGoal;
-        habit.Period = dto.Period;
-        habit.TargetTime = dto.TargetTime;
-        habit.ReminderTime = dto.ReminderTime;
-        habit.Notes = dto.Notes;
-
-        await _context.SaveChangesAsync();
-
-        if (goalOrScheduleChanged)
-        {
-            var user = await _userManager.FindByIdAsync(userId!);
-            var recalc = await _progressService.RecalculateHabitAsync(habit, user?.TimeZoneId);
-
-            if (recalc.XpDelta != 0 && user != null)
+            var habit = await _context.Habits.FindAsync(id);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (habit == null || habit.UserId != userId)
             {
-                user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
-                await _userManager.UpdateAsync(user);
+                return NotFound();
             }
 
-            if (recalc.PetStreakBonusDelta > 0)
+            if (!HabitCategories.IsValid(dto.Category))
             {
-                await _petGrowthService.AddStreakBonusXpAsync(userId!, recalc.PetStreakBonusDelta);
+                return BadRequest($"Geçersiz kategori. İzin verilen kategoriler: {string.Join(", ", HabitCategories.Allowed)}");
             }
-            else if (recalc.PetStreakBonusDelta < 0)
-            {
-                await _petGrowthService.RemoveStreakBonusXpAsync(userId!, -recalc.PetStreakBonusDelta);
-            }
-        }
 
-        return ToDto(habit);
+            var normalizedName = dto.Name.Trim();
+            var normalizedNameKey = normalizedName.ToUpperInvariant();
+            var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
+                 h.UserId == userId && h.Id != id && h.NormalizedName == normalizedNameKey);
+            if (nameTakenByAnother)
+            {
+                return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
+            }
+
+            var goalOrScheduleChanged = habit.DailyGoal != dto.DailyGoal
+                || habit.Period != dto.Period
+                || habit.TargetTime != dto.TargetTime;
+
+            var oldCategory = habit.Category;
+            var categoryChanged = !string.Equals(oldCategory, dto.Category, StringComparison.OrdinalIgnoreCase);
+
+            habit.Name = normalizedName;
+            habit.NormalizedName = normalizedNameKey;
+            habit.Category = dto.Category;
+            habit.DailyGoal = dto.DailyGoal;
+            habit.Period = dto.Period;
+            habit.TargetTime = dto.TargetTime;
+            habit.ReminderTime = dto.ReminderTime;
+            habit.Notes = dto.Notes;
+
+            await _context.SaveChangesAsync();
+
+            // YENİ: Kategori değişince eski kategoriye bağlı yan etkiler
+            // (çiçek suyu / pet odaklanma XP'si) geçmiş toplam miktar
+            // üzerinden geri alınır, yeni kategoriye bağlıysa yeniden uygulanır.
+            if (categoryChanged)
+            {
+                var totalAmount = await _context.HabitCompletions
+                    .Where(c => c.HabitId == id)
+                    .SumAsync(c => (int?)c.Amount) ?? 0;
+
+                if (totalAmount != 0)
+                {
+                    var wasWater = HabitCategories.IsWater(oldCategory);
+                    var isWater = HabitCategories.IsWater(habit.Category);
+                    var wasFocus = HabitCategories.IsFocus(oldCategory);
+                    var isFocus = HabitCategories.IsFocus(habit.Category);
+
+                    if (wasWater && !isWater)
+                    {
+                        await _flowerService.AddWaterAsync(userId!, -totalAmount);
+                    }
+                    else if (!wasWater && isWater)
+                    {
+                        await _flowerService.AddWaterAsync(userId!, totalAmount);
+                    }
+
+                    if (wasFocus && !isFocus)
+                    {
+                        await _petGrowthService.RemoveFocusXpAsync(userId!, totalAmount);
+                    }
+                    else if (!wasFocus && isFocus)
+                    {
+                        await _petGrowthService.AddFocusXpAsync(userId!, totalAmount);
+                    }
+                }
+            }
+
+            if (goalOrScheduleChanged)
+            {
+                var user = await _userManager.FindByIdAsync(userId!);
+                var recalc = await _progressService.RecalculateHabitAsync(habit, user?.TimeZoneId);
+
+                if (recalc.XpDelta != 0 && user != null)
+                {
+                    user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
+                    await _userManager.UpdateAsync(user);
+                }
+
+                if (recalc.PetStreakBonusDelta > 0)
+                {
+                    await _petGrowthService.AddStreakBonusXpAsync(userId!, recalc.PetStreakBonusDelta);
+                }
+                else if (recalc.PetStreakBonusDelta < 0)
+                {
+                    await _petGrowthService.RemoveStreakBonusXpAsync(userId!, -recalc.PetStreakBonusDelta);
+                }
+            }
+
+            await transaction.CommitAsync();
+            return ToDto(habit);
+        });
     }
 
     [HttpPut("{id:int}/archive")]
@@ -287,11 +340,6 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): flower/pet XP geri alma, habit
-    // silme ve kullanıcı XP güncellemesi artık tek transaction içinde.
-    // Önceden bunlardan biri (ör. son UserManager.UpdateAsync) başarısız
-    // olursa habit silinmiş ama XP/çiçek/pet durumu güncellenmemiş
-    // kalabiliyordu.
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteHabit(int id)
     {

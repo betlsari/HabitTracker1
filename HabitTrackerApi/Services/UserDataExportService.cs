@@ -6,9 +6,8 @@ using Models;
 namespace Services;
 
 /// <summary>
-/// YENİ: GDPR/KVKK veri taşınabilirliği için kullanıcının tüm verisini tek
-/// bir JSON yapısında toplar. Önceden sadece hesap SİLME vardı (DeleteAccount);
-/// kullanıcının verisini indirip taşıyabilmesinin hiçbir yolu yoktu.
+/// GDPR/KVKK veri taşınabilirliği için kullanıcının tüm verisini tek bir
+/// JSON yapısında toplar.
 /// </summary>
 public class UserDataExportService
 {
@@ -42,6 +41,7 @@ public class UserDataExportService
         var pets = await _context.Pets.AsNoTracking()
             .Where(p => p.UserId == user.Id)
             .ToListAsync(cancellationToken);
+        var petIds = pets.Select(p => p.Id).ToList();
 
         var badges = await _context.UserBadges.AsNoTracking()
             .Include(ub => ub.Badge)
@@ -57,6 +57,33 @@ public class UserDataExportService
 
         var deviceTokens = await _context.DeviceTokens.AsNoTracking()
             .Where(d => d.UserId == user.Id)
+            .ToListAsync(cancellationToken);
+
+        // YENİ: Pet aksesuar kilitleri.
+        var petAccessoryUnlocks = petIds.Count == 0
+            ? new List<PetAccessoryUnlock>()
+            : await _context.PetAccessoryUnlocks.AsNoTracking()
+                .Where(u => petIds.Contains(u.PetId))
+                .ToListAsync(cancellationToken);
+
+        // YENİ: Arka plan kilitleri.
+        var backgroundUnlocks = await _context.UserBackgroundUnlocks.AsNoTracking()
+            .Where(u => u.UserId == user.Id)
+            .Select(u => u.Background)
+            .ToListAsync(cancellationToken);
+
+        // YENİ: Bildirim tercihleri.
+        var notificationPreference = await _context.NotificationPreferences.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == user.Id, cancellationToken);
+
+        // YENİ: Bu kullanıcıya ait auth audit olayları (login/2FA/şifre
+        // geçmişi). Hem doğrudan UserId ile eşleşenler hem de (ör. hesap
+        // henüz oluşturulmadan önceki bazı olaylarda olduğu gibi) email
+        // üzerinden eşleşenler dahil edilir — AuthController.GetAuditLog
+        // ile aynı sorgu deseni.
+        var authAuditEvents = await _context.AuthAuditEvents.AsNoTracking()
+            .Where(e => e.UserId == user.Id || (user.Email != null && e.Email == user.Email))
+            .OrderByDescending(e => e.CreatedAt)
             .ToListAsync(cancellationToken);
 
         return new UserDataExportDto
@@ -141,6 +168,30 @@ public class UserDataExportService
                 Platform = d.Platform,
                 CreatedAt = d.CreatedAt,
                 LastSeenAt = d.LastSeenAt
+            }).ToList(),
+            PetAccessoryUnlocks = petAccessoryUnlocks.Select(u => new PetAccessoryUnlockExportDto
+            {
+                PetId = u.PetId,
+                Accessory = u.Accessory,
+                UnlockedAt = u.UnlockedAt
+            }).ToList(),
+            BackgroundUnlocks = backgroundUnlocks,
+            NotificationPreference = notificationPreference == null ? null : new NotificationPreferenceExportDto
+            {
+                DisabledTypes = string.IsNullOrWhiteSpace(notificationPreference.DisabledTypes)
+                    ? new List<string>()
+                    : notificationPreference.DisabledTypes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+                QuietHoursStart = notificationPreference.QuietHoursStart,
+                QuietHoursEnd = notificationPreference.QuietHoursEnd
+            },
+            AuthAuditEvents = authAuditEvents.Select(e => new AuthAuditEventExportDto
+            {
+                EventType = e.EventType,
+                Succeeded = e.Succeeded,
+                IpAddress = e.IpAddress,
+                UserAgent = e.UserAgent,
+                Detail = e.Detail,
+                CreatedAt = e.CreatedAt
             }).ToList()
         };
     }

@@ -6,11 +6,13 @@ using Models;
 namespace Services;
 
 /// <summary>
-/// YENİ: Pet aksesuarları (şapka, gözlük, papyon) ve arka planların (ev, orman, sahil)
-/// kilit açma/donatma (equip) mantığını yönetir. Aksesuarlar pet'in Level'ına, arka
-/// planlar kullanıcının çiçek (Flower) seviyesine bağlı olarak açılır ve kalıcı olarak
-/// saklanır — bu sayede pet XP'si sonradan azalsa bile (ör. bir habit completion
-/// silindiğinde) daha önce kazanılmış kozmetikler geri alınmaz.
+/// Pet aksesuarları (şapka, gözlük, papyon) ve arka planların (ev, orman, sahil)
+/// kilit açma/donatma (equip) mantığını yönetir. Aksesuarlar pet'in Level'ına
+/// VEYA kullanıcının kazandığı belirli rozetlere (bkz. BadgeAccessoryUnlocks)
+/// bağlı olarak açılır; arka planlar kullanıcının çiçek (Flower) seviyesine
+/// bağlı olarak açılır. Kilitler kalıcı olarak saklanır — bu sayede pet
+/// XP'si sonradan azalsa bile (ör. bir habit completion silindiğinde) daha
+/// önce kazanılmış kozmetikler geri alınmaz.
 /// </summary>
 public class PetCosmeticsService
 {
@@ -25,6 +27,19 @@ public class PetCosmeticsService
     {
         (5, PetBackgrounds.Forest),
         (10, PetBackgrounds.Beach)
+    };
+
+    // YENİ: "Rozet veya başarılarla aksesuar açma" — daha önce sadece pet
+    // Level'ına bağlı olan aksesuarlar artık ilgili rozet kazanıldığında da
+    // (pet'in Level'ı henüz eşiğe ulaşmamış olsa bile) açılabiliyor. Level
+    // eşikleriyle çakışmasın diye aynı aksesuar setine bilinçli olarak
+    // eşlendi; kullanıcı iki yoldan birinden (streak ile level, ya da streak
+    // rozetiyle doğrudan) aynı aksesuara ulaşabilir.
+    private static readonly Dictionary<string, string> BadgeAccessoryUnlocks = new(StringComparer.Ordinal)
+    {
+        [BadgeService.Streak3] = PetAccessories.Hat,
+        [BadgeService.Streak7] = PetAccessories.Glasses,
+        [BadgeService.Streak30] = PetAccessories.Bowtie,
     };
 
     private readonly AppDbContext _context;
@@ -52,6 +67,50 @@ public class PetCosmeticsService
             _context.PetAccessoryUnlocks.Add(new PetAccessoryUnlock
             {
                 PetId = pet.Id,
+                Accessory = accessory,
+                UnlockedAt = DateTime.UtcNow
+            });
+            newUnlocks = true;
+        }
+
+        if (newUnlocks)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    // YENİ: BadgeService bir rozet verdiğinde çağrılır. İlgili rozet bir
+    // aksesuara eşleniyorsa, kullanıcının TÜM pet'leri için (pet Level'ından
+    // bağımsız olarak) o aksesuarı açar. Zaten açılmış olan pet'ler atlanır.
+    public async Task EvaluateAccessoryUnlocksForBadgeAsync(
+        string userId, string badgeCode, CancellationToken cancellationToken = default)
+    {
+        if (!BadgeAccessoryUnlocks.TryGetValue(badgeCode, out var accessory))
+        {
+            return;
+        }
+
+        var petIds = await _context.Pets.AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+
+        if (petIds.Count == 0)
+        {
+            return;
+        }
+
+        var alreadyUnlockedPetIds = await _context.PetAccessoryUnlocks
+            .Where(u => petIds.Contains(u.PetId) && u.Accessory == accessory)
+            .Select(u => u.PetId)
+            .ToListAsync(cancellationToken);
+
+        var newUnlocks = false;
+        foreach (var petId in petIds.Except(alreadyUnlockedPetIds))
+        {
+            _context.PetAccessoryUnlocks.Add(new PetAccessoryUnlock
+            {
+                PetId = petId,
                 Accessory = accessory,
                 UnlockedAt = DateTime.UtcNow
             });
