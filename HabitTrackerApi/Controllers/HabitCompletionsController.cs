@@ -134,10 +134,21 @@ public class HabitCompletionsController : ControllerBase
         });
     }
 
+    // DÜZELTİLDİ: Sayfalama eklendi. Önceden habit'in TÜM completion kayıtları
+    // tek seferde dönüyordu; uzun süredir kullanılan bir alışkanlıkta binlerce
+    // satır dönebiliyordu. Artık diğer controller'larla (Habits, Books, Pets,
+    // Notifications) tutarlı şekilde PagedResultDto + page/pageSize kullanılıyor.
+    // Varsayılan sıralama en yeni tamamlamalar önce gelecek şekilde ayarlandı.
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<HabitCompletionDto>>> GetHabitCompletions(int habitId)
+    public async Task<ActionResult<PagedResultDto<HabitCompletionDto>>> GetHabitCompletions(
+        int habitId,
+        int page = 1,
+        int pageSize = 50)
     {
-        var habit = await _context.Habits.FindAsync(habitId);
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
+        var habit = await _context.Habits.AsNoTracking().FirstOrDefaultAsync(h => h.Id == habitId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (habit == null || habit.UserId != userId)
@@ -145,9 +156,15 @@ public class HabitCompletionsController : ControllerBase
             return NotFound();
         }
 
-        return await _context.HabitCompletions
+        var query = _context.HabitCompletions
             .AsNoTracking()
             .Where(c => c.HabitId == habitId)
+            .OrderByDescending(c => c.CompletionDate);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(c => new HabitCompletionDto
             {
                 Id = c.Id,
@@ -158,6 +175,14 @@ public class HabitCompletionsController : ControllerBase
                 IsOnTime = c.IsOnTime
             })
             .ToListAsync();
+
+        return new PagedResultDto<HabitCompletionDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
     }
 
     [HttpPut("{id}")]

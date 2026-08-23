@@ -140,12 +140,6 @@ public class BookService
         return xpEarned;
     }
 
-    // DÜZELTİLDİ: timeZoneId parametresi eklendi. Önceden bu metot her zaman
-    // UTC bazlı dönem sınırları kullanıyordu — AddReadingLogAsync'in kullandığı
-    // gerçek kullanıcı saat dilimiyle tutarsızdı ve haftalık/aylık dönem
-    // sınırlarında ±1 günlük kaymalara (dolayısıyla yanlış XP/streak
-    // hesaplanmasına) yol açabiliyordu. Artık AddReadingLogAsync ile birebir
-    // aynı TimeZones.Resolve + HabitSchedule.PeriodStartLocal akışı kullanılıyor.
     public async Task<int> RecalculateBookAsync(Book book, string? timeZoneId = null, CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -289,6 +283,10 @@ public class BookService
         return stats;
     }
 
+    // DÜZELTİLDİ (N+1): Önceden her kitap için ayrı LoadPeriodTotalsAsync
+    // çağrılıyordu. Artık kitaplar Period'a göre gruplanıp her grup için TEK
+    // toplu sorgu atılıyor (HabitProgressService.GetComparisonAsync ile aynı
+    // desen) — 200 kitap olsa bile en fazla 3 sorgu koşar.
     public async Task<List<BookComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Book> books,
         string? timeZoneId,
@@ -298,16 +296,32 @@ public class BookService
         var tz = TimeZones.Resolve(timeZoneId);
         var results = new List<BookComparisonDto>(books.Count);
 
+        if (books.Count == 0)
+        {
+            return results;
+        }
+
+        var totalsByBook = new Dictionary<int, Dictionary<DateTime, int>>();
+        foreach (var group in books.GroupBy(b => b.Period))
+        {
+            var bookIds = group.Select(b => b.Id).ToArray();
+            var batch = await LoadPeriodTotalsBatchAsync(bookIds, group.Key, tz, cancellationToken);
+            foreach (var kv in batch)
+            {
+                totalsByBook[kv.Key] = kv.Value;
+            }
+        }
+
         foreach (var book in books)
         {
-            var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
-            var today = HabitSchedule.PeriodStartLocal(DateTime.UtcNow, book.Period, tz);
+            var totals = totalsByBook.TryGetValue(book.Id, out var t) ? t : new Dictionary<DateTime, int>();
+            var bookToday = HabitSchedule.PeriodStartLocal(DateTime.UtcNow, book.Period, tz);
             var createdLocal = book.CreatedAt.Kind == DateTimeKind.Utc
                 ? book.CreatedAt
                 : DateTime.SpecifyKind(book.CreatedAt, DateTimeKind.Utc);
             var bookStart = HabitSchedule.PeriodStartLocal(createdLocal, book.Period, tz);
 
-            var cursor = today;
+            var cursor = bookToday;
             int periodsConsidered = 0;
             int periodsGoalMet = 0;
 
@@ -329,7 +343,7 @@ public class BookService
             {
                 BookId = book.Id,
                 Title = book.Title,
-                CurrentStreak = CountStreakFromTotals(totals, today, book.DailyGoalAmount, book.CreatedAt, book.Period, tz),
+                CurrentStreak = CountStreakFromTotals(totals, bookToday, book.DailyGoalAmount, book.CreatedAt, book.Period, tz),
                 CompletionRatePercent = Math.Round(completionRate, 1)
             });
         }
@@ -368,6 +382,44 @@ public class BookService
         return rows.ToDictionary(row => row.PeriodStart, row => row.Total);
     }
 
+    // YENİ: Birden fazla kitap için TEK sorguda dönemsel toplamları yükler.
+    // HabitProgressService.LoadPeriodTotalsBatchAsync ile birebir aynı desen.
+    public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
+        IReadOnlyList<int> bookIds,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        CancellationToken cancellationToken = default)
+    {
+        var result = bookIds.ToDictionary(id => id, _ => new Dictionary<DateTime, int>());
+        if (bookIds.Count == 0)
+        {
+            return result;
+        }
+
+        var idsArray = bookIds.ToArray();
+        var rows = await _context.Database.SqlQuery<BookPeriodTotal>($"""
+            SELECT "BookId",
+                   date_trunc({GetDateTruncUnit(period)}, "ReadDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
+                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
+            FROM "BookReadingLogs"
+            WHERE "BookId" = ANY({idsArray})
+            GROUP BY "BookId", 2
+            """).ToListAsync(cancellationToken);
+
+        foreach (var row in rows)
+        {
+            if (!result.TryGetValue(row.BookId, out var dict))
+            {
+                dict = new Dictionary<DateTime, int>();
+                result[row.BookId] = dict;
+            }
+
+            dict[row.PeriodStart] = row.Total;
+        }
+
+        return result;
+    }
+
     private static string GetDateTruncUnit(HabitPeriod period) => period switch
     {
         HabitPeriod.Daily => "day",
@@ -378,6 +430,13 @@ public class BookService
 
     private sealed class PeriodTotal
     {
+        public DateTime PeriodStart { get; init; }
+        public int Total { get; init; }
+    }
+
+    private sealed class BookPeriodTotal
+    {
+        public int BookId { get; init; }
         public DateTime PeriodStart { get; init; }
         public int Total { get; init; }
     }

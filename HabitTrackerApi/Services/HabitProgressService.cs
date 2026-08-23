@@ -21,19 +21,34 @@ public class HabitProgressService
         return BuildProgress(habit, tz, totals, DateTime.UtcNow);
     }
 
+    // DÜZELTİLDİ (N+1): Önceden her habit için ayrı ayrı LoadPeriodTotalsAsync
+    // çağrılıyordu (habit sayısı kadar SQL sorgusu). Artık habit'ler Period'a
+    // (Daily/Weekly/Monthly) göre gruplanıp her grup için TEK toplu sorgu
+    // atılıyor — kullanıcının 100 habit'i olsa bile en fazla 3 sorgu koşuyor.
     public async Task<List<HabitProgressDto>> GetSummaryAsync(IReadOnlyList<Habit> habits, string? timeZoneId, CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
+        var now = DateTime.UtcNow;
+
+        if (habits.Count == 0)
+        {
+            return new List<HabitProgressDto>();
+        }
+
+        var totalsByHabit = await LoadPeriodTotalsForHabitsAsync(habits, tz, cancellationToken);
+
         var result = new List<HabitProgressDto>(habits.Count);
         foreach (var habit in habits)
         {
-            var totals = await LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
-            result.Add(BuildProgress(habit, tz, totals, DateTime.UtcNow));
+            var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
+            result.Add(BuildProgress(habit, tz, totals, now));
         }
 
         return result;
     }
 
+    // DÜZELTİLDİ (N+1): GetComparisonAsync da artık toplu yüklenen totals
+    // sözlüğünü kullanıyor; döngü içinde DB'ye gitmiyor.
     public async Task<List<HabitComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Habit> habits,
         string? timeZoneId,
@@ -44,9 +59,16 @@ public class HabitProgressService
         var now = DateTime.UtcNow;
         var results = new List<HabitComparisonDto>(habits.Count);
 
+        if (habits.Count == 0)
+        {
+            return results;
+        }
+
+        var totalsByHabit = await LoadPeriodTotalsForHabitsAsync(habits, tz, cancellationToken);
+
         foreach (var habit in habits)
         {
-            var totals = await LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
+            var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
             var currentPeriodStart = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
 
             var createdAtUtc = habit.CreatedAt.Kind == DateTimeKind.Utc
@@ -100,11 +122,6 @@ public class HabitProgressService
         return ranked;
     }
 
-    // DÜZELTİLDİ: granularity parametresi eklendi. Verilmezse habit'in kendi
-    // Period'u kullanılır (önceki davranışla tam uyumlu); verilirse (Daily/
-    // Weekly/Monthly) kullanıcı, habit'in kendi periyodundan bağımsız olarak
-    // istediği eksende istatistik görebilir — dokümandaki "günlük, haftalık ve
-    // aylık başarı grafikleri" maddesi artık her habit için sağlanabiliyor.
     public async Task<List<DailyStatDto>> GetStatsAsync(
         Habit habit,
         string? timeZoneId,
@@ -193,6 +210,70 @@ public class HabitProgressService
         return rows.ToDictionary(row => row.PeriodStart, row => row.Total);
     }
 
+    // YENİ: Birden fazla habit için TEK sorguda dönemsel toplamları yükler.
+    // Aynı Period'a sahip habit'ler tek bir "WHERE HabitId = ANY(...)" sorgusu
+    // ile gruplanır (date_trunc unit'i habit'in Period'una bağlı olduğundan
+    // farklı Period'lar ayrı sorgu gerektirir — ama toplamda habit sayısı
+    // kadar değil, en fazla 3 (Daily/Weekly/Monthly) sorgu koşar).
+    public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
+        IReadOnlyList<int> habitIds,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        CancellationToken cancellationToken = default)
+    {
+        var result = habitIds.ToDictionary(id => id, _ => new Dictionary<DateTime, int>());
+        if (habitIds.Count == 0)
+        {
+            return result;
+        }
+
+        var idsArray = habitIds.ToArray();
+        var rows = await _context.Database.SqlQuery<HabitPeriodTotal>($"""
+            SELECT "HabitId",
+                   date_trunc({GetDateTruncUnit(period)}, "CompletionDate" AT TIME ZONE {tz.Id}) AS "PeriodStart",
+                   COALESCE(SUM("Amount"), 0)::integer AS "Total"
+            FROM "HabitCompletions"
+            WHERE "HabitId" = ANY({idsArray})
+            GROUP BY "HabitId", 2
+            """).ToListAsync(cancellationToken);
+
+        foreach (var row in rows)
+        {
+            if (!result.TryGetValue(row.HabitId, out var dict))
+            {
+                dict = new Dictionary<DateTime, int>();
+                result[row.HabitId] = dict;
+            }
+
+            dict[row.PeriodStart] = row.Total;
+        }
+
+        return result;
+    }
+
+    // YENİ: Farklı Period'lara sahip habit'leri gruplayıp her grup için
+    // LoadPeriodTotalsBatchAsync çağıran yardımcı metod. GetSummaryAsync ve
+    // GetComparisonAsync tarafından ortak kullanılır.
+    private async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsForHabitsAsync(
+        IReadOnlyList<Habit> habits,
+        TimeZoneInfo tz,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, Dictionary<DateTime, int>>();
+
+        foreach (var group in habits.GroupBy(h => h.Period))
+        {
+            var habitIds = group.Select(h => h.Id).ToArray();
+            var batch = await LoadPeriodTotalsBatchAsync(habitIds, group.Key, tz, cancellationToken);
+            foreach (var kv in batch)
+            {
+                result[kv.Key] = kv.Value;
+            }
+        }
+
+        return result;
+    }
+
     private static string GetDateTruncUnit(HabitPeriod period) => period switch
     {
         HabitPeriod.Daily => "day",
@@ -203,6 +284,13 @@ public class HabitProgressService
 
     private sealed class PeriodTotal
     {
+        public DateTime PeriodStart { get; init; }
+        public int Total { get; init; }
+    }
+
+    private sealed class HabitPeriodTotal
+    {
+        public int HabitId { get; init; }
         public DateTime PeriodStart { get; init; }
         public int Total { get; init; }
     }
