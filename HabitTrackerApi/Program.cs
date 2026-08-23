@@ -232,7 +232,9 @@ builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
-
+builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
+builder.Services.AddHostedService<EmailSenderBackgroundService>();
+builder.Services.AddScoped<UserDataExportService>();
 
 var app = builder.Build();
 app.UseExceptionHandler();
@@ -268,6 +270,34 @@ app.MapHealthChecks("/health");
 
 
 
+
+await SeedRolesAndAdminAsync(app.Services, app.Configuration);
+
 app.Run();
 
+static async Task SeedRolesAndAdminAsync(IServiceProvider services, IConfiguration configuration)
+{
+    using var scope = services.CreateScope();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<Microsoft.AspNetCore.Identity.IdentityRole>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Models.User>>();
+
+    foreach (var roleName in new[] { "Admin", "User" })
+    {
+        if (!await roleManager.RoleExistsAsync(roleName))
+        {
+            await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(roleName));
+        }
+    }
+
+   
+    var bootstrapAdminEmail = configuration["Admin:BootstrapEmail"];
+    if (!string.IsNullOrWhiteSpace(bootstrapAdminEmail))
+    {
+        var user = await userManager.FindByEmailAsync(bootstrapAdminEmail);
+        if (user != null && !await userManager.IsInRoleAsync(user, "Admin"))
+        {
+            await userManager.AddToRoleAsync(user, "Admin");
+        }
+    }
+}
 public partial class Program;

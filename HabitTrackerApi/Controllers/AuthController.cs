@@ -25,23 +25,27 @@ public class AuthController : ControllerBase
 
     private readonly AppDbContext _context;
 
-    public AuthController(
-        UserManager<User> userManager,
-        SignInManager<User> signInManager,
-        TokenService tokenService,
-        EmailService emailService,
-        AuthAuditService authAudit,
-        AppDbContext context,
-        ILogger<AuthController> logger)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _tokenService = tokenService;
-        _emailService = emailService;
-        _authAudit = authAudit;
-        _context = context;
-        _logger = logger;
-    }
+    private readonly IEmailQueue _emailQueue;
+
+public AuthController(
+    UserManager<User> userManager,
+    SignInManager<User> signInManager,
+    TokenService tokenService,
+    EmailService emailService,
+    IEmailQueue emailQueue,        
+    AuthAuditService authAudit,
+    AppDbContext context,
+    ILogger<AuthController> logger)
+{
+    _userManager = userManager;
+    _signInManager = signInManager;
+    _tokenService = tokenService;
+    _emailService = emailService;
+    _emailQueue = emailQueue;       
+    _authAudit = authAudit;
+    _context = context;
+    _logger = logger;
+}
 
 
     [HttpPost("register")]
@@ -441,7 +445,7 @@ public class AuthController : ControllerBase
         if (user != null && !await _userManager.IsEmailConfirmedAsync(user))
         {
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-            await _emailService.SendEmailAsync(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}");
+            _emailQueue.Enqueue(new EmailMessage(user.Email, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         }
 
         return Ok("Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, yeni bir doğrulama kodu gönderildi.");
@@ -460,6 +464,20 @@ public class AuthController : ControllerBase
 
         return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
     }
+    [HttpGet("me/export")]
+[Authorize]
+public async Task<IActionResult> ExportMyData([FromServices] UserDataExportService exportService)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var user = await _userManager.FindByIdAsync(userId!);
+    if (user == null)
+    {
+        return NotFound();
+    }
+
+    var export = await exportService.ExportAsync(user);
+    return Ok(export);
+}
 
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)

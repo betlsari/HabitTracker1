@@ -260,31 +260,48 @@ public class BooksController : ControllerBase
     }
 
     [HttpGet("{id:int}/reading-logs")]
-    public async Task<ActionResult<IEnumerable<BookReadingLogDto>>> GetReadingLogs(int id)
+public async Task<ActionResult<PagedResultDto<BookReadingLogDto>>> GetReadingLogs(
+    int id, int page = 1, int pageSize = 50)
+{
+    if (page < 1) page = 1;
+    if (pageSize < 1 || pageSize > 200) pageSize = 50;
+
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var book = await _context.Books.AsNoTracking()
+        .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+
+    if (book == null)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var book = await _context.Books.AsNoTracking()
-            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
-
-        if (book == null)
-        {
-            return NotFound();
-        }
-
-        return await _context.BookReadingLogs.AsNoTracking()
-            .Where(l => l.BookId == id)
-            .OrderByDescending(l => l.ReadDate)
-            .Select(l => new BookReadingLogDto
-            {
-                Id = l.Id,
-                BookId = l.BookId,
-                ReadDate = l.ReadDate,
-                Amount = l.Amount,
-                PageReachedAt = l.PageReachedAt,
-                XpEarned = l.XpEarned
-            })
-            .ToListAsync();
+        return NotFound();
     }
+
+    var query = _context.BookReadingLogs.AsNoTracking()
+        .Where(l => l.BookId == id)
+        .OrderByDescending(l => l.ReadDate);
+
+    var totalCount = await query.CountAsync();
+    var items = await query
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .Select(l => new BookReadingLogDto
+        {
+            Id = l.Id,
+            BookId = l.BookId,
+            ReadDate = l.ReadDate,
+            Amount = l.Amount,
+            PageReachedAt = l.PageReachedAt,
+            XpEarned = l.XpEarned
+        })
+        .ToListAsync();
+
+    return new PagedResultDto<BookReadingLogDto>
+    {
+        Items = items,
+        Page = page,
+        PageSize = pageSize,
+        TotalCount = totalCount
+    };
+}
 
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
@@ -414,9 +431,7 @@ public class BooksController : ControllerBase
         return Ok(result);
     }
 
-    // DÜZELTİLDİ: user opsiyonel parametre olarak eklendi — çağıran taraf zaten
-    // UserManager'dan kullanıcıyı çekmişse (timezone için) tekrar sorgu atmaya
-    // gerek kalmıyor. Verilmezse eskisi gibi userId üzerinden çekiliyor.
+    
     private async Task ApplyXpDeltaAsync(string userId, int xpDelta, User? preloadedUser = null)
     {
         var user = preloadedUser ?? await _userManager.FindByIdAsync(userId);
