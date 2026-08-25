@@ -1,3 +1,4 @@
+// HabitTrackerApi/Services/HabitProgressService.cs
 using Data;
 using Dtos;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +25,8 @@ public class HabitProgressService
     {
         var tz = TimeZones.Resolve(timeZoneId);
         var totals = await LoadPeriodTotalsAsync(habit.Id, habit.Period, tz, cancellationToken);
-        return BuildProgress(habit, tz, totals, DateTime.UtcNow);
+        var truncated = IsHistoryTruncated(habit.CreatedAt);
+        return BuildProgress(habit, tz, totals, DateTime.UtcNow, truncated);
     }
 
     public async Task<List<HabitProgressDto>> GetSummaryAsync(IReadOnlyList<Habit> habits, string? timeZoneId, CancellationToken cancellationToken = default)
@@ -43,12 +45,25 @@ public class HabitProgressService
         foreach (var habit in habits)
         {
             var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
-            result.Add(BuildProgress(habit, tz, totals, now));
+            var truncated = IsHistoryTruncated(habit.CreatedAt);
+            result.Add(BuildProgress(habit, tz, totals, now, truncated));
         }
 
         return result;
     }
 
+    // DÜZELTİLDİ (🔴 madde 2 — bellekte lookback filtreleme): Önceden bu
+    // metod HER ZAMAN LoadPeriodTotalsBatchAsync'i MaxHistoryLookbackDays
+    // (730 gün) sınırıyla çağırıp, ardından cursor'ı geriye doğru gezerek
+    // (while döngüsü) sadece lookbackPeriods kadarını sayıyordu — yani
+    // kullanıcı "son 30 gün" istese bile SQL'den 730 günlük tüm veri
+    // çekiliyor, filtreleme sadece bellekte yapılıyordu. Artık istenen
+    // lookbackPeriods'a göre yaklaşık bir üst sınır hesaplanıp, DB'den
+    // MaxHistoryLookbackDays ile bu ikisinin DAHA SIKI (daha kısıtlayıcı)
+    // olanı kadar veri çekiliyor. lookbackPeriods küçükse (örn. 30) çekilen
+    // veri hacmi önemli ölçüde azalır; lookbackPeriods büyükse
+    // (MaxHistoryLookbackDays'i aşıyorsa) davranış öncekiyle birebir aynı
+    // kalır (mevcut sınır zaten daha sıkı).
     public async Task<List<HabitComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Habit> habits,
         string? timeZoneId,
@@ -64,7 +79,8 @@ public class HabitProgressService
             return results;
         }
 
-        var totalsByHabit = await LoadPeriodTotalsForHabitsAsync(habits, tz, cancellationToken);
+        var effectiveCutoffUtc = ComputeEffectiveCutoffUtc(habits, lookbackPeriods, now);
+        var totalsByHabit = await LoadPeriodTotalsForHabitsAsync(habits, tz, cancellationToken, effectiveCutoffUtc);
 
         foreach (var habit in habits)
         {
@@ -98,6 +114,11 @@ public class HabitProgressService
                 ? 0
                 : Math.Min(100, (double)totalInCurrentPeriod / habit.DailyGoal * 100);
 
+            // YENİ (🔵): habit'in oluşturulma tarihi, bu sorgu için kullanılan
+            // etkin cutoff'tan öncesindeyse, gerçek geçmişin bir kısmı hiç
+            // okunmadı demektir — completion rate düşük görünüyor olabilir.
+            var truncated = createdAtUtc < effectiveCutoffUtc;
+
             results.Add(new HabitComparisonDto
             {
                 HabitId = habit.Id,
@@ -105,7 +126,8 @@ public class HabitProgressService
                 Category = habit.Category,
                 CurrentStreak = CountStreak(habit, totals, currentPeriodStart, tz),
                 CompletionRatePercent = Math.Round(completionRate, 1),
-                PercentageCompletedThisPeriod = Math.Round(percentageThisPeriod, 1)
+                PercentageCompletedThisPeriod = Math.Round(percentageThisPeriod, 1),
+                HistoryTruncated = truncated
             });
         }
 
@@ -193,15 +215,6 @@ public class HabitProgressService
         return totals.TryGetValue(periodStartLocal, out var total) && total >= habit.DailyGoal;
     }
 
-    // DÜZELTİLDİ (🔴 madde 1 — sınırsız geçmiş yükleme): Önceden bu metod
-    // habitId'ye ait TÜM completion geçmişini (tarih filtresi olmadan)
-    // çekiyordu. Artık AppLimits:MaxHistoryLookbackDays (varsayılan 730 gün)
-    // öncesine ait satırlar SQL seviyesinde filtreleniyor — hem çekilen
-    // veri hacmi hem de bellek içi bucketing maliyeti sabit bir üst sınıra
-    // bağlanmış oluyor. Bu metod GetProgressAsync, GetSummaryAsync,
-    // GetComparisonAsync, GetStatsAsync ve ReminderBackgroundService (HER
-    // DAKİKA çalışıyor) tarafından ortak kullanıldığı için en çok kazanç
-    // sağlayan yer burası.
     public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int habitId,
         HabitPeriod period,
@@ -209,7 +222,18 @@ public class HabitProgressService
         CancellationToken cancellationToken = default)
     {
         var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+        return await LoadPeriodTotalsAsync(habitId, period, tz, cutoffUtc, cancellationToken);
+    }
 
+    // YENİ: cutoff'u dışarıdan alabilen overload; GetComparisonAsync gibi
+    // daha dar bir aralık isteyen çağıranlar bunu kullanır.
+    private async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
+        int habitId,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        DateTime cutoffUtc,
+        CancellationToken cancellationToken)
+    {
         var rows = await _context.HabitCompletions
             .AsNoTracking()
             .Where(c => c.HabitId == habitId && c.CompletionDate >= cutoffUtc)
@@ -228,13 +252,23 @@ public class HabitProgressService
         return result;
     }
 
-    // DÜZELTİLDİ (🔴 madde 1): aynı MaxHistoryLookbackDays sınırı toplu
-    // (batch) sorguya da uygulandı.
     public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
         IReadOnlyList<int> habitIds,
         HabitPeriod period,
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
+    {
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+        return await LoadPeriodTotalsBatchAsync(habitIds, period, tz, cutoffUtc, cancellationToken);
+    }
+
+    // YENİ: cutoff'u dışarıdan alabilen overload.
+    private async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
+        IReadOnlyList<int> habitIds,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        DateTime cutoffUtc,
+        CancellationToken cancellationToken)
     {
         var result = habitIds.ToDictionary(id => id, _ => new Dictionary<DateTime, int>());
         if (habitIds.Count == 0)
@@ -242,7 +276,6 @@ public class HabitProgressService
             return result;
         }
 
-        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
         var idsArray = habitIds.ToArray();
         var rows = await _context.HabitCompletions
             .AsNoTracking()
@@ -270,14 +303,17 @@ public class HabitProgressService
     private async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsForHabitsAsync(
         IReadOnlyList<Habit> habits,
         TimeZoneInfo tz,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTime? cutoffUtcOverride = null)
     {
         var result = new Dictionary<int, Dictionary<DateTime, int>>();
 
         foreach (var group in habits.GroupBy(h => h.Period))
         {
             var habitIds = group.Select(h => h.Id).ToArray();
-            var batch = await LoadPeriodTotalsBatchAsync(habitIds, group.Key, tz, cancellationToken);
+            var batch = cutoffUtcOverride.HasValue
+                ? await LoadPeriodTotalsBatchAsync(habitIds, group.Key, tz, cutoffUtcOverride.Value, cancellationToken)
+                : await LoadPeriodTotalsBatchAsync(habitIds, group.Key, tz, cancellationToken);
             foreach (var kv in batch)
             {
                 result[kv.Key] = kv.Value;
@@ -287,10 +323,45 @@ public class HabitProgressService
         return result;
     }
 
-    // NOT (madde 1): RecalculateHabitAsync BİLİNÇLİ OLARAK
-    // LoadPeriodTotalsAsync/LoadPeriodTotalsBatchAsync KULLANMIYOR — kendi
-    // sorgusuyla TÜM geçmişi okuyor. XP'yi doğru yeniden hesaplamak için bu
-    // şart; MaxHistoryLookbackDays sınırı burada uygulanmıyor.
+    // YENİ (🔴 madde 2 yardımcı metodu): lookbackPeriods ve habit'lerin
+    // period tiplerine göre yaklaşık bir "bu kadar günden eskisi gerekmiyor"
+    // tarihi hesaplar. En kısıtlayıcı (en uzun) period tipi baz alınır
+    // (Monthly ~31 gün) — bu sayede tüm habit'ler için güvenle tek bir
+    // cutoff kullanılabilir. Sonuç, mevcut MaxHistoryLookbackDays cutoff'u
+    // ile karşılaştırılıp İKİSİNDEN DAHA YAKIN (daha az veri çeken) olan
+    // seçilir; MaxHistoryLookbackDays sınırı hiçbir zaman aşılmaz.
+    private DateTime ComputeEffectiveCutoffUtc(IReadOnlyList<Habit> habits, int lookbackPeriods, DateTime now)
+    {
+        var maxPeriod = habits.Max(h => h.Period);
+        var approxDaysPerPeriod = maxPeriod switch
+        {
+            HabitPeriod.Monthly => 31,
+            HabitPeriod.Weekly => 7,
+            _ => 1
+        };
+
+        // +2 pay: hafta/ay başlangıcı yuvarlamalarından kaynaklanabilecek
+        // sınır hatalarına karşı küçük bir tolerans.
+        var lookbackBasedCutoff = now.AddDays(-((long)approxDaysPerPeriod * lookbackPeriods + 2));
+        var hardCutoff = now.AddDays(-_maxHistoryLookbackDays);
+
+        // İki cutoff'tan DAHA GEÇ (yani daha az veri çeken, daha kısıtlayıcı)
+        // olanı kullanılır.
+        return lookbackBasedCutoff > hardCutoff ? lookbackBasedCutoff : hardCutoff;
+    }
+
+    // YENİ (🔵): Habit'in oluşturulma tarihi genel MaxHistoryLookbackDays
+    // sınırından daha eskiyse, LoadPeriodTotalsAsync tarafından okunan
+    // veri o habit'in tüm geçmişini kapsamıyor demektir.
+    private bool IsHistoryTruncated(DateTime habitCreatedAtUtc)
+    {
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+        var createdAtUtc = habitCreatedAtUtc.Kind == DateTimeKind.Utc
+            ? habitCreatedAtUtc
+            : DateTime.SpecifyKind(habitCreatedAtUtc, DateTimeKind.Utc);
+        return createdAtUtc < cutoffUtc;
+    }
+
     public async Task<HabitRecalculationResult> RecalculateHabitAsync(
         Habit habit,
         string? timeZoneId,
@@ -355,7 +426,8 @@ public class HabitProgressService
         Habit habit,
         TimeZoneInfo tz,
         IReadOnlyDictionary<DateTime, int> totals,
-        DateTime utcNow)
+        DateTime utcNow,
+        bool historyTruncated)
     {
         var periodStart = HabitSchedule.PeriodStartLocal(utcNow, habit.Period, tz);
         var periodEnd = HabitSchedule.NextPeriodStartLocal(periodStart, habit.Period);
@@ -374,7 +446,8 @@ public class HabitProgressService
             CurrentStreak = CountStreak(habit, totals, periodStart, tz),
             Period = habit.Period,
             PeriodStart = periodStart,
-            PeriodEnd = periodEnd
+            PeriodEnd = periodEnd,
+            HistoryTruncated = historyTruncated
         };
     }
 

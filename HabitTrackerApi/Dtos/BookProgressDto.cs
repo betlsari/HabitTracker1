@@ -1,3 +1,4 @@
+// HabitTrackerApi/Dtos/BookProgressDto.cs
 namespace Dtos;
 
 public class BookProgressDto
@@ -22,4 +23,7 @@ public class BookProgressDto
     public DateTime PeriodStart { get; set; }
 
     public DateTime PeriodEnd { get; set; }
+
+    
+    public bool HistoryTruncated { get; set; }
 }

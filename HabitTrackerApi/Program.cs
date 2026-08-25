@@ -23,6 +23,10 @@ using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>(optional: true);
+}
 
 // Sentry is optional; an empty DSN keeps local and test environments disabled.
 builder.WebHost.UseSentry();

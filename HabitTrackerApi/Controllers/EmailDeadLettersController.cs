@@ -1,13 +1,17 @@
+// HabitTrackerApi/Controllers/EmailDeadLettersController.cs
 using Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Models;
 using Services;
+using Asp.Versioning;
 
 namespace Controllers;
 
+
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/admin/email-dead-letters")]
 [Authorize]
 public sealed class EmailDeadLettersController : ControllerBase

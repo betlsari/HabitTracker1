@@ -1,3 +1,4 @@
+// HabitTrackerApi/Dtos/HabitProgressDto.cs
 using Models;
 
 namespace Dtos;
@@ -23,4 +24,7 @@ public class HabitProgressDto
     public DateTime PeriodStart { get; set; }
 
     public DateTime PeriodEnd { get; set; }
+
+  
+    public bool HistoryTruncated { get; set; }
 }

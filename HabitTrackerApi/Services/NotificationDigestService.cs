@@ -1,3 +1,4 @@
+// HabitTrackerApi/Services/NotificationDigestService.cs
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Models;
@@ -17,12 +18,20 @@ public sealed class NotificationDigestService
 
     public async Task ProcessAsync(DateTime utcNow, CancellationToken cancellationToken)
     {
+        // DÜZELTİLDİ (🟠 N+1): Önceden ilk sorgu zaten Users ile join yapıp
+        // TimeZoneId'yi ÇEKMİYORDU (sadece Email alıyordu), sonra döngü
+        // içinde HER kullanıcı için AYRI bir _context.Users sorgusu atılarak
+        // TimeZoneId tekrar okunuyordu. Artık TimeZoneId de ilk join'e dahil
+        // edildi; döngü içindeki ikinci sorgu tamamen kaldırıldı. Bu servis
+        // her dakika tetiklendiği için (NotificationDigestBackgroundService)
+        // kullanıcı sayısı arttıkça bu N+1 giderek pahalılaşıyordu.
         var users = await _context.NotificationPreferences.AsNoTracking()
             .Where(p => p.DigestEnabled)
             .Join(_context.Users, p => p.UserId, u => u.Id, (p, u) => new
             {
                 p.UserId,
                 u.Email,
+                u.TimeZoneId,
                 p.DigestHourUtc,
                 p.QuietHoursStart,
                 p.QuietHoursEnd
@@ -42,13 +51,9 @@ public sealed class NotificationDigestService
                 continue;
             }
 
-            // Quiet hours defer the digest; notifications remain in the digest
-            // and are sent on the next worker tick after quiet hours end.
-            var timeZoneId = await _context.Users.AsNoTracking()
-                .Where(u => u.Id == user.UserId)
-                .Select(u => u.TimeZoneId)
-                .FirstOrDefaultAsync(cancellationToken);
-            var localNow = TimeZones.ToLocal(utcNow, TimeZones.Resolve(timeZoneId));
+            // DÜZELTİLDİ: Ayrı sorgu yerine yukarıdaki join'den gelen
+            // user.TimeZoneId kullanılıyor.
+            var localNow = TimeZones.ToLocal(utcNow, TimeZones.Resolve(user.TimeZoneId));
             if (IsWithinQuietHours(localNow, user.QuietHoursStart, user.QuietHoursEnd))
             {
                 continue;
@@ -91,7 +96,6 @@ public sealed class NotificationDigestService
             }
         }
     }
-
 
     private static bool IsWithinQuietHours(DateTime localNow, TimeOnly? start, TimeOnly? end)
     {

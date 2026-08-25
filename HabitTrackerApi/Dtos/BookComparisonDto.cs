@@ -7,8 +7,10 @@ public class BookComparisonDto
 
     public int CurrentStreak { get; set; }
 
-    
     public double CompletionRatePercent { get; set; }
 
     public int Rank { get; set; }
+
+    
+    public bool HistoryTruncated { get; set; }
 }

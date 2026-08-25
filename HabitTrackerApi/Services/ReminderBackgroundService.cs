@@ -1,3 +1,4 @@
+// HabitTrackerApi/Services/ReminderBackgroundService.cs
 using Configuration;
 using Data;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,20 @@ public sealed class ReminderBackgroundService : BackgroundService
 
 public sealed class ReminderService
 {
+    // DÜZELTİLDİ (🔴 madde 1 — sınırsız bellek yükleme): Önceden ProcessAsync
+    // TÜM arşivlenmemiş habit'leri + book'ları + 93 günlük TÜM
+    // completion/reading-log kayıtlarını tek seferde belleğe çekiyordu. Bu
+    // servis HER DAKİKA çalıştığı için kullanıcı/habit sayısı arttıkça bu,
+    // sistemin en pahalı periyodik işi haline geliyordu (hem DB'den transfer
+    // edilen veri hacmi hem de bellek kullanımı sınırsız büyüyordu).
+    //
+    // Artık habit'ler ve book'lar BatchSize (300) büyüklüğünde sayfalar
+    // halinde, Id'ye göre keyset pagination ile işleniyor. Her sayfa için
+    // SADECE o sayfadaki habit/book Id'lerine ait 93 günlük aktivite
+    // çekiliyor — böylece bellekte aynı anda en fazla ~300 habit/book +
+    // onlara ait aktivite kayıtları tutuluyor, tüm tablo değil.
+    private const int BatchSize = 300;
+
     private readonly AppDbContext _context;
     private readonly NotificationService _notifications;
     private readonly int _missedHour;
@@ -56,34 +71,85 @@ public sealed class ReminderService
 
     public async Task ProcessAsync(DateTime utcNow, CancellationToken cancellationToken = default)
     {
-        var habits = await _context.Habits.AsNoTracking().Where(h => !h.IsArchived).ToListAsync(cancellationToken);
-        var books = await _context.Books.AsNoTracking().Where(b => !b.IsArchived).ToListAsync(cancellationToken);
-        var userIds = habits.Select(h => h.UserId).Concat(books.Select(b => b.UserId)).Distinct().ToArray();
-        var timeZones = await _context.Users.AsNoTracking()
-            .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.TimeZoneId, cancellationToken);
-        var habitIds = habits.Select(h => h.Id).ToArray();
-        var bookIds = books.Select(b => b.Id).ToArray();
         var activitySinceUtc = utcNow.AddDays(-93);
-        var habitAmounts = (await _context.HabitCompletions.AsNoTracking()
-            .Where(c => habitIds.Contains(c.HabitId) && c.CompletionDate >= activitySinceUtc)
-            .Select(c => new ActivityAmount(c.HabitId, c.CompletionDate, c.Amount))
-            .ToListAsync(cancellationToken)).ToLookup(x => x.Id);
-        var bookAmounts = (await _context.BookReadingLogs.AsNoTracking()
-            .Where(l => bookIds.Contains(l.BookId) && l.ReadDate >= activitySinceUtc)
-            .Select(l => new ActivityAmount(l.BookId, l.ReadDate, l.Amount))
-            .ToListAsync(cancellationToken)).ToLookup(x => x.Id);
 
-        foreach (var habit in habits)
+        await ProcessHabitsInBatchesAsync(utcNow, activitySinceUtc, cancellationToken);
+        await ProcessBooksInBatchesAsync(utcNow, activitySinceUtc, cancellationToken);
+    }
+
+    private async Task ProcessHabitsInBatchesAsync(DateTime utcNow, DateTime activitySinceUtc, CancellationToken cancellationToken)
+    {
+        var lastId = 0;
+
+        while (true)
         {
-            timeZones.TryGetValue(habit.UserId, out var timeZoneId);
-            await ProcessHabitAsync(habit, utcNow, timeZoneId, habitAmounts[habit.Id], cancellationToken);
+            var habitBatch = await _context.Habits.AsNoTracking()
+                .Where(h => !h.IsArchived && h.Id > lastId)
+                .OrderBy(h => h.Id)
+                .Take(BatchSize)
+                .ToListAsync(cancellationToken);
+
+            if (habitBatch.Count == 0)
+            {
+                break;
+            }
+
+            lastId = habitBatch[^1].Id;
+
+            var userIds = habitBatch.Select(h => h.UserId).Distinct().ToArray();
+            var timeZones = await _context.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.TimeZoneId, cancellationToken);
+
+            var habitIds = habitBatch.Select(h => h.Id).ToArray();
+            var habitAmounts = (await _context.HabitCompletions.AsNoTracking()
+                .Where(c => habitIds.Contains(c.HabitId) && c.CompletionDate >= activitySinceUtc)
+                .Select(c => new ActivityAmount(c.HabitId, c.CompletionDate, c.Amount))
+                .ToListAsync(cancellationToken)).ToLookup(x => x.Id);
+
+            foreach (var habit in habitBatch)
+            {
+                timeZones.TryGetValue(habit.UserId, out var timeZoneId);
+                await ProcessHabitAsync(habit, utcNow, timeZoneId, habitAmounts[habit.Id], cancellationToken);
+            }
         }
+    }
 
-        foreach (var book in books)
+    private async Task ProcessBooksInBatchesAsync(DateTime utcNow, DateTime activitySinceUtc, CancellationToken cancellationToken)
+    {
+        var lastId = 0;
+
+        while (true)
         {
-            timeZones.TryGetValue(book.UserId, out var timeZoneId);
-            await ProcessBookAsync(book, utcNow, timeZoneId, bookAmounts[book.Id], cancellationToken);
+            var bookBatch = await _context.Books.AsNoTracking()
+                .Where(b => !b.IsArchived && b.Id > lastId)
+                .OrderBy(b => b.Id)
+                .Take(BatchSize)
+                .ToListAsync(cancellationToken);
+
+            if (bookBatch.Count == 0)
+            {
+                break;
+            }
+
+            lastId = bookBatch[^1].Id;
+
+            var userIds = bookBatch.Select(b => b.UserId).Distinct().ToArray();
+            var timeZones = await _context.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.TimeZoneId, cancellationToken);
+
+            var bookIds = bookBatch.Select(b => b.Id).ToArray();
+            var bookAmounts = (await _context.BookReadingLogs.AsNoTracking()
+                .Where(l => bookIds.Contains(l.BookId) && l.ReadDate >= activitySinceUtc)
+                .Select(l => new ActivityAmount(l.BookId, l.ReadDate, l.Amount))
+                .ToListAsync(cancellationToken)).ToLookup(x => x.Id);
+
+            foreach (var book in bookBatch)
+            {
+                timeZones.TryGetValue(book.UserId, out var timeZoneId);
+                await ProcessBookAsync(book, utcNow, timeZoneId, bookAmounts[book.Id], cancellationToken);
+            }
         }
     }
 

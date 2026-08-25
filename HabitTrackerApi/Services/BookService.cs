@@ -42,6 +42,7 @@ public class BookService
         _context = context;
         _maxHistoryLookbackDays = limits.Value.MaxHistoryLookbackDays;
     }
+
     public async Task<BookLogResult> AddReadingLogAsync(
         Book book,
         LogReadingDto dto,
@@ -238,6 +239,10 @@ public class BookService
         return newTotalXp - oldTotalXp;
     }
 
+    // DÜZELTİLDİ (🔵 madde 6 — sessiz veri kırpma sinyali): HistoryTruncated
+    // artık DTO'ya set ediliyor. Book, AppLimits:MaxHistoryLookbackDays
+    // sınırından daha eski bir tarihte oluşturulmuşsa, LoadPeriodTotalsAsync
+    // tarafından okunan geçmiş book'un tüm geçmişini kapsamıyor demektir.
     public async Task<BookProgressDto> GetProgressAsync(Book book, string? timeZoneId, CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -250,6 +255,11 @@ public class BookService
         var periodAmount = totals.TryGetValue(periodStart, out var amount) ? amount : 0;
         var isGoalReached = book.DailyGoalAmount > 0 && periodAmount >= book.DailyGoalAmount;
         var percentage = book.DailyGoalAmount == 0 ? 0 : Math.Min(100, (double)periodAmount / book.DailyGoalAmount * 100);
+
+        var cutoffUtc = now.AddDays(-_maxHistoryLookbackDays);
+        var createdAtUtc = book.CreatedAt.Kind == DateTimeKind.Utc
+            ? book.CreatedAt
+            : DateTime.SpecifyKind(book.CreatedAt, DateTimeKind.Utc);
 
         return new BookProgressDto
         {
@@ -264,7 +274,8 @@ public class BookService
                 ? Math.Min(100, (double)book.CurrentPage / book.TotalPages.Value * 100)
                 : null,
             PeriodStart = periodStart,
-            PeriodEnd = periodEnd
+            PeriodEnd = periodEnd,
+            HistoryTruncated = createdAtUtc < cutoffUtc
         };
     }
 
@@ -297,6 +308,22 @@ public class BookService
         return stats;
     }
 
+    // DÜZELTİLDİ (🔴 madde 2 — bellekte lookback filtreleme): Önceden bu
+    // metod HER ZAMAN LoadPeriodTotalsBatchAsync'i MaxHistoryLookbackDays
+    // (730 gün varsayılan) sınırıyla çağırıp, ardından cursor'ı geriye doğru
+    // gezerek (while döngüsü) sadece lookbackDays kadarını sayıyordu — yani
+    // kullanıcı "son 30 gün" istese bile SQL'den tüm MaxHistoryLookbackDays
+    // penceresi çekiliyor, gerçek filtreleme sadece bellekte yapılıyordu.
+    // Artık istenen lookbackDays'e göre yaklaşık bir üst sınır hesaplanıp,
+    // DB'den MaxHistoryLookbackDays ile bu ikisinin DAHA SIKI (daha az veri
+    // çeken) olanı kadar veri çekiliyor. lookbackDays küçükse çekilen veri
+    // hacmi önemli ölçüde azalır; lookbackDays büyükse (MaxHistoryLookbackDays'i
+    // aşıyorsa) davranış öncekiyle birebir aynı kalır.
+    //
+    // YENİ (🔵 madde 6): Her book için HistoryTruncated artık, book'un
+    // oluşturulma tarihinin bu sorgu için kullanılan etkin cutoff'tan önce
+    // olup olmadığına göre işaretleniyor — cutoff öncesi günler sessizce 0
+    // sayıldığından completion rate gerçek olandan düşük görünebilir.
     public async Task<List<BookComparisonDto>> GetComparisonAsync(
         IReadOnlyList<Book> books,
         string? timeZoneId,
@@ -304,6 +331,7 @@ public class BookService
         CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
+        var now = DateTime.UtcNow;
         var results = new List<BookComparisonDto>(books.Count);
 
         if (books.Count == 0)
@@ -311,11 +339,13 @@ public class BookService
             return results;
         }
 
+        var effectiveCutoffUtc = ComputeEffectiveCutoffUtc(books, lookbackDays, now);
+
         var totalsByBook = new Dictionary<int, Dictionary<DateTime, int>>();
         foreach (var group in books.GroupBy(b => b.Period))
         {
             var bookIds = group.Select(b => b.Id).ToArray();
-            var batch = await LoadPeriodTotalsBatchAsync(bookIds, group.Key, tz, cancellationToken);
+            var batch = await LoadPeriodTotalsBatchAsync(bookIds, group.Key, tz, effectiveCutoffUtc, cancellationToken);
             foreach (var kv in batch)
             {
                 totalsByBook[kv.Key] = kv.Value;
@@ -349,12 +379,15 @@ public class BookService
 
             var completionRate = periodsConsidered == 0 ? 0 : (double)periodsGoalMet / periodsConsidered * 100;
 
+            var truncated = createdLocal < effectiveCutoffUtc;
+
             results.Add(new BookComparisonDto
             {
                 BookId = book.Id,
                 Title = book.Title,
                 CurrentStreak = CountStreakFromTotals(totals, bookToday, book.DailyGoalAmount, book.CreatedAt, book.Period, tz),
-                CompletionRatePercent = Math.Round(completionRate, 1)
+                CompletionRatePercent = Math.Round(completionRate, 1),
+                HistoryTruncated = truncated
             });
         }
 
@@ -373,7 +406,8 @@ public class BookService
 
     // DÜZELTİLDİ (🔴 madde 1): MaxHistoryLookbackDays sınırı eklendi (bkz.
     // HabitProgressService.LoadPeriodTotalsAsync üzerindeki açıklama — aynı
-    // gerekçe/desen burada da geçerli).
+    // gerekçe/desen burada da geçerli). Artık genel MaxHistoryLookbackDays
+    // cutoff'unu hesaplayıp private overload'a devrediyor.
     public async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
         int bookId,
         HabitPeriod period,
@@ -381,7 +415,19 @@ public class BookService
         CancellationToken cancellationToken = default)
     {
         var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+        return await LoadPeriodTotalsAsync(bookId, period, tz, cutoffUtc, cancellationToken);
+    }
 
+    // YENİ (🔴 madde 2): cutoff'u dışarıdan alabilen overload. GetComparisonAsync
+    // gibi daha dar bir aralık isteyen çağıranlar bunu kullanır, böylece
+    // MaxHistoryLookbackDays'ten daha az veri SQL'den çekilebilir.
+    private async Task<Dictionary<DateTime, int>> LoadPeriodTotalsAsync(
+        int bookId,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        DateTime cutoffUtc,
+        CancellationToken cancellationToken)
+    {
         var rows = await _context.BookReadingLogs
             .AsNoTracking()
             .Where(l => l.BookId == bookId && l.ReadDate >= cutoffUtc)
@@ -400,12 +446,26 @@ public class BookService
         return result;
     }
 
-    // DÜZELTİLDİ (🔴 madde 1): MaxHistoryLookbackDays sınırı eklendi.
+    // DÜZELTİLDİ (🔴 madde 1): MaxHistoryLookbackDays sınırı eklendi. Artık
+    // genel cutoff'u hesaplayıp private overload'a devrediyor.
     public async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
         IReadOnlyList<int> bookIds,
         HabitPeriod period,
         TimeZoneInfo tz,
         CancellationToken cancellationToken = default)
+    {
+        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
+        return await LoadPeriodTotalsBatchAsync(bookIds, period, tz, cutoffUtc, cancellationToken);
+    }
+
+    // YENİ (🔴 madde 2): cutoff'u dışarıdan alabilen overload; GetComparisonAsync
+    // bunu daha dar (lookbackDays'e göre hesaplanmış) bir cutoff ile çağırır.
+    private async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadPeriodTotalsBatchAsync(
+        IReadOnlyList<int> bookIds,
+        HabitPeriod period,
+        TimeZoneInfo tz,
+        DateTime cutoffUtc,
+        CancellationToken cancellationToken)
     {
         var result = bookIds.ToDictionary(id => id, _ => new Dictionary<DateTime, int>());
         if (bookIds.Count == 0)
@@ -413,7 +473,6 @@ public class BookService
             return result;
         }
 
-        var cutoffUtc = DateTime.UtcNow.AddDays(-_maxHistoryLookbackDays);
         var idsArray = bookIds.ToArray();
         var rows = await _context.BookReadingLogs
             .AsNoTracking()
@@ -442,6 +501,33 @@ public class BookService
     {
         var totals = await LoadPeriodTotalsAsync(book.Id, book.Period, tz, cancellationToken);
         return CountStreakFromTotals(totals, fromPeriodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz);
+    }
+
+    // YENİ (🔴 madde 2 yardımcı metodu): lookbackDays ve book'ların period
+    // tiplerine göre yaklaşık bir "bu kadar günden eskisi gerekmiyor" tarihi
+    // hesaplar. En kısıtlayıcı (en uzun) period tipi baz alınır (Monthly ~31
+    // gün) — bu sayede farklı period'lardaki tüm book'lar için güvenle tek
+    // bir cutoff kullanılabilir. Sonuç, mevcut MaxHistoryLookbackDays
+    // cutoff'u ile karşılaştırılıp İKİSİNDEN DAHA YAKIN (daha az veri çeken)
+    // olan seçilir; MaxHistoryLookbackDays sınırı hiçbir zaman aşılmaz.
+    private DateTime ComputeEffectiveCutoffUtc(IReadOnlyList<Book> books, int lookbackDays, DateTime now)
+    {
+        var maxPeriod = books.Max(b => b.Period);
+        var approxDaysPerPeriod = maxPeriod switch
+        {
+            HabitPeriod.Monthly => 31,
+            HabitPeriod.Weekly => 7,
+            _ => 1
+        };
+
+        // +2 pay: hafta/ay başlangıcı yuvarlamalarından kaynaklanabilecek
+        // sınır hatalarına karşı küçük bir tolerans.
+        var lookbackBasedCutoff = now.AddDays(-((long)approxDaysPerPeriod * lookbackDays + 2));
+        var hardCutoff = now.AddDays(-_maxHistoryLookbackDays);
+
+        // İki cutoff'tan DAHA GEÇ (yani daha az veri çeken, daha kısıtlayıcı)
+        // olanı kullanılır.
+        return lookbackBasedCutoff > hardCutoff ? lookbackBasedCutoff : hardCutoff;
     }
 
     public static int CountStreakFromTotals(

@@ -1,6 +1,8 @@
+
 namespace Models;
 
-public class EmailDeadLetter
+
+public class EmailDeadLetter : IHasConcurrencyToken
 {
     public long Id { get; set; }
     public long? OriginalOutboxId { get; set; }
@@ -11,4 +13,6 @@ public class EmailDeadLetter
     public string? LastError { get; set; }
     public DateTime FailedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
+
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }
