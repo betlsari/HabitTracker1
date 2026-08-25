@@ -13,7 +13,6 @@ using System.Text.Json.Serialization;
 using System.Security.Claims;
 using Configuration;
 using Microsoft.AspNetCore.HttpLogging;
-using Asp.Versioning;
 using Serilog;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -83,22 +82,6 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-
-builder.Services.AddApiVersioning(options =>
-{
-    options.DefaultApiVersion = new ApiVersion(1, 0);
-    options.AssumeDefaultVersionWhenUnspecified = true;
-    options.ReportApiVersions = true;
-    options.ApiVersionReader = ApiVersionReader.Combine(
-        new UrlSegmentApiVersionReader(),
-        new HeaderApiVersionReader("X-Api-Version"));
-})
-.AddApiExplorer(options =>
-{
-    options.GroupNameFormat = "'v'VVV";
-    options.SubstituteApiVersionInUrl = true;
-});
-
 // Database Configuration
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
@@ -152,12 +135,6 @@ builder.Services.AddOptions<AppLimitsOptions>()
         "AppLimits:MaxHistoryLookbackDays 1 ile 3650 (10 yıl) gün arasında olmalıdır.")
     .ValidateOnStart();
 
-builder.Services.AddOptions<CaptchaOptions>()
-    .Bind(builder.Configuration.GetSection(CaptchaOptions.SectionName))
-    .ValidateOnStart();
-
-builder.Services.AddHttpClient<CaptchaVerifier>();
-
 // Production Validations
 if (builder.Environment.IsProduction())
 {
@@ -171,7 +148,7 @@ if (builder.Environment.IsProduction())
     if (string.IsNullOrWhiteSpace(redisConnectionString))
     {
         throw new InvalidOperationException(
-            "Production ortamında Redis:ConnectionString boş olamaz. SecurityStampCache ve dashboard cache için dağıtık bir cache gereklidir.");
+            "Production ortamında Redis:ConnectionString boş olamaz. DashboardCacheService için dağıtık bir cache gereklidir.");
     }
 
     var smtpHost = builder.Configuration["Email:SmtpHost"];
@@ -191,18 +168,6 @@ if (builder.Environment.IsProduction())
     {
         throw new InvalidOperationException(
             "Production ortamında HealthCheck:ApiKey boş olamaz. Aksi halde /health endpoint'i monitoring/load balancer dahil herkes için erişilemez hale gelir. Ortam değişkeni veya secret store üzerinden tanımlayın.");
-    }
-
-    // YENİ (🔴 ölçeklenebilirlik fail-fast): Production'da Redis
-    // zorunludur. Aksi halde birden fazla instance'ta SecurityStamp
-    // iptalleri (şifre değişimi, 2FA kapatma, hesap silme) tutarsız
-    // davranır — bu sessiz bir güvenlik açığıdır, bu yüzden başlangıçta
-    // gürültülü şekilde engelleniyor.
-    if (string.IsNullOrWhiteSpace(redisConnectionString))
-    {
-        throw new InvalidOperationException(
-            "Production ortamında Redis:ConnectionString boş olamaz. SecurityStampCache birden fazla instance arasında " +
-            "tutarlı çalışabilmek için dağıtık bir cache'e (Redis) ihtiyaç duyar.");
     }
 }
 
@@ -231,8 +196,8 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// Memory Cache (yerel, kısa ömürlü amaçlar için hâlâ kullanılabilir;
-// SecurityStampCache artık IDistributedCache üzerine kurulu)
+// Memory Cache (SecurityStampCache artık bunun üzerine kurulu; kısa ömürlü,
+// process-local bir cache olduğu için tek instance senaryosunda yeterlidir)
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SecurityStampCache>();
 
@@ -263,13 +228,6 @@ builder.Services.AddAuthentication(options =>
             if (principal == null)
             {
                 context.Fail("Geçersiz token.");
-                return;
-            }
-
-            var purpose = principal.FindFirstValue("purpose");
-            if (purpose == "2fa-pending")
-            {
-                context.Fail("Bu token sadece 2FA doğrulama akışında kullanılabilir.");
                 return;
             }
 
@@ -374,12 +332,6 @@ builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
 // Dependency Injection (Services)
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
 
-// DÜZELTİLDİ (🔴 kalıcılık): EmailQueue/RecalculationQueue artık singleton
-// in-memory Channel değil; her ikisi de AppDbContext kullandığı için Scoped
-// olarak kayıtlı. Aynı somut instance hem "yazma" (IEmailQueue/
-// IRecalculationQueue) hem "worker okuma" (IEmailOutboxProcessor/
-// IRecalculationOutboxProcessor) arayüzlerine map'leniyor — böylece aynı
-// HTTP isteği/scope içinde tek bir DbContext üzerinden çalışılır.
 builder.Services.AddScoped<EmailOutboxService>();
 builder.Services.AddScoped<IEmailQueue>(sp => sp.GetRequiredService<EmailOutboxService>());
 builder.Services.AddScoped<IEmailOutboxProcessor>(sp => sp.GetRequiredService<EmailOutboxService>());
@@ -391,7 +343,6 @@ builder.Services.AddScoped<IRecalculationOutboxProcessor>(sp => sp.GetRequiredSe
 builder.Services.AddScoped<DashboardCacheService>();
 
 builder.Services.AddScoped<TokenService>();
-builder.Services.AddScoped<AuthAuditService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<XpService>();
 builder.Services.AddScoped<HabitProgressService>();
@@ -409,17 +360,14 @@ builder.Services.AddScoped<PetMoodService>();
 builder.Services.AddScoped<BookService>();
 builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddScoped<PetCosmeticsService>();
-builder.Services.AddScoped<TwoFactorLockoutService>();
 builder.Services.AddScoped<UserDataExportService>();
 builder.Services.AddScoped<NotificationDigestService>();
 builder.Services.AddScoped<ReminderService>();
-builder.Services.AddScoped<TwoFactorFallbackCodeService>();
 
 // Hosted Services (Background Tasks)
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
-builder.Services.AddHostedService<AuthAuditCleanupService>();
 builder.Services.AddHostedService<ArchivedRecordsCleanupService>();
 builder.Services.AddHostedService<OutboxCleanupService>();
 builder.Services.AddHostedService<EmailSenderBackgroundService>();

@@ -8,34 +8,22 @@ using Microsoft.AspNetCore.Authorization;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
-using Asp.Versioning;
-
 using Filters;
 
 namespace Controllers;
 
 [ApiController]
-[ApiVersion("1.0")]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
-
 {
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
     private readonly TokenService _tokenService;
     private readonly EmailService _emailService;
-    private readonly AuthAuditService _authAudit;
-    private readonly ILogger<AuthController> _logger;
-
     private readonly AppDbContext _context;
-
-    // DÜZELTİLDİ: IEmailQueue artık DB destekli outbox'a yazıyor
-    // (bkz. Services/EmailOutboxService.cs); Enqueue -> EnqueueAsync.
     private readonly IEmailQueue _emailQueue;
-    private readonly TwoFactorLockoutService _twoFactorLockout;
     private readonly SecurityStampCache _securityStampCache;
-    private readonly CaptchaVerifier _captchaVerifier;
-    private readonly TwoFactorFallbackCodeService _twoFactorFallbackCodeService;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         UserManager<User> userManager,
@@ -43,12 +31,8 @@ public class AuthController : ControllerBase
         TokenService tokenService,
         EmailService emailService,
         IEmailQueue emailQueue,
-        AuthAuditService authAudit,
         AppDbContext context,
-        TwoFactorLockoutService twoFactorLockout,
         SecurityStampCache securityStampCache,
-        CaptchaVerifier captchaVerifier,
-        TwoFactorFallbackCodeService twoFactorFallbackCodeService,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -56,154 +40,9 @@ public class AuthController : ControllerBase
         _tokenService = tokenService;
         _emailService = emailService;
         _emailQueue = emailQueue;
-        _authAudit = authAudit;
         _context = context;
-        _twoFactorLockout = twoFactorLockout;
         _securityStampCache = securityStampCache;
-        _captchaVerifier = captchaVerifier;
-        _twoFactorFallbackCodeService = twoFactorFallbackCodeService;
         _logger = logger;
-    }
-
-    private Task<bool> ValidateCaptchaAsync(string? token) => _captchaVerifier.ValidateAsync(token);
-
-
-    [HttpPost("2fa/login")]
-    [EnableRateLimiting("AuthPolicy")]
-    public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
-    {
-        var (userId, tokenStamp) = _tokenService.ValidatePreAuthTokenAndGetUserId(dto.PreAuthToken);
-        if (userId == null)
-        {
-            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, detail: "invalid-preauth-token");
-            return Unauthorized("Oturum süresi dolmuş veya geçersiz. Lütfen tekrar giriş yapın.");
-        }
-
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user == null || !await _userManager.GetTwoFactorEnabledAsync(user))
-        {
-            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "two-factor-not-enabled");
-            return Unauthorized();
-        }
-
-        if (user.SecurityStamp != tokenStamp)
-        {
-            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "stale-preauth-token");
-            return Unauthorized("Oturumunuz güvenlik nedeniyle geçersiz kılındı. Lütfen tekrar giriş yapın.");
-        }
-
-        if (await _twoFactorLockout.IsLockedOutAsync(userId))
-        {
-            await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "2fa-locked-out");
-            return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
-        }
-
-        var codeValid = await _userManager.VerifyTwoFactorTokenAsync(
-            user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
-
-        if (!codeValid)
-        {
-            if (await _twoFactorFallbackCodeService.ValidateCodeAsync(user.Id, dto.Code))
-            {
-                await _twoFactorLockout.ResetAsync(userId);
-                var (fallbackAccessToken, fallbackRefreshToken) = await IssueTokensAsync(user);
-                await _authAudit.RecordAsync(HttpContext, "two-factor-login", true, user, detail: "email-fallback");
-                return Ok(new { Token = fallbackAccessToken, RefreshToken = fallbackRefreshToken });
-            }
-
-            var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
-            if (!recoveryValid.Succeeded)
-            {
-                await _twoFactorLockout.RecordFailureAsync(userId);
-                await _authAudit.RecordAsync(HttpContext, "two-factor-login", false, user, detail: "invalid-code");
-                return BadRequest("Doğrulama kodu hatalı.");
-            }
-        }
-
-        await _twoFactorLockout.ResetAsync(userId);
-        var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
-        await _authAudit.RecordAsync(HttpContext, "two-factor-login", true, user);
-        return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
-    }
-
-    [HttpPost("2fa/setup")]
-    [Authorize]
-    [EnableRateLimiting("AuthPolicy")]
-    public async Task<IActionResult> SetupTwoFactor(SetupTwoFactorDto dto)
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
-        if (!passwordResult.Succeeded)
-        {
-            if (passwordResult.IsLockedOut)
-            {
-                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
-            }
-            await _authAudit.RecordAsync(HttpContext, "two-factor-setup", false, user, detail: "invalid-password");
-            return BadRequest("Şifre hatalı.");
-        }
-
-        await _userManager.ResetAuthenticatorKeyAsync(user);
-        var unformattedKey = await _userManager.GetAuthenticatorKeyAsync(user);
-
-        const string issuer = "HabitTracker";
-        var label = user.Email ?? user.UserName ?? user.Id;
-        var authenticatorUri =
-            $"otpauth://totp/{Uri.EscapeDataString(issuer)}:{Uri.EscapeDataString(label)}" +
-            $"?secret={unformattedKey}&issuer={Uri.EscapeDataString(issuer)}&digits=6";
-
-        await _authAudit.RecordAsync(HttpContext, "two-factor-setup", true, user);
-
-        return Ok(new { SharedKey = unformattedKey, AuthenticatorUri = authenticatorUri });
-    }
-
-    [HttpPost("2fa/enable")]
-    [Authorize]
-    public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        if (user.TwoFactorEnabled)
-        {
-            return BadRequest("İki adımlı doğrulama zaten etkin.");
-        }
-
-        if (await _twoFactorLockout.IsLockedOutAsync(userId!))
-        {
-            return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
-        }
-
-        var isValid = await _userManager.VerifyTwoFactorTokenAsync(
-            user, TokenOptions.DefaultAuthenticatorProvider, dto.Code);
-        if (!isValid)
-        {
-            await _twoFactorLockout.RecordFailureAsync(userId!);
-            await _authAudit.RecordAsync(HttpContext, "two-factor-enable", false, user, detail: "invalid-code");
-            return BadRequest("Doğrulama kodu hatalı. Authenticator uygulamanızdaki güncel kodu girin.");
-        }
-
-        await _twoFactorLockout.ResetAsync(userId!);
-        await _userManager.SetTwoFactorEnabledAsync(user, true);
-        var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-
-        await _authAudit.RecordAsync(HttpContext, "two-factor-enable", true, user);
-
-        return Ok(new
-        {
-            message = "İki adımlı doğrulama etkinleştirildi. Kurtarma kodlarınızı güvenli bir yerde saklayın; her biri yalnızca bir kez kullanılabilir.",
-            recoveryCodes
-        });
     }
 
     [HttpPost("register")]
@@ -211,11 +50,6 @@ public class AuthController : ControllerBase
     [EmailRateLimit]
     public async Task<IActionResult> Register(RegisterDto registerDto)
     {
-        if (!await ValidateCaptchaAsync(registerDto.CaptchaToken))
-        {
-            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
-        }
-
         var user = new User
         {
             UserName = registerDto.Email,
@@ -246,101 +80,20 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Login(LoginDto loginDto)
     {
-        if (!await ValidateCaptchaAsync(loginDto.CaptchaToken))
-        {
-            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
-        }
-
         var user = await _userManager.FindByEmailAsync(loginDto.Email);
         if (user == null)
         {
-            await _authAudit.RecordAsync(HttpContext, "login", false, email: loginDto.Email, detail: "unknown-user");
             return Unauthorized();
         }
+
         var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
         if (!result.Succeeded)
         {
-            if (result.IsNotAllowed)
-            {
-                await _authAudit.RecordAsync(HttpContext, "login", false, user, detail: "email-not-confirmed");
-                return Unauthorized();
-            }
-            if (result.IsLockedOut)
-            {
-                await _authAudit.RecordAsync(HttpContext, "login-lockout", false, user, detail: "lockout");
-                return Unauthorized();
-            }
-            await _authAudit.RecordAsync(HttpContext, "login", false, user, detail: "invalid-password");
             return Unauthorized();
         }
 
-        if (await _userManager.GetTwoFactorEnabledAsync(user))
-        {
-            await _authAudit.RecordAsync(HttpContext, "login-password", true, user, detail: "two-factor-required");
-            var preAuthToken = _tokenService.GeneratePreAuthToken(user);
-            var emailFallbackCode = await _twoFactorFallbackCodeService.GenerateCodeAsync(user.Id);
-            await _emailQueue.EnqueueAsync(new EmailMessage(
-                user.Email!,
-                "2FA güvenlik kodu",
-                $"İki adımlı doğrulama için güvenlik kodunuz: {emailFallbackCode}. Bu kod 10 dakika boyunca geçerli olacaktır."));
-            return Ok(new
-            {
-                RequiresTwoFactor = true,
-                PreAuthToken = preAuthToken,
-                EmailFallbackSent = true
-            });
-        }
-
         var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
-        await _authAudit.RecordAsync(HttpContext, "login", true, user);
-        return Ok(new { RequiresTwoFactor = false, Token = accessToken, RefreshToken = refreshTokenValue });
-    }
-
-    [HttpGet("2fa/status")]
-    [Authorize]
-    public async Task<IActionResult> TwoFactorStatus()
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(new { Enabled = user.TwoFactorEnabled });
-    }
-
-    [HttpPost("2fa/disable")]
-    [Authorize]
-    [EnableRateLimiting("AuthPolicy")]
-    public async Task<IActionResult> DisableTwoFactor(DisableTwoFactorDto dto)
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
-        if (!passwordResult.Succeeded)
-        {
-            if (passwordResult.IsLockedOut)
-            {
-                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
-            }
-            await _authAudit.RecordAsync(HttpContext, "two-factor-disable", false, user, detail: "invalid-password");
-            return BadRequest("Şifre hatalı.");
-        }
-
-        await _userManager.SetTwoFactorEnabledAsync(user, false);
-        await _userManager.ResetAuthenticatorKeyAsync(user);
-
-        await RevokeAllRefreshTokensAsync(user.Id);
-
-        await _authAudit.RecordAsync(HttpContext, "two-factor-disable", true, user);
-
-        return Ok(new { message = "İki adımlı doğrulama devre dışı bırakıldı." });
+        return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
     [HttpPost("refresh")]
@@ -359,10 +112,7 @@ public class AuthController : ControllerBase
 
         if (storedToken.RevokedAt != null)
         {
-            var revokedCount = await RevokeAllRefreshTokensAsync(storedToken.UserId);
-            _logger.LogWarning(
-                "Refresh token reuse tespit edildi. UserId={UserId} RevokedTokenCount={RevokedCount}",
-                storedToken.UserId, revokedCount);
+            await RevokeAllRefreshTokensAsync(storedToken.UserId);
             return Unauthorized("Oturumunuz güvenlik nedeniyle sonlandırıldı. Lütfen tekrar giriş yapın.");
         }
 
@@ -420,84 +170,6 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Tüm oturumlar kapatıldı.", revokedCount });
     }
 
-    [HttpGet("sessions")]
-    [Authorize]
-    public async Task<ActionResult<IEnumerable<SessionDto>>> GetSessions()
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        return await _context.RefreshTokens.AsNoTracking()
-            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
-            .OrderByDescending(t => t.CreatedAt)
-            .Select(t => new SessionDto
-            {
-                Id = t.Id, CreatedAt = t.CreatedAt, ExpiresAt = t.ExpiresAt,
-                IpAddress = t.IpAddress, UserAgent = t.UserAgent
-            })
-            .ToListAsync();
-    }
-
-    [HttpDelete("sessions/{sessionId:int}")]
-    [Authorize]
-    public async Task<IActionResult> RevokeSession(int sessionId)
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var session = await _context.RefreshTokens
-            .FirstOrDefaultAsync(t => t.Id == sessionId && t.UserId == userId);
-        if (session == null)
-        {
-            return NotFound();
-        }
-
-        if (session.RevokedAt == null)
-        {
-            session.RevokedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-        }
-        return NoContent();
-    }
-
-    [HttpGet("audit-log")]
-    [Authorize]
-    public async Task<ActionResult<PagedResultDto<AuthAuditEventDto>>> GetAuditLog(int page = 1, int pageSize = 50)
-    {
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 200) pageSize = 50;
-
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var currentUser = await _userManager.FindByIdAsync(userId);
-        var email = currentUser?.Email;
-
-        var query = _context.AuthAuditEvents.AsNoTracking()
-            .Where(e => e.UserId == userId || (email != null && e.Email == email))
-            .OrderByDescending(e => e.CreatedAt);
-
-        var totalCount = await query.CountAsync();
-        var items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(e => new AuthAuditEventDto
-            {
-                Id = e.Id,
-                UserId = e.UserId,
-                Email = e.Email,
-                EventType = e.EventType,
-                Succeeded = e.Succeeded,
-                IpAddress = e.IpAddress,
-                UserAgent = e.UserAgent,
-                Detail = e.Detail,
-                CreatedAt = e.CreatedAt
-            })
-            .ToListAsync();
-
-        return new PagedResultDto<AuthAuditEventDto>
-        {
-            Items = items,
-            Page = page,
-            PageSize = pageSize,
-            TotalCount = totalCount
-        };
-    }
-
     [HttpPost("email-change")]
     [Authorize]
     [EnableRateLimiting("AuthPolicy")]
@@ -513,7 +185,6 @@ public class AuthController : ControllerBase
 
         var token = await _userManager.GenerateChangeEmailTokenAsync(user, dto.NewEmail);
         await _emailService.SendEmailAsync(dto.NewEmail, "Email değişikliği", $"Onay kodunuz: {token}");
-        await _authAudit.RecordAsync(HttpContext, "email-change-request", true, user, detail: dto.NewEmail);
         return Ok("Onay kodu yeni email adresinize gönderildi.");
     }
 
@@ -525,13 +196,11 @@ public class AuthController : ControllerBase
         if (user == null) return NotFound();
 
         var oldEmail = user.Email;
-
         var result = await _userManager.ChangeEmailAsync(user, dto.NewEmail, dto.Token);
         if (!result.Succeeded) return BadRequest(result.Errors);
 
         await _userManager.SetUserNameAsync(user, dto.NewEmail);
         await RevokeAllRefreshTokensAsync(user.Id);
-        await _authAudit.RecordAsync(HttpContext, "email-change-confirm", true, user, detail: dto.NewEmail);
 
         if (!string.IsNullOrWhiteSpace(oldEmail) &&
             !string.Equals(oldEmail, dto.NewEmail, StringComparison.OrdinalIgnoreCase))
@@ -539,8 +208,7 @@ public class AuthController : ControllerBase
             await _emailQueue.EnqueueAsync(new EmailMessage(
                 oldEmail,
                 "Hesap email adresiniz değiştirildi",
-                $"Hesabınızın email adresi '{dto.NewEmail}' olarak değiştirildi. " +
-                "Bu işlemi siz yapmadıysanız, lütfen derhal şifrenizi sıfırlayın ve bizimle iletişime geçin."));
+                $"Hesabınızın email adresi '{dto.NewEmail}' olarak değiştirildi. Bu işlemi siz yapmadıysanız, lütfen derhal şifrenizi sıfırlayın."));
         }
 
         return Ok("Email adresiniz güncellendi. Lütfen tekrar giriş yapın.");
@@ -550,15 +218,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ConfirmEmail(string email, string token)
     {
         var user = await _userManager.FindByEmailAsync(email);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
         var result = await _userManager.ConfirmEmailAsync(user, token);
-        if (!result.Succeeded)
-        {
-            return BadRequest(result.Errors);
-        }
+        if (!result.Succeeded) return BadRequest(result.Errors);
         return Ok("Email doğrulandı.");
     }
 
@@ -573,7 +235,6 @@ public class AuthController : ControllerBase
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
             await _emailQueue.EnqueueAsync(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         }
-
         return Ok("Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, yeni bir doğrulama kodu gönderildi.");
     }
 
@@ -582,11 +243,6 @@ public class AuthController : ControllerBase
     [EmailRateLimit]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
     {
-        if (!await ValidateCaptchaAsync(dto.CaptchaToken))
-        {
-            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
-        }
-
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
@@ -595,11 +251,9 @@ public class AuthController : ControllerBase
 
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
         await _emailQueue.EnqueueAsync(new EmailMessage(user.Email!, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}"));
-
         return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
     }
 
-       
     [HttpGet("me/export")]
     [Authorize]
     [EnableRateLimiting("AuthPolicy")]
@@ -607,10 +261,7 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
 
         var export = await exportService.ExportAsync(user);
         return Ok(export);
@@ -622,13 +273,9 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
 
         var (level, currentLevelXp, xpForNextLevel, progress) = UserLevelService.GetLevelProgress(user.TotalXp);
-
         return Ok(new UserLevelDto
         {
             TotalXp = user.TotalXp,
@@ -643,30 +290,21 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
     {
-        if (!await ValidateCaptchaAsync(dto.CaptchaToken))
-        {
-            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
-        }
-
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
-            await _authAudit.RecordAsync(HttpContext, "password-reset", false, email: dto.Email, detail: "unknown-user");
             return BadRequest("Kullanıcı bulunamadı.");
         }
         var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
         if (!result.Succeeded)
         {
-            await _authAudit.RecordAsync(HttpContext, "password-reset", false, user, detail: "invalid-token-or-password");
             return BadRequest(result.Errors);
         }
 
         await RevokeAllRefreshTokensAsync(user.Id);
         await _emailQueue.EnqueueAsync(new EmailMessage(
-            user.Email!,
-            "Şifreniz değiştirildi",
+            user.Email!, "Şifreniz değiştirildi",
             "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız derhal destek ekibiyle iletişime geçin."));
-        await _authAudit.RecordAsync(HttpContext, "password-reset", true, user);
 
         return Ok("Şifre başarıyla sıfırlandı.");
     }
@@ -678,10 +316,7 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
 
         var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
         if (!passwordResult.Succeeded)
@@ -690,24 +325,19 @@ public class AuthController : ControllerBase
             {
                 return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
             }
-
-            await _authAudit.RecordAsync(HttpContext, "password-change", false, user, detail: "invalid-current-password");
             return BadRequest("Mevcut şifre hatalı.");
         }
 
         var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
         if (!result.Succeeded)
         {
-            await _authAudit.RecordAsync(HttpContext, "password-change", false, user, detail: "invalid-current-password-or-policy");
             return BadRequest(result.Errors);
         }
 
         await RevokeAllRefreshTokensAsync(user.Id);
         await _emailQueue.EnqueueAsync(new EmailMessage(
-            user.Email!,
-            "Şifreniz değiştirildi",
+            user.Email!, "Şifreniz değiştirildi",
             "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız derhal destek ekibiyle iletişime geçin."));
-        await _authAudit.RecordAsync(HttpContext, "password-change", true, user);
 
         return Ok("Şifre başarıyla değiştirildi.");
     }
@@ -723,10 +353,7 @@ public class AuthController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
 
         user.TimeZoneId = dto.TimeZoneId;
         await _userManager.UpdateAsync(user);
@@ -739,11 +366,8 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
-        return Ok(new { user.Email, user.DisplayName, user.AvatarUrl, user.TotalXp, user.TimeZoneId, user.TwoFactorEnabled });
+        if (user == null) return NotFound();
+        return Ok(new { user.Email, user.DisplayName, user.AvatarUrl, user.TotalXp, user.TimeZoneId });
     }
 
     [HttpPut("me/profile")]
@@ -752,18 +376,12 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> UpdateProfile(UpdateProfileDto dto)
     {
         var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
 
         user.DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? null : dto.DisplayName.Trim();
         user.AvatarUrl = string.IsNullOrWhiteSpace(dto.AvatarUrl) ? null : dto.AvatarUrl.Trim();
         var result = await _userManager.UpdateAsync(user);
-        if (!result.Succeeded)
-        {
-            return BadRequest(result.Errors);
-        }
+        if (!result.Succeeded) return BadRequest(result.Errors);
 
         return Ok(new { user.Email, user.DisplayName, user.AvatarUrl, user.TotalXp, user.TimeZoneId });
     }
@@ -775,10 +393,7 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
-        if (user == null)
-        {
-            return NotFound();
-        }
+        if (user == null) return NotFound();
 
         var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
         if (!passwordResult.Succeeded)
@@ -787,54 +402,19 @@ public class AuthController : ControllerBase
             {
                 return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
             }
-            await _authAudit.RecordAsync(HttpContext, "account-delete", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
 
-        if (await _userManager.GetTwoFactorEnabledAsync(user))
+        var result = await _userManager.DeleteAsync(user);
+        if (!result.Succeeded)
         {
-            if (await _twoFactorLockout.IsLockedOutAsync(user.Id))
-            {
-                return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
-            }
-
-            var codeValid = !string.IsNullOrWhiteSpace(dto.TwoFactorCode) &&
-                await _userManager.VerifyTwoFactorTokenAsync(
-                    user, TokenOptions.DefaultAuthenticatorProvider, dto.TwoFactorCode);
-            if (!codeValid && !string.IsNullOrWhiteSpace(dto.TwoFactorCode))
-            {
-                var recoveryResult = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.TwoFactorCode);
-                codeValid = recoveryResult.Succeeded;
-            }
-
-            if (!codeValid)
-            {
-                await _twoFactorLockout.RecordFailureAsync(user.Id);
-                await _authAudit.RecordAsync(HttpContext, "account-delete", false, user, detail: "invalid-two-factor-code");
-                return BadRequest("Hesap silmek için geçerli bir 2FA kodu gereklidir.");
-            }
-
-            await _twoFactorLockout.ResetAsync(user.Id);
+            return BadRequest(result.Errors);
         }
 
-        await _authAudit.RecordAsync(HttpContext, "account-delete", true, user);
-
-       var result = await _userManager.DeleteAsync(user);
-if (!result.Succeeded)
-{
-    return BadRequest(result.Errors);
-}
-
-        // Audit events intentionally have no FK for forensics, so erase the
-        // user's historical PII explicitly as part of account deletion.
-        await _context.AuthAuditEvents
-            .Where(e => e.UserId == userId || e.Email == user.Email)
-            .ExecuteDeleteAsync();
-
-await _securityStampCache.InvalidateAsync(userId!);
-
+        await _securityStampCache.InvalidateAsync(userId!);
         return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }
+
     private async Task<(string AccessToken, string RefreshToken)> IssueTokensAsync(User user)
     {
         var token = _tokenService.GenerateToken(user);
@@ -852,68 +432,8 @@ await _securityStampCache.InvalidateAsync(userId!);
         await _context.SaveChangesAsync();
         return (token, refreshToken);
     }
-    
-[HttpGet("2fa/recovery-codes/count")]
-[Authorize]
-public async Task<IActionResult> GetRemainingRecoveryCodesCount()
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-    var user = await _userManager.FindByIdAsync(userId!);
-    if (user == null)
-    {
-        return NotFound();
-    }
 
-    if (!await _userManager.GetTwoFactorEnabledAsync(user))
-    {
-        return BadRequest("İki adımlı doğrulama etkin değil.");
-    }
-
-    var remaining = await _userManager.CountRecoveryCodesAsync(user);
-    return Ok(new { RemainingCodes = remaining });
-}
-
-
-[HttpPost("2fa/recovery-codes/regenerate")]
-[Authorize]
-[EnableRateLimiting("AuthPolicy")]
-public async Task<IActionResult> RegenerateRecoveryCodes(RegenerateRecoveryCodesDto dto)
-{
-    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-    var user = await _userManager.FindByIdAsync(userId!);
-    if (user == null)
-    {
-        return NotFound();
-    }
-
-    if (!await _userManager.GetTwoFactorEnabledAsync(user))
-    {
-        await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", false, user, detail: "2fa-not-enabled");
-        return BadRequest("İki adımlı doğrulama etkin değil.");
-    }
-
-    var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
-    if (!passwordResult.Succeeded)
-    {
-        if (passwordResult.IsLockedOut)
-        {
-            return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
-        }
-        await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", false, user, detail: "invalid-password");
-        return BadRequest("Şifre hatalı.");
-    }
-
-    var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-    await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", true, user);
-
-    return Ok(new
-    {
-        message = "Yeni kurtarma kodları oluşturuldu. Önceki kodlar artık geçersiz; yeni kodları güvenli bir yerde saklayın.",
-        recoveryCodes
-    });
-}
-
-       private async Task<int> RevokeAllRefreshTokensAsync(string userId)
+    private async Task<int> RevokeAllRefreshTokensAsync(string userId)
     {
         var activeTokens = await _context.RefreshTokens
             .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
@@ -929,11 +449,7 @@ public async Task<IActionResult> RegenerateRecoveryCodes(RegenerateRecoveryCodes
             await _context.SaveChangesAsync();
         }
 
-       
-       // DÜZELTİLDİ: SecurityStampCache artık dağıtık (Redis) — bu çağrı
-       // TÜM API instance'larındaki cache'i geçersiz kılar.
-       await _securityStampCache.InvalidateAsync(userId);
-
+        await _securityStampCache.InvalidateAsync(userId);
         return activeTokens.Count;
     }
 }

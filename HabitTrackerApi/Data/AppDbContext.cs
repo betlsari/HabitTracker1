@@ -34,9 +34,6 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<PetAccessoryUnlock> PetAccessoryUnlocks { get; set; }
     public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
 
-    public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
-    public DbSet<TwoFactorAttempt> TwoFactorAttempts { get; set; }
-
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
     public DbSet<EmailOutboxItem> EmailOutboxItems { get; set; }
@@ -44,7 +41,7 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<EmailDeadLetter> EmailDeadLetters { get; set; }
     public DbSet<NotificationDigestDelivery> NotificationDigestDeliveries { get; set; }
 
-    // YENİ: Kalıcı (DB-backed) push bildirim outbox tablosu. Bkz.
+    // Kalıcı (DB-backed) push bildirim outbox tablosu. Bkz.
     // Services/PushOutboxService.cs ve Services/PushSenderBackgroundService.cs
     public DbSet<PushOutboxItem> PushOutboxItems { get; set; }
 
@@ -84,15 +81,6 @@ public class AppDbContext : IdentityDbContext<User>
                 new Badge { Id = 6, Code = "WATER_GROWTH_5", Name = "Fidancık", Description = "Su çiçeğin 5. seviyeye ulaştı." },
                 new Badge { Id = 7, Code = "WATER_GROWTH_10", Name = "Çiçek bahçesi", Description = "Su çiçeğin 10. seviyeye ulaştı." }
             );
-        });
-
-        builder.Entity<TwoFactorAttempt>(entity =>
-        {
-            entity.HasIndex(t => t.UserId).IsUnique();
-            entity.HasOne(t => t.User)
-                .WithMany()
-                .HasForeignKey(t => t.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<UserBadge>(entity =>
@@ -153,12 +141,6 @@ public class AppDbContext : IdentityDbContext<User>
                 .WithMany(u => u.DeviceTokens)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        builder.Entity<AuthAuditEvent>(entity =>
-        {
-            entity.HasIndex(e => new { e.UserId, e.CreatedAt });
-            entity.HasIndex(e => new { e.Email, e.CreatedAt });
         });
 
         builder.Entity<Book>(entity =>
@@ -235,7 +217,7 @@ public class AppDbContext : IdentityDbContext<User>
                 .HasDatabaseName("IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt");
         });
 
-        // YENİ: EmailOutboxItems/RecalculationOutboxItems ile aynı gerekçe —
+        // EmailOutboxItems/RecalculationOutboxItems ile aynı gerekçe —
         // worker'ın "Pending & NextAttemptAt geçmiş" satırları hızlıca
         // bulabilmesi için composite index.
         builder.Entity<PushOutboxItem>(entity =>
