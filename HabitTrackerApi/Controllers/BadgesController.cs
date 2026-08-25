@@ -3,10 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Services;
 using System.Security.Claims;
 using Dtos;
+using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/[controller]")]
 [Authorize]
 public class BadgesController : ControllerBase

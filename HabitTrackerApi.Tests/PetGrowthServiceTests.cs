@@ -230,4 +230,20 @@ public class PetGrowthServiceTests
         Assert.Equal(40, pet.Xp);
         Assert.Equal(0, pet.Level); // 40/100 = 0, henüz level atlamadı
     }
+
+    [Fact]
+    public void PetLeveling_Apply_CapsLevelAndXp()
+    {
+        var pet = new Pet
+        {
+            Type = "Cat",
+            Stage = PetStage.Hatched,
+            Xp = 1000
+        };
+
+        PetLeveling.Apply(pet, maxLevel: 3);
+
+        Assert.Equal(300, pet.Xp);
+        Assert.Equal(3, pet.Level);
+    }
 }

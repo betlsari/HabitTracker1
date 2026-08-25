@@ -32,6 +32,7 @@ public class PetsController : ControllerBase
     private readonly int _eggCostXp;
     private readonly int _feedCostXp;
     private readonly int _feedXpGain;
+    private readonly int _maxPetLevel;
 
     public PetsController(
         AppDbContext context,
@@ -49,6 +50,7 @@ public class PetsController : ControllerBase
         _eggCostXp = limits.Value.PetEggCostXp;
         _feedCostXp = limits.Value.PetFeedCostXp;
         _feedXpGain = limits.Value.PetFeedXpGain;
+        _maxPetLevel = limits.Value.MaxPetLevel;
         _logger = logger;
     }
 
@@ -139,6 +141,7 @@ public class PetsController : ControllerBase
         var pet = new Pet
         {
             Type = dto.Type,
+            Nickname = string.IsNullOrWhiteSpace(dto.Nickname) ? null : dto.Nickname.Trim(),
             ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
             Level = 0,
             Xp = 0,
@@ -203,7 +206,7 @@ public class PetsController : ControllerBase
         var justHatched = PetHatching.TryHatch(pet);
         if (pet.Stage == PetStage.Hatched)
         {
-            pet.Level = pet.Xp / 100;
+            PetLeveling.Apply(pet, _maxPetLevel);
         }
 
         await _context.SaveChangesAsync();

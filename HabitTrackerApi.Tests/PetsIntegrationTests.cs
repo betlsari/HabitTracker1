@@ -17,8 +17,10 @@ public sealed class PetsIntegrationTests : IClassFixture<ApiFactory>
         var token = await _factory.CreateAccessTokenAsync();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.PostAsJsonAsync("/api/pets", new { type = "Cat" });
+        var response = await client.PostAsJsonAsync("/api/pets", new { type = "Cat", nickname = "  Luna  " });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var pet = await response.Content.ReadFromJsonAsync<PetResponse>();
+        Assert.Equal("Luna", pet!.Nickname);
     }
 
     [Fact]
@@ -48,6 +50,11 @@ public sealed class PetsIntegrationTests : IClassFixture<ApiFactory>
         var firstPet = await first.Content.ReadFromJsonAsync<PetIdResponse>();
         var secondPet = await second.Content.ReadFromJsonAsync<PetIdResponse>();
         Assert.Equal(firstPet!.Id, secondPet!.Id);
+    }
+
+    private sealed class PetResponse
+    {
+        public string? Nickname { get; set; }
     }
 
     private sealed class PetIdResponse

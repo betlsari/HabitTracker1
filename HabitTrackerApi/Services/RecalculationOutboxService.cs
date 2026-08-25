@@ -43,36 +43,6 @@ public sealed class RecalculationOutboxService : IRecalculationQueue, IRecalcula
         _context.SaveChanges();
     }
 
-    public async IAsyncEnumerable<RecalculationJob> DequeueAllAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        var jobs = await _context.RecalculationOutboxItems
-            .Where(x => x.Status == RecalculationOutboxStatus.Pending)
-            .OrderBy(x => x.CreatedAt)
-            .Take(100)
-            .ToListAsync(cancellationToken);
-
-        foreach (var item in jobs)
-        {
-            if (item.JobType == RecalculationJobType.Habit && item.HabitId.HasValue)
-            {
-                item.Status = RecalculationOutboxStatus.Processing;
-                item.LockedAt = DateTime.UtcNow;
-                item.LockedBy = "recalc-queue";
-                yield return new HabitRecalculationJob(item.HabitId.Value, item.UserId, item.TimeZoneId);
-            }
-            else if (item.JobType == RecalculationJobType.Book && item.BookId.HasValue)
-            {
-                item.Status = RecalculationOutboxStatus.Processing;
-                item.LockedAt = DateTime.UtcNow;
-                item.LockedBy = "recalc-queue";
-                yield return new BookRecalculationJob(item.BookId.Value, item.UserId, item.TimeZoneId);
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-    }
-
     public int PendingCount => _context.RecalculationOutboxItems
         .Count(x => x.Status == RecalculationOutboxStatus.Pending || x.Status == RecalculationOutboxStatus.Processing);
 

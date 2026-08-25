@@ -1,0 +1,1755 @@
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:21:26 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (2ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:26 INF]  Executed DbCommand (2ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:26 INF]  Executed DbCommand (1ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:26 INF]  Executed DbCommand (1ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:26 INF] e533c6e2435143b0954c9aa570d66a3b Executed DbCommand (0ms) [Parameters=[@__normalizedEmail_0='?' (Size = 55)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedEmail" = @__normalizedEmail_0
+LIMIT 2
+[2026-08-25 21:21:26 INF] e533c6e2435143b0954c9aa570d66a3b HTTP POST /api/auth/forgot-password responded 200 in 135.9986 ms
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 36), @p1='?' (DbType = Int32), @p2='?', @p3='?' (Size = 36), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (Size = 50), @p7='?' (DbType = Boolean), @p8='?' (Size = 4), @p9='?' (DbType = Boolean), @p10='?' (DbType = DateTimeOffset), @p11='?' (Size = 50), @p12='?' (Size = 50), @p13='?' (Size = 84), @p14='?', @p15='?' (DbType = Boolean), @p16='?' (Size = 32), @p17='?' (Size = 15), @p18='?' (DbType = Int32), @p19='?' (DbType = Boolean), @p20='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "AspNetUsers" ("Id", "AccessFailedCount", "AvatarUrl", "ConcurrencyStamp", "CreatedAt", "DisplayName", "Email", "EmailConfirmed", "EquippedBackground", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TimeZoneId", "TotalXp", "TwoFactorEnabled", "UserName")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 36), @p1='?' (DbType = Int32), @p2='?', @p3='?' (Size = 36), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (Size = 50), @p7='?' (DbType = Boolean), @p8='?' (Size = 4), @p9='?' (DbType = Boolean), @p10='?' (DbType = DateTimeOffset), @p11='?' (Size = 50), @p12='?' (Size = 50), @p13='?' (Size = 84), @p14='?', @p15='?' (DbType = Boolean), @p16='?' (Size = 32), @p17='?' (Size = 15), @p18='?' (DbType = Int32), @p19='?' (DbType = Boolean), @p20='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "AspNetUsers" ("Id", "AccessFailedCount", "AvatarUrl", "ConcurrencyStamp", "CreatedAt", "DisplayName", "Email", "EmailConfirmed", "EquippedBackground", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TimeZoneId", "TotalXp", "TwoFactorEnabled", "UserName")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 36), @p1='?' (DbType = Int32), @p2='?', @p3='?' (Size = 36), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (Size = 50), @p7='?' (DbType = Boolean), @p8='?' (Size = 4), @p9='?' (DbType = Boolean), @p10='?' (DbType = DateTimeOffset), @p11='?' (Size = 50), @p12='?' (Size = 50), @p13='?' (Size = 84), @p14='?', @p15='?' (DbType = Boolean), @p16='?' (Size = 32), @p17='?' (Size = 15), @p18='?' (DbType = Int32), @p19='?' (DbType = Boolean), @p20='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "AspNetUsers" ("Id", "AccessFailedCount", "AvatarUrl", "ConcurrencyStamp", "CreatedAt", "DisplayName", "Email", "EmailConfirmed", "EquippedBackground", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TimeZoneId", "TotalXp", "TwoFactorEnabled", "UserName")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 36), @p1='?' (DbType = Int32), @p2='?', @p3='?' (Size = 36), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (Size = 50), @p7='?' (DbType = Boolean), @p8='?' (Size = 4), @p9='?' (DbType = Boolean), @p10='?' (DbType = DateTimeOffset), @p11='?' (Size = 50), @p12='?' (Size = 50), @p13='?' (Size = 84), @p14='?', @p15='?' (DbType = Boolean), @p16='?' (Size = 32), @p17='?' (Size = 15), @p18='?' (DbType = Int32), @p19='?' (DbType = Boolean), @p20='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "AspNetUsers" ("Id", "AccessFailedCount", "AvatarUrl", "ConcurrencyStamp", "CreatedAt", "DisplayName", "Email", "EmailConfirmed", "EquippedBackground", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TimeZoneId", "TotalXp", "TwoFactorEnabled", "UserName")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20);
+[2026-08-25 21:21:26 INF] f6504d9e00414cea9e6c4fb758310ce7 Executed DbCommand (0ms) [Parameters=[@__normalizedEmail_0='?' (Size = 55)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedEmail" = @__normalizedEmail_0
+LIMIT 2
+[2026-08-25 21:21:26 INF] f6504d9e00414cea9e6c4fb758310ce7 HTTP POST /api/auth/forgot-password responded 200 in 14.1274 ms
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetRoles" (
+    "Id" TEXT NOT NULL CONSTRAINT "PK_AspNetRoles" PRIMARY KEY,
+    "Name" TEXT NULL,
+    "NormalizedName" TEXT NULL,
+    "ConcurrencyStamp" TEXT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUsers" (
+    "Id" TEXT NOT NULL CONSTRAINT "PK_AspNetUsers" PRIMARY KEY,
+    "DisplayName" TEXT NULL,
+    "AvatarUrl" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "TotalXp" INTEGER NOT NULL,
+    "TimeZoneId" TEXT NOT NULL DEFAULT 'Europe/Istanbul',
+    "EquippedBackground" TEXT NOT NULL,
+    "UserName" TEXT NULL,
+    "NormalizedUserName" TEXT NULL,
+    "Email" TEXT NULL,
+    "NormalizedEmail" TEXT NULL,
+    "EmailConfirmed" INTEGER NOT NULL,
+    "PasswordHash" TEXT NULL,
+    "SecurityStamp" TEXT NULL,
+    "ConcurrencyStamp" TEXT NULL,
+    "PhoneNumber" TEXT NULL,
+    "PhoneNumberConfirmed" INTEGER NOT NULL,
+    "TwoFactorEnabled" INTEGER NOT NULL,
+    "LockoutEnd" TEXT NULL,
+    "LockoutEnabled" INTEGER NOT NULL,
+    "AccessFailedCount" INTEGER NOT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AuthAuditEvents" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AuthAuditEvents" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NULL,
+    "Email" TEXT NOT NULL,
+    "EventType" TEXT NOT NULL,
+    "Succeeded" INTEGER NOT NULL,
+    "IpAddress" TEXT NULL,
+    "UserAgent" TEXT NULL,
+    "Detail" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Badges" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Badges" PRIMARY KEY AUTOINCREMENT,
+    "Code" TEXT NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Description" TEXT NOT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "EmailDeadLetters" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_EmailDeadLetters" PRIMARY KEY AUTOINCREMENT,
+    "OriginalOutboxId" INTEGER NULL,
+    "ToEmail" TEXT NOT NULL,
+    "Subject" TEXT NOT NULL,
+    "Body" TEXT NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "LastError" TEXT NULL,
+    "FailedAt" TEXT NOT NULL,
+    "ResolvedAt" TEXT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "EmailOutboxItems" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_EmailOutboxItems" PRIMARY KEY AUTOINCREMENT,
+    "ToEmail" TEXT NOT NULL,
+    "Subject" TEXT NOT NULL,
+    "Body" TEXT NOT NULL,
+    "Status" INTEGER NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "LastError" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "NextAttemptAt" TEXT NULL,
+    "SentAt" TEXT NULL,
+    "LockedAt" TEXT NULL,
+    "LockedBy" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "NotificationDigestDeliveries" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_NotificationDigestDeliveries" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "DigestDate" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "RecalculationOutboxItems" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_RecalculationOutboxItems" PRIMARY KEY AUTOINCREMENT,
+    "JobType" INTEGER NOT NULL,
+    "HabitId" INTEGER NULL,
+    "BookId" INTEGER NULL,
+    "UserId" TEXT NOT NULL,
+    "TimeZoneId" TEXT NULL,
+    "Status" INTEGER NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "LastError" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "NextAttemptAt" TEXT NULL,
+    "CompletedAt" TEXT NULL,
+    "LockedAt" TEXT NULL,
+    "LockedBy" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetRoleClaims" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AspNetRoleClaims" PRIMARY KEY AUTOINCREMENT,
+    "RoleId" TEXT NOT NULL,
+    "ClaimType" TEXT NULL,
+    "ClaimValue" TEXT NULL,
+    CONSTRAINT "FK_AspNetRoleClaims_AspNetRoles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "AspNetRoles" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserClaims" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AspNetUserClaims" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "ClaimType" TEXT NULL,
+    "ClaimValue" TEXT NULL,
+    CONSTRAINT "FK_AspNetUserClaims_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserLogins" (
+    "LoginProvider" TEXT NOT NULL,
+    "ProviderKey" TEXT NOT NULL,
+    "ProviderDisplayName" TEXT NULL,
+    "UserId" TEXT NOT NULL,
+    CONSTRAINT "PK_AspNetUserLogins" PRIMARY KEY ("LoginProvider", "ProviderKey"),
+    CONSTRAINT "FK_AspNetUserLogins_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserRoles" (
+    "UserId" TEXT NOT NULL,
+    "RoleId" TEXT NOT NULL,
+    CONSTRAINT "PK_AspNetUserRoles" PRIMARY KEY ("UserId", "RoleId"),
+    CONSTRAINT "FK_AspNetUserRoles_AspNetRoles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "AspNetRoles" ("Id") ON DELETE CASCADE,
+    CONSTRAINT "FK_AspNetUserRoles_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserTokens" (
+    "UserId" TEXT NOT NULL,
+    "LoginProvider" TEXT NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Value" TEXT NULL,
+    CONSTRAINT "PK_AspNetUserTokens" PRIMARY KEY ("UserId", "LoginProvider", "Name"),
+    CONSTRAINT "FK_AspNetUserTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Books" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Books" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Title" TEXT NOT NULL,
+    "NormalizedTitle" TEXT NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "Author" TEXT NULL,
+    "GoalType" INTEGER NOT NULL,
+    "Period" INTEGER NOT NULL,
+    "TotalPages" INTEGER NULL,
+    "DailyGoalAmount" INTEGER NOT NULL,
+    "CurrentPage" INTEGER NOT NULL,
+    "TotalMinutesRead" INTEGER NOT NULL,
+    "IsCompleted" INTEGER NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "CompletedAt" TEXT NULL,
+    "ManuallyCompleted" INTEGER NOT NULL,
+    "CompletionBonusAwarded" INTEGER NOT NULL,
+    "IsArchived" INTEGER NOT NULL,
+    "ArchivedAt" TEXT NULL,
+    "Notes" TEXT NULL,
+    "CoverImageUrl" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_Books_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "DeviceTokens" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_DeviceTokens" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Token" TEXT NOT NULL,
+    "Platform" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "LastSeenAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_DeviceTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Flowers" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Flowers" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "WaterAmount" INTEGER NOT NULL,
+    "Level" INTEGER NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_Flowers_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Habits" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Habits" PRIMARY KEY AUTOINCREMENT,
+    "Name" TEXT NOT NULL,
+    "NormalizedName" TEXT NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "DailyGoal" INTEGER NOT NULL,
+    "Category" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "UserId" TEXT NOT NULL,
+    "XpPerUnit" INTEGER NOT NULL,
+    "XpBonusForGoal" INTEGER NOT NULL,
+    "Period" INTEGER NOT NULL,
+    "TargetTime" TEXT NULL,
+    "ReminderTime" TEXT NULL,
+    "IsArchived" INTEGER NOT NULL,
+    "ArchivedAt" TEXT NULL,
+    "Notes" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    "CustomCategoryName" TEXT NULL,
+    "Unit" INTEGER NOT NULL,
+    CONSTRAINT "FK_Habits_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (14ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "NotificationPreferences" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_NotificationPreferences" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "DisabledTypes" TEXT NOT NULL,
+    "QuietHoursStart" TEXT NULL,
+    "QuietHoursEnd" TEXT NULL,
+    "DigestEnabled" INTEGER NOT NULL,
+    "DigestHourUtc" INTEGER NOT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_NotificationPreferences_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Pets" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Pets" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Type" TEXT NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "Level" INTEGER NOT NULL,
+    "Xp" INTEGER NOT NULL,
+    "Mood" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "Nickname" TEXT NULL,
+    "Stage" INTEGER NOT NULL,
+    "HatchedAt" TEXT NULL,
+    "EquippedAccessory" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_Pets_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "RefreshTokens" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_RefreshTokens" PRIMARY KEY AUTOINCREMENT,
+    "Token" TEXT NOT NULL,
+    "ExpiresAt" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "RevokedAt" TEXT NULL,
+    "IpAddress" TEXT NULL,
+    "UserAgent" TEXT NULL,
+    "UserId" TEXT NOT NULL,
+    "FamilyId" TEXT NOT NULL,
+    "ReplacedByTokenHash" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_RefreshTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "TwoFactorAttempts" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_TwoFactorAttempts" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "FailedCount" INTEGER NOT NULL,
+    "LockedUntil" TEXT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_TwoFactorAttempts_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "UserBackgroundUnlocks" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_UserBackgroundUnlocks" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Background" TEXT NOT NULL,
+    "UnlockedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_UserBackgroundUnlocks_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "UserNotifications" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_UserNotifications" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Type" TEXT NOT NULL,
+    "Title" TEXT NOT NULL,
+    "Body" TEXT NOT NULL,
+    "HabitId" INTEGER NULL,
+    "IsRead" INTEGER NOT NULL,
+    "DedupKey" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_UserNotifications_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "UserBadges" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_UserBadges" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "BadgeId" INTEGER NOT NULL,
+    "EarnedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_UserBadges_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE,
+    CONSTRAINT "FK_UserBadges_Badges_BadgeId" FOREIGN KEY ("BadgeId") REFERENCES "Badges" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "BookReadingLogs" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_BookReadingLogs" PRIMARY KEY AUTOINCREMENT,
+    "BookId" INTEGER NOT NULL,
+    "ReadDate" TEXT NOT NULL,
+    "Amount" INTEGER NOT NULL,
+    "PageReachedAt" INTEGER NULL,
+    "XpEarned" INTEGER NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_BookReadingLogs_Books_BookId" FOREIGN KEY ("BookId") REFERENCES "Books" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "HabitCompletions" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_HabitCompletions" PRIMARY KEY AUTOINCREMENT,
+    "HabitId" INTEGER NOT NULL,
+    "CompletionDate" TEXT NOT NULL,
+    "Amount" INTEGER NOT NULL,
+    "XpEarned" INTEGER NOT NULL,
+    "PetStreakBonusXp" INTEGER NOT NULL,
+    "IsOnTime" INTEGER NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_HabitCompletions_Habits_HabitId" FOREIGN KEY ("HabitId") REFERENCES "Habits" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "PetAccessoryUnlocks" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_PetAccessoryUnlocks" PRIMARY KEY AUTOINCREMENT,
+    "PetId" INTEGER NOT NULL,
+    "Accessory" TEXT NOT NULL,
+    "UnlockedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_PetAccessoryUnlocks_Pets_PetId" FOREIGN KEY ("PetId") REFERENCES "Pets" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (1, 'FIRST_COMPLETION', 'İlk alışkanlık kaydını oluşturdun.', 'İlk adım');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (2, 'STREAK_3', 'Aynı alışkanlıkta 3 dönem üst üste hedefi tutturdun.', '3''lük seri');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (3, 'STREAK_7', 'Aynı alışkanlıkta 7 dönem üst üste hedefi tutturdun.', 'Haftalık zincir');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (4, 'STREAK_30', 'Aynı alışkanlıkta 30 dönem üst üste hedefi tutturdun.', 'Aylık zincir');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (5, 'READING_STREAK_7', 'Okuma alışkanlığını 7 dönem üst üste sürdürdün.', 'Kitap kurdu');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (6, 'WATER_GROWTH_5', 'Su çiçeğin 5. seviyeye ulaştı.', 'Fidancık');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (7, 'WATER_GROWTH_10', 'Su çiçeğin 10. seviyeye ulaştı.', 'Çiçek bahçesi');
+SELECT changes();
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetRoleClaims_RoleId" ON "AspNetRoleClaims" ("RoleId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "RoleNameIndex" ON "AspNetRoles" ("NormalizedName");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetUserClaims_UserId" ON "AspNetUserClaims" ("UserId");
+[2026-08-25 21:21:26 INF] 145f040b3f4e45b2b35ce59f413e0a68 Executed DbCommand (0ms) [Parameters=[@__normalizedEmail_0='?' (Size = 55)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedEmail" = @__normalizedEmail_0
+LIMIT 2
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetUserLogins_UserId" ON "AspNetUserLogins" ("UserId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetUserRoles_RoleId" ON "AspNetUserRoles" ("RoleId");
+[2026-08-25 21:21:26 INF] 145f040b3f4e45b2b35ce59f413e0a68 HTTP POST /api/auth/forgot-password responded 200 in 53.7899 ms
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "EmailIndex" ON "AspNetUsers" ("NormalizedEmail");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "UserNameIndex" ON "AspNetUsers" ("NormalizedUserName");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AuthAuditEvents_Email_CreatedAt" ON "AuthAuditEvents" ("Email", "CreatedAt");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AuthAuditEvents_UserId_CreatedAt" ON "AuthAuditEvents" ("UserId", "CreatedAt");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Badges_Code" ON "Badges" ("Code");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_BookReadingLogs_BookId_ClientRequestId" ON "BookReadingLogs" ("BookId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_BookReadingLogs_BookId_ReadDate" ON "BookReadingLogs" ("BookId", "ReadDate");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_BookReadingLogs_ReadDate" ON "BookReadingLogs" ("ReadDate");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Books_CreatedAt" ON "Books" ("CreatedAt");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Books_UserId" ON "Books" ("UserId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Books_UserId_ClientRequestId" ON "Books" ("UserId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Books_UserId_IsArchived" ON "Books" ("UserId", "IsArchived");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Books_UserId_NormalizedTitle" ON "Books" ("UserId", "NormalizedTitle");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_DeviceTokens_UserId_Token" ON "DeviceTokens" ("UserId", "Token");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_EmailDeadLetters_ToEmail_FailedAt" ON "EmailDeadLetters" ("ToEmail", "FailedAt");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_EmailOutboxItems_Status_NextAttemptAt_CreatedAt" ON "EmailOutboxItems" ("Status", "NextAttemptAt", "CreatedAt");
+[2026-08-25 21:21:26 INF] 0878988655804690adf01b5f8e410fcf Executed DbCommand (0ms) [Parameters=[@__normalizedEmail_0='?' (Size = 55)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedEmail" = @__normalizedEmail_0
+LIMIT 2
+[2026-08-25 21:21:26 INF] 0878988655804690adf01b5f8e410fcf HTTP POST /api/auth/forgot-password responded 200 in 1.9317 ms
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Flowers_UserId" ON "Flowers" ("UserId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_HabitCompletions_CompletionDate" ON "HabitCompletions" ("CompletionDate");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_HabitCompletions_HabitId_ClientRequestId" ON "HabitCompletions" ("HabitId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_HabitCompletions_HabitId_CompletionDate" ON "HabitCompletions" ("HabitId", "CompletionDate");
+[2026-08-25 21:21:26 INF] 9c3a65752b674b68ad27fdf849ab0020 Executed DbCommand (0ms) [Parameters=[@__normalizedEmail_0='?' (Size = 55)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedEmail" = @__normalizedEmail_0
+LIMIT 2
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Habits_UserId_ClientRequestId" ON "Habits" ("UserId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Habits_UserId_IsArchived" ON "Habits" ("UserId", "IsArchived");
+[2026-08-25 21:21:26 INF] 9c3a65752b674b68ad27fdf849ab0020 HTTP POST /api/auth/forgot-password responded 200 in 1.8165 ms
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Habits_UserId_NormalizedName" ON "Habits" ("UserId", "NormalizedName");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_NotificationDigestDeliveries_UserId_DigestDate" ON "NotificationDigestDeliveries" ("UserId", "DigestDate");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_NotificationPreferences_UserId" ON "NotificationPreferences" ("UserId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_PetAccessoryUnlocks_PetId_Accessory" ON "PetAccessoryUnlocks" ("PetId", "Accessory");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Pets_CreatedAt" ON "Pets" ("CreatedAt");
+[2026-08-25 21:21:26 INF] 04f79c410a7c4b9a81055966920310dd HTTP POST /api/auth/forgot-password responded 429 in 0.7266 ms
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Pets_UserId_ClientRequestId" ON "Pets" ("UserId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt" ON "RecalculationOutboxItems" ("Status", "NextAttemptAt", "CreatedAt");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_RefreshTokens_FamilyId" ON "RefreshTokens" ("FamilyId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_RefreshTokens_Token" ON "RefreshTokens" ("Token");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_RefreshTokens_UserId" ON "RefreshTokens" ("UserId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_TwoFactorAttempts_UserId" ON "TwoFactorAttempts" ("UserId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_UserBackgroundUnlocks_UserId_Background" ON "UserBackgroundUnlocks" ("UserId", "Background");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_UserBadges_BadgeId" ON "UserBadges" ("BadgeId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_UserBadges_UserId_BadgeId" ON "UserBadges" ("UserId", "BadgeId");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_UserNotifications_DedupKey" ON "UserNotifications" ("DedupKey");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_UserNotifications_UserId_CreatedAt" ON "UserNotifications" ("UserId", "CreatedAt");
+[2026-08-25 21:21:26 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 7167900359f5483cad8f0721ee65ff05 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 24d3b4e84ba54f0eb5ba69ed5ac936e9 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 41d62648873c4ca993fd61913d52bbd5 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:21:27 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:21:27 INF] 6a6d407ac3c646e5b02e67848601e38f Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 6a6d407ac3c646e5b02e67848601e38f Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "f"."Id", "f"."ConcurrencyToken", "f"."CreatedAt", "f"."Level", "f"."UpdatedAt", "f"."UserId", "f"."WaterAmount"
+FROM "Flowers" AS "f"
+WHERE "f"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 7167900359f5483cad8f0721ee65ff05 Executed DbCommand (6ms) [Parameters=[@p0='?' (Size = 40)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 24d3b4e84ba54f0eb5ba69ed5ac936e9 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 41d62648873c4ca993fd61913d52bbd5 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 41)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 6a6d407ac3c646e5b02e67848601e38f Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?' (DbType = Int32), @p3='?' (DbType = DateTime), @p4='?' (Size = 36), @p5='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Flowers" ("ConcurrencyToken", "CreatedAt", "Level", "UpdatedAt", "UserId", "WaterAmount")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 41d62648873c4ca993fd61913d52bbd5 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Books" AS "b"
+WHERE "b"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 7167900359f5483cad8f0721ee65ff05 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Pets" AS "p"
+WHERE "p"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 24d3b4e84ba54f0eb5ba69ed5ac936e9 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Boolean), @p2='?' (DbType = Int32), @p3='?' (Size = 8), @p4='?' (DbType = Time), @p5='?' (DbType = Time), @p6='?' (DbType = DateTime), @p7='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "NotificationPreferences" ("ConcurrencyToken", "DigestEnabled", "DigestHourUtc", "DisabledTypes", "QuietHoursEnd", "QuietHoursStart", "UpdatedAt", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 45)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] 41d62648873c4ca993fd61913d52bbd5 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedTitleKey_1='?' (Size = 16)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Books" AS "b"
+    WHERE "b"."UserId" = @__userId_0 AND "b"."NormalizedTitle" = @__normalizedTitleKey_1)
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 15)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 41)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 17)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 52)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 17)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] 6a6d407ac3c646e5b02e67848601e38f HTTP GET /api/flowers responded 200 in 80.1641 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 24d3b4e84ba54f0eb5ba69ed5ac936e9 HTTP PUT /api/notificationpreferences responded 200 in 261.3362 ms
+[2026-08-25 21:21:27 INF] 7167900359f5483cad8f0721ee65ff05 Executed DbCommand (0ms) [Parameters=[@p0='?', @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?', @p4='?' (DbType = DateTime), @p5='?' (DbType = Int32), @p6='?' (Size = 3), @p7='?', @p8='?' (DbType = Int32), @p9='?' (Size = 3), @p10='?' (Size = 36), @p11='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Pets" ("ClientRequestId", "ConcurrencyToken", "CreatedAt", "EquippedAccessory", "HatchedAt", "Level", "Mood", "Nickname", "Stage", "Type", "UserId", "Xp")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 410fa878c56e4a7cac9a3f74cb7d94c4 HTTP GET /api/flowers responded 401 in 3.9868 ms
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 2), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 17), @p9='?' (Size = 17), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 5), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (Size = 7), @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 41), @p9='?' (Size = 41), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 4), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 45), @p9='?' (Size = 45), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (1ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 4), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 15), @p9='?' (Size = 15), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 5), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (Size = 7), @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 52), @p9='?' (Size = 52), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (1ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 2), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 17), @p9='?' (Size = 17), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 7a4080453c14440bbf1e036ca86aade1 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (1ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 7a4080453c14440bbf1e036ca86aade1 HTTP GET /api/notificationpreferences responded 200 in 22.5712 ms
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetRoles" (
+    "Id" TEXT NOT NULL CONSTRAINT "PK_AspNetRoles" PRIMARY KEY,
+    "Name" TEXT NULL,
+    "NormalizedName" TEXT NULL,
+    "ConcurrencyStamp" TEXT NULL
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUsers" (
+    "Id" TEXT NOT NULL CONSTRAINT "PK_AspNetUsers" PRIMARY KEY,
+    "DisplayName" TEXT NULL,
+    "AvatarUrl" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "TotalXp" INTEGER NOT NULL,
+    "TimeZoneId" TEXT NOT NULL DEFAULT 'Europe/Istanbul',
+    "EquippedBackground" TEXT NOT NULL,
+    "UserName" TEXT NULL,
+    "NormalizedUserName" TEXT NULL,
+    "Email" TEXT NULL,
+    "NormalizedEmail" TEXT NULL,
+    "EmailConfirmed" INTEGER NOT NULL,
+    "PasswordHash" TEXT NULL,
+    "SecurityStamp" TEXT NULL,
+    "ConcurrencyStamp" TEXT NULL,
+    "PhoneNumber" TEXT NULL,
+    "PhoneNumberConfirmed" INTEGER NOT NULL,
+    "TwoFactorEnabled" INTEGER NOT NULL,
+    "LockoutEnd" TEXT NULL,
+    "LockoutEnabled" INTEGER NOT NULL,
+    "AccessFailedCount" INTEGER NOT NULL
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AuthAuditEvents" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AuthAuditEvents" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NULL,
+    "Email" TEXT NOT NULL,
+    "EventType" TEXT NOT NULL,
+    "Succeeded" INTEGER NOT NULL,
+    "IpAddress" TEXT NULL,
+    "UserAgent" TEXT NULL,
+    "Detail" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Badges" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Badges" PRIMARY KEY AUTOINCREMENT,
+    "Code" TEXT NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Description" TEXT NOT NULL
+);
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "EmailDeadLetters" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_EmailDeadLetters" PRIMARY KEY AUTOINCREMENT,
+    "OriginalOutboxId" INTEGER NULL,
+    "ToEmail" TEXT NOT NULL,
+    "Subject" TEXT NOT NULL,
+    "Body" TEXT NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "LastError" TEXT NULL,
+    "FailedAt" TEXT NOT NULL,
+    "ResolvedAt" TEXT NULL
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "EmailOutboxItems" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_EmailOutboxItems" PRIMARY KEY AUTOINCREMENT,
+    "ToEmail" TEXT NOT NULL,
+    "Subject" TEXT NOT NULL,
+    "Body" TEXT NOT NULL,
+    "Status" INTEGER NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "LastError" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "NextAttemptAt" TEXT NULL,
+    "SentAt" TEXT NULL,
+    "LockedAt" TEXT NULL,
+    "LockedBy" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "NotificationDigestDeliveries" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_NotificationDigestDeliveries" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "DigestDate" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "RecalculationOutboxItems" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_RecalculationOutboxItems" PRIMARY KEY AUTOINCREMENT,
+    "JobType" INTEGER NOT NULL,
+    "HabitId" INTEGER NULL,
+    "BookId" INTEGER NULL,
+    "UserId" TEXT NOT NULL,
+    "TimeZoneId" TEXT NULL,
+    "Status" INTEGER NOT NULL,
+    "AttemptCount" INTEGER NOT NULL,
+    "LastError" TEXT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "NextAttemptAt" TEXT NULL,
+    "CompletedAt" TEXT NULL,
+    "LockedAt" TEXT NULL,
+    "LockedBy" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL
+);
+[2026-08-25 21:21:27 INF] 41d62648873c4ca993fd61913d52bbd5 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?', @p2='?', @p3='?' (DbType = DateTime), @p4='?' (DbType = Boolean), @p5='?' (DbType = Guid), @p6='?', @p7='?' (DbType = DateTime), @p8='?' (DbType = Int32), @p9='?' (DbType = Int32), @p10='?' (DbType = Int32), @p11='?' (DbType = Boolean), @p12='?' (DbType = Boolean), @p13='?' (DbType = Boolean), @p14='?' (Size = 16), @p15='?', @p16='?' (DbType = Int32), @p17='?' (Size = 16), @p18='?' (DbType = Int32), @p19='?' (DbType = Int32), @p20='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Books" ("ArchivedAt", "Author", "ClientRequestId", "CompletedAt", "CompletionBonusAwarded", "ConcurrencyToken", "CoverImageUrl", "CreatedAt", "CurrentPage", "DailyGoalAmount", "GoalType", "IsArchived", "IsCompleted", "ManuallyCompleted", "NormalizedTitle", "Notes", "Period", "Title", "TotalMinutesRead", "TotalPages", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetRoleClaims" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AspNetRoleClaims" PRIMARY KEY AUTOINCREMENT,
+    "RoleId" TEXT NOT NULL,
+    "ClaimType" TEXT NULL,
+    "ClaimValue" TEXT NULL,
+    CONSTRAINT "FK_AspNetRoleClaims_AspNetRoles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "AspNetRoles" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (1ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserClaims" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_AspNetUserClaims" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "ClaimType" TEXT NULL,
+    "ClaimValue" TEXT NULL,
+    CONSTRAINT "FK_AspNetUserClaims_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 7167900359f5483cad8f0721ee65ff05 HTTP POST /api/pets responded 200 in 291.1638 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserLogins" (
+    "LoginProvider" TEXT NOT NULL,
+    "ProviderKey" TEXT NOT NULL,
+    "ProviderDisplayName" TEXT NULL,
+    "UserId" TEXT NOT NULL,
+    CONSTRAINT "PK_AspNetUserLogins" PRIMARY KEY ("LoginProvider", "ProviderKey"),
+    CONSTRAINT "FK_AspNetUserLogins_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserRoles" (
+    "UserId" TEXT NOT NULL,
+    "RoleId" TEXT NOT NULL,
+    CONSTRAINT "PK_AspNetUserRoles" PRIMARY KEY ("UserId", "RoleId"),
+    CONSTRAINT "FK_AspNetUserRoles_AspNetRoles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "AspNetRoles" ("Id") ON DELETE CASCADE,
+    CONSTRAINT "FK_AspNetUserRoles_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "AspNetUserTokens" (
+    "UserId" TEXT NOT NULL,
+    "LoginProvider" TEXT NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Value" TEXT NULL,
+    CONSTRAINT "PK_AspNetUserTokens" PRIMARY KEY ("UserId", "LoginProvider", "Name"),
+    CONSTRAINT "FK_AspNetUserTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Books" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Books" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Title" TEXT NOT NULL,
+    "NormalizedTitle" TEXT NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "Author" TEXT NULL,
+    "GoalType" INTEGER NOT NULL,
+    "Period" INTEGER NOT NULL,
+    "TotalPages" INTEGER NULL,
+    "DailyGoalAmount" INTEGER NOT NULL,
+    "CurrentPage" INTEGER NOT NULL,
+    "TotalMinutesRead" INTEGER NOT NULL,
+    "IsCompleted" INTEGER NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "CompletedAt" TEXT NULL,
+    "ManuallyCompleted" INTEGER NOT NULL,
+    "CompletionBonusAwarded" INTEGER NOT NULL,
+    "IsArchived" INTEGER NOT NULL,
+    "ArchivedAt" TEXT NULL,
+    "Notes" TEXT NULL,
+    "CoverImageUrl" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_Books_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "DeviceTokens" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_DeviceTokens" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Token" TEXT NOT NULL,
+    "Platform" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "LastSeenAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_DeviceTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Flowers" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Flowers" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "WaterAmount" INTEGER NOT NULL,
+    "Level" INTEGER NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_Flowers_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Habits" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Habits" PRIMARY KEY AUTOINCREMENT,
+    "Name" TEXT NOT NULL,
+    "NormalizedName" TEXT NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "DailyGoal" INTEGER NOT NULL,
+    "Category" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "UserId" TEXT NOT NULL,
+    "XpPerUnit" INTEGER NOT NULL,
+    "XpBonusForGoal" INTEGER NOT NULL,
+    "Period" INTEGER NOT NULL,
+    "TargetTime" TEXT NULL,
+    "ReminderTime" TEXT NULL,
+    "IsArchived" INTEGER NOT NULL,
+    "ArchivedAt" TEXT NULL,
+    "Notes" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    "CustomCategoryName" TEXT NULL,
+    "Unit" INTEGER NOT NULL,
+    CONSTRAINT "FK_Habits_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "NotificationPreferences" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_NotificationPreferences" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "DisabledTypes" TEXT NOT NULL,
+    "QuietHoursStart" TEXT NULL,
+    "QuietHoursEnd" TEXT NULL,
+    "DigestEnabled" INTEGER NOT NULL,
+    "DigestHourUtc" INTEGER NOT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_NotificationPreferences_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "Pets" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_Pets" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Type" TEXT NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "Level" INTEGER NOT NULL,
+    "Xp" INTEGER NOT NULL,
+    "Mood" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "Nickname" TEXT NULL,
+    "Stage" INTEGER NOT NULL,
+    "HatchedAt" TEXT NULL,
+    "EquippedAccessory" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_Pets_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "RefreshTokens" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_RefreshTokens" PRIMARY KEY AUTOINCREMENT,
+    "Token" TEXT NOT NULL,
+    "ExpiresAt" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "RevokedAt" TEXT NULL,
+    "IpAddress" TEXT NULL,
+    "UserAgent" TEXT NULL,
+    "UserId" TEXT NOT NULL,
+    "FamilyId" TEXT NOT NULL,
+    "ReplacedByTokenHash" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_RefreshTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "TwoFactorAttempts" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_TwoFactorAttempts" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "FailedCount" INTEGER NOT NULL,
+    "LockedUntil" TEXT NULL,
+    "UpdatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_TwoFactorAttempts_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "UserBackgroundUnlocks" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_UserBackgroundUnlocks" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Background" TEXT NOT NULL,
+    "UnlockedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_UserBackgroundUnlocks_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "UserNotifications" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_UserNotifications" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "Type" TEXT NOT NULL,
+    "Title" TEXT NOT NULL,
+    "Body" TEXT NOT NULL,
+    "HabitId" INTEGER NULL,
+    "IsRead" INTEGER NOT NULL,
+    "DedupKey" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_UserNotifications_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "UserBadges" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_UserBadges" PRIMARY KEY AUTOINCREMENT,
+    "UserId" TEXT NOT NULL,
+    "BadgeId" INTEGER NOT NULL,
+    "EarnedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_UserBadges_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE,
+    CONSTRAINT "FK_UserBadges_Badges_BadgeId" FOREIGN KEY ("BadgeId") REFERENCES "Badges" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "BookReadingLogs" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_BookReadingLogs" PRIMARY KEY AUTOINCREMENT,
+    "BookId" INTEGER NOT NULL,
+    "ReadDate" TEXT NOT NULL,
+    "Amount" INTEGER NOT NULL,
+    "PageReachedAt" INTEGER NULL,
+    "XpEarned" INTEGER NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_BookReadingLogs_Books_BookId" FOREIGN KEY ("BookId") REFERENCES "Books" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "HabitCompletions" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_HabitCompletions" PRIMARY KEY AUTOINCREMENT,
+    "HabitId" INTEGER NOT NULL,
+    "CompletionDate" TEXT NOT NULL,
+    "Amount" INTEGER NOT NULL,
+    "XpEarned" INTEGER NOT NULL,
+    "PetStreakBonusXp" INTEGER NOT NULL,
+    "IsOnTime" INTEGER NOT NULL,
+    "ClientRequestId" TEXT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_HabitCompletions_Habits_HabitId" FOREIGN KEY ("HabitId") REFERENCES "Habits" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE TABLE "PetAccessoryUnlocks" (
+    "Id" INTEGER NOT NULL CONSTRAINT "PK_PetAccessoryUnlocks" PRIMARY KEY AUTOINCREMENT,
+    "PetId" INTEGER NOT NULL,
+    "Accessory" TEXT NOT NULL,
+    "UnlockedAt" TEXT NOT NULL,
+    "ConcurrencyToken" TEXT NOT NULL,
+    CONSTRAINT "FK_PetAccessoryUnlocks_Pets_PetId" FOREIGN KEY ("PetId") REFERENCES "Pets" ("Id") ON DELETE CASCADE
+);
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (1, 'FIRST_COMPLETION', 'İlk alışkanlık kaydını oluşturdun.', 'İlk adım');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (2, 'STREAK_3', 'Aynı alışkanlıkta 3 dönem üst üste hedefi tutturdun.', '3''lük seri');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (3, 'STREAK_7', 'Aynı alışkanlıkta 7 dönem üst üste hedefi tutturdun.', 'Haftalık zincir');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (4, 'STREAK_30', 'Aynı alışkanlıkta 30 dönem üst üste hedefi tutturdun.', 'Aylık zincir');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (5, 'READING_STREAK_7', 'Okuma alışkanlığını 7 dönem üst üste sürdürdün.', 'Kitap kurdu');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (6, 'WATER_GROWTH_5', 'Su çiçeğin 5. seviyeye ulaştı.', 'Fidancık');
+SELECT changes();
+
+INSERT INTO "Badges" ("Id", "Code", "Description", "Name")
+VALUES (7, 'WATER_GROWTH_10', 'Su çiçeğin 10. seviyeye ulaştı.', 'Çiçek bahçesi');
+SELECT changes();
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetRoleClaims_RoleId" ON "AspNetRoleClaims" ("RoleId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "RoleNameIndex" ON "AspNetRoles" ("NormalizedName");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetUserClaims_UserId" ON "AspNetUserClaims" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetUserLogins_UserId" ON "AspNetUserLogins" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AspNetUserRoles_RoleId" ON "AspNetUserRoles" ("RoleId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "EmailIndex" ON "AspNetUsers" ("NormalizedEmail");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "UserNameIndex" ON "AspNetUsers" ("NormalizedUserName");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AuthAuditEvents_Email_CreatedAt" ON "AuthAuditEvents" ("Email", "CreatedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_AuthAuditEvents_UserId_CreatedAt" ON "AuthAuditEvents" ("UserId", "CreatedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Badges_Code" ON "Badges" ("Code");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_BookReadingLogs_BookId_ClientRequestId" ON "BookReadingLogs" ("BookId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_BookReadingLogs_BookId_ReadDate" ON "BookReadingLogs" ("BookId", "ReadDate");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_BookReadingLogs_ReadDate" ON "BookReadingLogs" ("ReadDate");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Books_CreatedAt" ON "Books" ("CreatedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Books_UserId" ON "Books" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Books_UserId_ClientRequestId" ON "Books" ("UserId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Books_UserId_IsArchived" ON "Books" ("UserId", "IsArchived");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Books_UserId_NormalizedTitle" ON "Books" ("UserId", "NormalizedTitle");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_DeviceTokens_UserId_Token" ON "DeviceTokens" ("UserId", "Token");
+[2026-08-25 21:21:27 INF] c99daffd5de74df08f90e59ad53cf48d HTTP POST /api/habits responded 200 in 325.9585 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_EmailDeadLetters_ToEmail_FailedAt" ON "EmailDeadLetters" ("ToEmail", "FailedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_EmailOutboxItems_Status_NextAttemptAt_CreatedAt" ON "EmailOutboxItems" ("Status", "NextAttemptAt", "CreatedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Flowers_UserId" ON "Flowers" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_HabitCompletions_CompletionDate" ON "HabitCompletions" ("CompletionDate");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_HabitCompletions_HabitId_ClientRequestId" ON "HabitCompletions" ("HabitId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_HabitCompletions_HabitId_CompletionDate" ON "HabitCompletions" ("HabitId", "CompletionDate");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Habits_UserId_ClientRequestId" ON "Habits" ("UserId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Habits_UserId_IsArchived" ON "Habits" ("UserId", "IsArchived");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Habits_UserId_NormalizedName" ON "Habits" ("UserId", "NormalizedName");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_NotificationDigestDeliveries_UserId_DigestDate" ON "NotificationDigestDeliveries" ("UserId", "DigestDate");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_NotificationPreferences_UserId" ON "NotificationPreferences" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_PetAccessoryUnlocks_PetId_Accessory" ON "PetAccessoryUnlocks" ("PetId", "Accessory");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_Pets_CreatedAt" ON "Pets" ("CreatedAt");
+[2026-08-25 21:21:27 INF] 9db759667e5646bdad5ee7c8d984aa15 HTTP POST /api/habits responded 200 in 312.1257 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_Pets_UserId_ClientRequestId" ON "Pets" ("UserId", "ClientRequestId") WHERE "ClientRequestId" IS NOT NULL;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt" ON "RecalculationOutboxItems" ("Status", "NextAttemptAt", "CreatedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_RefreshTokens_FamilyId" ON "RefreshTokens" ("FamilyId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_RefreshTokens_Token" ON "RefreshTokens" ("Token");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_RefreshTokens_UserId" ON "RefreshTokens" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_TwoFactorAttempts_UserId" ON "TwoFactorAttempts" ("UserId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_UserBackgroundUnlocks_UserId_Background" ON "UserBackgroundUnlocks" ("UserId", "Background");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_UserBadges_BadgeId" ON "UserBadges" ("BadgeId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_UserBadges_UserId_BadgeId" ON "UserBadges" ("UserId", "BadgeId");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE UNIQUE INDEX "IX_UserNotifications_DedupKey" ON "UserNotifications" ("DedupKey");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+CREATE INDEX "IX_UserNotifications_UserId_CreatedAt" ON "UserNotifications" ("UserId", "CreatedAt");
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 0ccc40624d574db58ab6cddfacebd3d7 HTTP POST /api/habits responded 200 in 315.8473 ms
+[2026-08-25 21:21:27 INF] 07cfc8b615d343d0af2e95244b32581d HTTP POST /api/habits responded 200 in 317.1625 ms
+[2026-08-25 21:21:27 INF] b623982f101841bfb6418e8aa682a0fe HTTP POST /api/habits responded 200 in 315.0712 ms
+[2026-08-25 21:21:27 INF] 97eae706dd814a4baebde87286c561fd HTTP POST /api/habits responded 200 in 309.3645 ms
+[2026-08-25 21:21:27 INF] 41d62648873c4ca993fd61913d52bbd5 HTTP POST /api/books responded 200 in 318.2725 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[@__habit_Id_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ClientRequestId", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE "h"."Id" = @__habit_Id_0
+LIMIT 2
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ClientRequestId", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE NOT ("h"."IsArchived")
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[@p2='?' (DbType = Int32), @p0='?' (DbType = Guid), @p3='?' (DbType = Guid), @p1='?' (DbType = DateTime)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "Habits" SET "ConcurrencyToken" = @p0, "CreatedAt" = @p1
+WHERE "Id" = @p2 AND "ConcurrencyToken" = @p3
+RETURNING 1;
+[2026-08-25 21:21:27 INF] 60be016c32cc4d2c8567d39aed058dd4 HTTP GET /api/dashboard responded 200 in 127.5905 ms
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 30c4da5157c146498c8db371c9c5af17 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 30c4da5157c146498c8db371c9c5af17 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 40)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 30c4da5157c146498c8db371c9c5af17 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Pets" AS "p"
+WHERE "p"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 30c4da5157c146498c8db371c9c5af17 Executed DbCommand (0ms) [Parameters=[@p0='?', @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?', @p4='?' (DbType = DateTime), @p5='?' (DbType = Int32), @p6='?' (Size = 3), @p7='?', @p8='?' (DbType = Int32), @p9='?' (Size = 3), @p10='?' (Size = 36), @p11='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Pets" ("ClientRequestId", "ConcurrencyToken", "CreatedAt", "EquippedAccessory", "HatchedAt", "Level", "Mood", "Nickname", "Stage", "Type", "UserId", "Xp")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 30c4da5157c146498c8db371c9c5af17 HTTP POST /api/pets responded 200 in 13.0920 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 7)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 2), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 7), @p9='?' (Size = 7), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[@__job_HabitId_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ClientRequestId", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE "h"."Id" = @__job_HabitId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] bc8388f88228432ca5de058bcdfe17bd HTTP POST /api/habits/1/habitcompletions responded 200 in 184.2100 ms
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] a2b556a2a316406f84de8ec9e095bc5c HTTP POST /api/habits/1/habitcompletions responded 200 in 190.2961 ms
+[2026-08-25 21:21:27 INF] c717f268468542568363dd13a30a9582 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "p"."Id", "p"."ClientRequestId", "p"."ConcurrencyToken", "p"."CreatedAt", "p"."EquippedAccessory", "p"."HatchedAt", "p"."Level", "p"."Mood", "p"."Nickname", "p"."Stage", "p"."Type", "p"."UserId", "p"."Xp"
+FROM "Pets" AS "p"
+WHERE "p"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c717f268468542568363dd13a30a9582 Executed DbCommand (0ms) [Parameters=[@__pet_Id_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "p"."Accessory"
+FROM "PetAccessoryUnlocks" AS "p"
+WHERE "p"."PetId" = @__pet_Id_0
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[@__habit_Id_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."Amount", "h"."ClientRequestId", "h"."CompletionDate", "h"."ConcurrencyToken", "h"."HabitId", "h"."IsOnTime", "h"."PetStreakBonusXp", "h"."XpEarned"
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habit_Id_0
+ORDER BY "h"."CompletionDate", "h"."Id"
+[2026-08-25 21:21:27 INF] c717f268468542568363dd13a30a9582 HTTP GET /api/pets/2/accessories responded 200 in 29.7367 ms
+[2026-08-25 21:21:27 INF] cfb7247ef9d6436ea52c5061ef1570cd HTTP POST /api/habits responded 200 in 57.1586 ms
+[2026-08-25 21:21:27 INF] 6a6557998ab44e5e99d37811fbb1dcbb HTTP POST /api/sync/batch responded 200 in 99.0409 ms
+[2026-08-25 21:21:27 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:21:27 INF] b2b3adaca179477587e4890032eec96a Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ClientRequestId", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE "h"."Id" = @__habitId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 4110babe7b444768848bf8cf2d841874 HTTP POST /api/habits/1/habitcompletions responded 200 in 57.8979 ms
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 18)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] b2b3adaca179477587e4890032eec96a Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habitId_0
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ClientRequestId", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE "h"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32), @__cutoffUtc_1='?' (DbType = DateTime)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."CompletionDate", "h"."Amount"
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habitId_0 AND "h"."CompletionDate" >= @__cutoffUtc_1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?', @p2='?' (DbType = DateTime), @p3='?' (DbType = Guid), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (DbType = Int32), @p7='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "HabitCompletions" ("Amount", "ClientRequestId", "CompletionDate", "ConcurrencyToken", "HabitId", "IsOnTime", "PetStreakBonusXp", "XpEarned")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p1='?' (DbType = Int32), @p0='?' (DbType = Guid), @p2='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "Habits" SET "ConcurrencyToken" = @p0
+WHERE "Id" = @p1 AND "ConcurrencyToken" = @p2
+RETURNING 1;
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 18)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "p"."Id", "p"."ClientRequestId", "p"."ConcurrencyToken", "p"."CreatedAt", "p"."EquippedAccessory", "p"."HatchedAt", "p"."Level", "p"."Mood", "p"."Nickname", "p"."Stage", "p"."Type", "p"."UserId", "p"."Xp"
+FROM "Pets" AS "p"
+WHERE "p"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__p_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."ArchivedAt", "h"."Category", "h"."ClientRequestId", "h"."ConcurrencyToken", "h"."CreatedAt", "h"."CustomCategoryName", "h"."DailyGoal", "h"."IsArchived", "h"."Name", "h"."NormalizedName", "h"."Notes", "h"."Period", "h"."ReminderTime", "h"."TargetTime", "h"."Unit", "h"."UserId", "h"."XpBonusForGoal", "h"."XpPerUnit"
+FROM "Habits" AS "h"
+WHERE "h"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__code_0='?' (Size = 16)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."Code", "b"."Description", "b"."Name"
+FROM "Badges" AS "b"
+WHERE "b"."Code" = @__code_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__badge_Id_1='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserBadges" AS "u"
+    WHERE "u"."UserId" = @__userId_0 AND "u"."BadgeId" = @__badge_Id_1)
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__code_0='?' (Size = 8)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."Code", "b"."Description", "b"."Name"
+FROM "Badges" AS "b"
+WHERE "b"."Code" = @__code_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__badge_Id_1='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserBadges" AS "u"
+    WHERE "u"."UserId" = @__userId_0 AND "u"."BadgeId" = @__badge_Id_1)
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__dto_ClientRequestId_1='?' (Size = 32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."ArchivedAt", "b"."Author", "b"."ClientRequestId", "b"."CompletedAt", "b"."CompletionBonusAwarded", "b"."ConcurrencyToken", "b"."CoverImageUrl", "b"."CreatedAt", "b"."CurrentPage", "b"."DailyGoalAmount", "b"."GoalType", "b"."IsArchived", "b"."IsCompleted", "b"."ManuallyCompleted", "b"."NormalizedTitle", "b"."Notes", "b"."Period", "b"."Title", "b"."TotalMinutesRead", "b"."TotalPages", "b"."UserId"
+FROM "Books" AS "b"
+WHERE "b"."UserId" = @__userId_0 AND "b"."ClientRequestId" = @__dto_ClientRequestId_1
+LIMIT 1
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 41)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Books" AS "b"
+WHERE "b"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserBadges" ("BadgeId", "ConcurrencyToken", "EarnedAt", "UserId")
+VALUES (@p0, @p1, @p2, @p3)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedTitleKey_1='?' (Size = 48)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Books" AS "b"
+    WHERE "b"."UserId" = @__userId_0 AND "b"."NormalizedTitle" = @__normalizedTitleKey_1)
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__dedupKey_0='?' (Size = 51)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserNotifications" AS "u"
+    WHERE "u"."DedupKey" = @__dedupKey_0)
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?', @p2='?' (Size = 32), @p3='?' (DbType = DateTime), @p4='?' (DbType = Boolean), @p5='?' (DbType = Guid), @p6='?', @p7='?' (DbType = DateTime), @p8='?' (DbType = Int32), @p9='?' (DbType = Int32), @p10='?' (DbType = Int32), @p11='?' (DbType = Boolean), @p12='?' (DbType = Boolean), @p13='?' (DbType = Boolean), @p14='?' (Size = 48), @p15='?', @p16='?' (DbType = Int32), @p17='?' (Size = 48), @p18='?' (DbType = Int32), @p19='?' (DbType = Int32), @p20='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Books" ("ArchivedAt", "Author", "ClientRequestId", "CompletedAt", "CompletionBonusAwarded", "ConcurrencyToken", "CoverImageUrl", "CreatedAt", "CurrentPage", "DailyGoalAmount", "GoalType", "IsArchived", "IsCompleted", "ManuallyCompleted", "NormalizedTitle", "Notes", "Period", "Title", "TotalMinutesRead", "TotalPages", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32), @__cutoffUtc_1='?' (DbType = DateTime)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."CompletionDate", "h"."Amount"
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habitId_0 AND "h"."CompletionDate" >= @__cutoffUtc_1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 64), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 51), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (Size = 14), @p7='?' (Size = 11), @p8='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserNotifications" ("Body", "ConcurrencyToken", "CreatedAt", "DedupKey", "HabitId", "IsRead", "Title", "Type", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "d"."Token"
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?', @p2='?' (DbType = DateTime), @p3='?' (DbType = Guid), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (DbType = Int32), @p7='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "HabitCompletions" ("Amount", "ClientRequestId", "CompletionDate", "ConcurrencyToken", "HabitId", "IsOnTime", "PetStreakBonusXp", "XpEarned")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p1='?' (DbType = Int32), @p0='?' (DbType = Guid), @p2='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "Habits" SET "ConcurrencyToken" = @p0
+WHERE "Id" = @p1 AND "ConcurrencyToken" = @p2
+RETURNING 1;
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "f"."Id", "f"."ConcurrencyToken", "f"."CreatedAt", "f"."Level", "f"."UpdatedAt", "f"."UserId", "f"."WaterAmount"
+FROM "Flowers" AS "f"
+WHERE "f"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?' (DbType = Int32), @p3='?' (DbType = DateTime), @p4='?' (Size = 36), @p5='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Flowers" ("ConcurrencyToken", "CreatedAt", "Level", "UpdatedAt", "UserId", "WaterAmount")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p4='?' (DbType = Int32), @p0='?' (DbType = Guid), @p5='?' (DbType = Guid), @p1='?' (DbType = Int32), @p2='?' (DbType = DateTime), @p3='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "Flowers" SET "ConcurrencyToken" = @p0, "Level" = @p1, "UpdatedAt" = @p2, "WaterAmount" = @p3
+WHERE "Id" = @p4 AND "ConcurrencyToken" = @p5
+RETURNING 1;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "p"."Id"
+FROM "Pets" AS "p"
+WHERE "p"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__dedupKey_0='?' (Size = 17)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserNotifications" AS "u"
+    WHERE "u"."DedupKey" = @__dedupKey_0)
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "u"."Background"
+FROM "UserBackgroundUnlocks" AS "u"
+WHERE "u"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__dedupKey_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserNotifications" AS "u"
+    WHERE "u"."DedupKey" = @__dedupKey_0)
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 81), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 17), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (Size = 16), @p7='?' (Size = 11), @p8='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserNotifications" ("Body", "ConcurrencyToken", "CreatedAt", "DedupKey", "HabitId", "IsRead", "Title", "Type", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (10ms) [Parameters=[@p0='?' (Size = 35), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 50), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (Size = 15), @p7='?' (Size = 13), @p8='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserNotifications" ("Body", "ConcurrencyToken", "CreatedAt", "DedupKey", "HabitId", "IsRead", "Title", "Type", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "d"."Token"
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] c16b67016a2d415b8628359b91e00137 HTTP POST /api/habits/1/habitcompletions responded 200 in 53.8171 ms
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "d"."Token"
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__code_0='?' (Size = 16)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."Code", "b"."Description", "b"."Name"
+FROM "Badges" AS "b"
+WHERE "b"."Code" = @__code_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__badge_Id_1='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserBadges" AS "u"
+    WHERE "u"."UserId" = @__userId_0 AND "u"."BadgeId" = @__badge_Id_1)
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserBadges" ("BadgeId", "ConcurrencyToken", "EarnedAt", "UserId")
+VALUES (@p0, @p1, @p2, @p3)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__dedupKey_0='?' (Size = 59)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserNotifications" AS "u"
+    WHERE "u"."DedupKey" = @__dedupKey_0)
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 44), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 59), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (Size = 14), @p7='?' (Size = 11), @p8='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserNotifications" ("Body", "ConcurrencyToken", "CreatedAt", "DedupKey", "HabitId", "IsRead", "Title", "Type", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "d"."Token"
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__dedupKey_0='?' (Size = 17)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "UserNotifications" AS "u"
+    WHERE "u"."DedupKey" = @__dedupKey_0)
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 38), @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?' (Size = 17), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (Size = 16), @p7='?' (Size = 11), @p8='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "UserNotifications" ("Body", "ConcurrencyToken", "CreatedAt", "DedupKey", "HabitId", "IsRead", "Title", "Type", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "d"."Token"
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] b2b3adaca179477587e4890032eec96a Executed DbCommand (0ms) [Parameters=[@__habitId_0='?' (DbType = Int32), @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id", "h"."HabitId", "h"."CompletionDate", "h"."Amount", "h"."XpEarned", "h"."IsOnTime"
+FROM "HabitCompletions" AS "h"
+WHERE "h"."HabitId" = @__habitId_0
+ORDER BY "h"."CompletionDate" DESC
+LIMIT @__p_2 OFFSET @__p_1
+[2026-08-25 21:21:27 INF] f309cdf5850340d18ee9b43e1ff5bb6c HTTP POST /api/habits/1/habitcompletions responded 200 in 63.5882 ms
+[2026-08-25 21:21:27 INF] b2b3adaca179477587e4890032eec96a HTTP GET /api/habits/1/habitcompletions responded 200 in 96.1107 ms
+[2026-08-25 21:21:27 INF] 4d751256b76143f09f55fb2781646414 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "f"."Id", "f"."ConcurrencyToken", "f"."CreatedAt", "f"."Level", "f"."UpdatedAt", "f"."UserId", "f"."WaterAmount"
+FROM "Flowers" AS "f"
+WHERE "f"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 88aa8c0d5f0143ce8b69d8047d132c98 HTTP POST /api/books responded 200 in 74.1542 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 4d751256b76143f09f55fb2781646414 HTTP GET /api/flowers responded 200 in 11.4575 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 75863bc331094f818a07674fc9055bb4 Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."Code", "b"."Description", "b"."Name"
+FROM "Badges" AS "b"
+ORDER BY "b"."Id"
+[2026-08-25 21:21:27 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:21:27 INF] 7601806214b641d282267cb27321fa26 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 3e4004c101d54ac6aeece3c14d41ec6a Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__dto_ClientRequestId_1='?' (Size = 32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."ArchivedAt", "b"."Author", "b"."ClientRequestId", "b"."CompletedAt", "b"."CompletionBonusAwarded", "b"."ConcurrencyToken", "b"."CoverImageUrl", "b"."CreatedAt", "b"."CurrentPage", "b"."DailyGoalAmount", "b"."GoalType", "b"."IsArchived", "b"."IsCompleted", "b"."ManuallyCompleted", "b"."NormalizedTitle", "b"."Notes", "b"."Period", "b"."Title", "b"."TotalMinutesRead", "b"."TotalPages", "b"."UserId"
+FROM "Books" AS "b"
+WHERE "b"."UserId" = @__userId_0 AND "b"."ClientRequestId" = @__dto_ClientRequestId_1
+LIMIT 1
+[2026-08-25 21:21:27 INF] 3e4004c101d54ac6aeece3c14d41ec6a HTTP POST /api/books responded 200 in 4.3181 ms
+[2026-08-25 21:21:27 INF] 75863bc331094f818a07674fc9055bb4 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "u"."Id", "u"."BadgeId", "u"."ConcurrencyToken", "u"."EarnedAt", "u"."UserId"
+FROM "UserBadges" AS "u"
+WHERE "u"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 7601806214b641d282267cb27321fa26 HTTP PUT /api/notificationpreferences responded 400 in 39.1421 ms
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 42)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedNameKey_1='?' (Size = 39)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Habits" AS "h"
+    WHERE "h"."UserId" = @__userId_0 AND "h"."NormalizedName" = @__normalizedNameKey_1)
+[2026-08-25 21:21:27 INF] 9d1cedd0753341648ab296fb60b710bb Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 5), @p2='?', @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (Size = 7), @p6='?' (DbType = Int32), @p7='?' (DbType = Boolean), @p8='?' (Size = 39), @p9='?' (Size = 39), @p10='?', @p11='?' (DbType = Int32), @p12='?' (DbType = Time), @p13='?' (DbType = Time), @p14='?' (DbType = Int32), @p15='?' (Size = 36), @p16='?' (DbType = Int32), @p17='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Habits" ("ArchivedAt", "Category", "ClientRequestId", "ConcurrencyToken", "CreatedAt", "CustomCategoryName", "DailyGoal", "IsArchived", "Name", "NormalizedName", "Notes", "Period", "ReminderTime", "TargetTime", "Unit", "UserId", "XpBonusForGoal", "XpPerUnit")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 9d1cedd0753341648ab296fb60b710bb Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 40)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] e53be81149274dcba3f4a9107eb3368d Executed DbCommand (0ms) [Parameters=[@p20='?' (Size = 36), @p0='?' (DbType = Int32), @p1='?', @p2='?' (Size = 36), @p21='?' (Size = 36), @p3='?' (DbType = DateTime), @p4='?', @p5='?' (Size = 50), @p6='?' (DbType = Boolean), @p7='?' (Size = 4), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTimeOffset), @p10='?' (Size = 50), @p11='?' (Size = 50), @p12='?' (Size = 84), @p13='?', @p14='?' (DbType = Boolean), @p15='?' (Size = 32), @p16='?' (Size = 15), @p17='?' (DbType = Int32), @p18='?' (DbType = Boolean), @p19='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "AspNetUsers" SET "AccessFailedCount" = @p0, "AvatarUrl" = @p1, "ConcurrencyStamp" = @p2, "CreatedAt" = @p3, "DisplayName" = @p4, "Email" = @p5, "EmailConfirmed" = @p6, "EquippedBackground" = @p7, "LockoutEnabled" = @p8, "LockoutEnd" = @p9, "NormalizedEmail" = @p10, "NormalizedUserName" = @p11, "PasswordHash" = @p12, "PhoneNumber" = @p13, "PhoneNumberConfirmed" = @p14, "SecurityStamp" = @p15, "TimeZoneId" = @p16, "TotalXp" = @p17, "TwoFactorEnabled" = @p18, "UserName" = @p19
+WHERE "Id" = @p20 AND "ConcurrencyStamp" = @p21
+RETURNING 1;
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:21:27 INF] 9d1cedd0753341648ab296fb60b710bb Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Pets" AS "p"
+WHERE "p"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 9d1cedd0753341648ab296fb60b710bb Executed DbCommand (0ms) [Parameters=[@p0='?', @p1='?' (DbType = Guid), @p2='?' (DbType = DateTime), @p3='?', @p4='?' (DbType = DateTime), @p5='?' (DbType = Int32), @p6='?' (Size = 3), @p7='?', @p8='?' (DbType = Int32), @p9='?' (Size = 5), @p10='?' (Size = 36), @p11='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Pets" ("ClientRequestId", "ConcurrencyToken", "CreatedAt", "EquippedAccessory", "HatchedAt", "Level", "Mood", "Nickname", "Stage", "Type", "UserId", "Xp")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:21:27 INF] 1200ed7e37d042f08f72b54ab1bd987e Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:21:27 INF] 9d1cedd0753341648ab296fb60b710bb HTTP POST /api/pets responded 200 in 56.6413 ms
+[2026-08-25 21:21:27 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:21:27 INF] 1200ed7e37d042f08f72b54ab1bd987e Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 41)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:21:27 INF] 1200ed7e37d042f08f72b54ab1bd987e Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "Books" AS "b"
+WHERE "b"."UserId" = @__userId_0
+[2026-08-25 21:21:27 INF] 1200ed7e37d042f08f72b54ab1bd987e Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__normalizedTitleKey_1='?' (Size = 51)], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Books" AS "b"
+    WHERE "b"."UserId" = @__userId_0 AND "b"."NormalizedTitle" = @__normalizedTitleKey_1)
+[2026-08-25 21:21:27 INF] 1200ed7e37d042f08f72b54ab1bd987e Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?', @p2='?', @p3='?' (DbType = DateTime), @p4='?' (DbType = Boolean), @p5='?' (DbType = Guid), @p6='?', @p7='?' (DbType = DateTime), @p8='?' (DbType = Int32), @p9='?' (DbType = Int32), @p10='?' (DbType = Int32), @p11='?' (DbType = Boolean), @p12='?' (DbType = Boolean), @p13='?' (DbType = Boolean), @p14='?' (Size = 51), @p15='?', @p16='?' (DbType = Int32), @p17='?' (Size = 51), @p18='?' (DbType = Int32), @p19='?' (DbType = Int32), @p20='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "Books" ("ArchivedAt", "Author", "ClientRequestId", "CompletedAt", "CompletionBonusAwarded", "ConcurrencyToken", "CoverImageUrl", "CreatedAt", "CurrentPage", "DailyGoalAmount", "GoalType", "IsArchived", "IsCompleted", "ManuallyCompleted", "NormalizedTitle", "Notes", "Period", "Title", "TotalMinutesRead", "TotalPages", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20)
+RETURNING "Id";
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[@__normalizedUserName_0='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."NormalizedUserName" = @__normalizedUserName_0
+LIMIT 1
+[2026-08-25 21:21:27 INF]  Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 36), @p1='?' (DbType = Int32), @p2='?', @p3='?' (Size = 36), @p4='?' (DbType = DateTime), @p5='?', @p6='?' (Size = 50), @p7='?' (DbType = Boolean), @p8='?' (Size = 4), @p9='?' (DbType = Boolean), @p10='?' (DbType = DateTimeOffset), @p11='?' (Size = 50), @p12='?' (Size = 50), @p13='?' (Size = 84), @p14='?', @p15='?' (DbType = Boolean), @p16='?' (Size = 32), @p17='?' (Size = 15), @p18='?' (DbType = Int32), @p19='?' (DbType = Boolean), @p20='?' (Size = 50)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "AspNetUsers" ("Id", "AccessFailedCount", "AvatarUrl", "ConcurrencyStamp", "CreatedAt", "DisplayName", "Email", "EmailConfirmed", "EquippedBackground", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TimeZoneId", "TotalXp", "TwoFactorEnabled", "UserName")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20);
+[2026-08-25 21:21:28 WRN] bb2623daa09348e9a536bed3c14ba3b9 Failed to determine the https port for redirect.

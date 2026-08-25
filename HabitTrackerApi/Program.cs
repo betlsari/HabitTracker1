@@ -399,6 +399,7 @@ builder.Services.AddScoped<PetCosmeticsService>();
 builder.Services.AddScoped<TwoFactorLockoutService>();
 builder.Services.AddScoped<UserDataExportService>();
 builder.Services.AddScoped<NotificationDigestService>();
+builder.Services.AddScoped<ReminderService>();
 builder.Services.AddScoped<TwoFactorFallbackCodeService>();
 
 // Hosted Services (Background Tasks)
@@ -406,6 +407,7 @@ builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddHostedService<AuthAuditCleanupService>();
+builder.Services.AddHostedService<ArchivedRecordsCleanupService>();
 // DÜZELTİLDİ: Artık DB outbox tablosunu poll ediyor (bkz. yukarıdaki not).
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
 builder.Services.AddHostedService<RecalculationBackgroundService>();

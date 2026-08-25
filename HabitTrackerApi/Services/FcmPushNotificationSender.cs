@@ -13,6 +13,12 @@ public interface IPushNotificationSender
 
 public class FcmPushNotificationSender : IPushNotificationSender
 {
+    private static readonly HashSet<string> PermanentTokenErrorCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "UNREGISTERED",
+        "INVALID_ARGUMENT",
+        "SENDER_ID_MISMATCH"
+    };
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly FcmAccessTokenProvider _tokenProvider;
     private readonly ILogger<FcmPushNotificationSender> _logger;
@@ -80,7 +86,7 @@ public class FcmPushNotificationSender : IPushNotificationSender
                     var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     var errorCode = TryExtractFcmErrorCode(errorBody);
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound ||
-                        string.Equals(errorCode, "UNREGISTERED", StringComparison.OrdinalIgnoreCase))
+                        (errorCode != null && PermanentTokenErrorCodes.Contains(errorCode)))
                     {
                         var removed = await _context.DeviceTokens
                             .Where(t => t.Token == token)
@@ -115,7 +121,18 @@ public class FcmPushNotificationSender : IPushNotificationSender
                     {
                         return codeEl.GetString();
                     }
+
+                    if (detail.TryGetProperty("reason", out var reasonEl))
+                    {
+                        return reasonEl.GetString();
+                    }
                 }
+            }
+
+            if (doc.RootElement.TryGetProperty("error", out var error) &&
+                error.TryGetProperty("status", out var status))
+            {
+                return status.GetString();
             }
         }
         catch

@@ -16,4 +16,6 @@ public class ResetPasswordDto
     [Required]
     [StrongPassword]
     public required string NewPassword { get; set; }
+
+    public string? CaptchaToken { get; set; }
 }

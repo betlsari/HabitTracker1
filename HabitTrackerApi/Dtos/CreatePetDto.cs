@@ -8,5 +8,8 @@ public class CreatePetDto
     public required string Type { get; set; }
 
     [MaxLength(100)]
+    public string? Nickname { get; set; }
+
+    [MaxLength(100)]
     public string? ClientRequestId { get; set; }
 }

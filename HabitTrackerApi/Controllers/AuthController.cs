@@ -633,6 +633,11 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
     {
+        if (!await ValidateCaptchaAsync(dto.CaptchaToken))
+        {
+            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
+        }
+
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
