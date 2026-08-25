@@ -12,6 +12,9 @@ public class NotificationPreference : IHasConcurrencyToken
     public TimeOnly? QuietHoursStart { get; set; }
     public TimeOnly? QuietHoursEnd { get; set; }
 
+    public bool DigestEnabled { get; set; }
+    public int DigestHourUtc { get; set; } = 19;
+
     public DateTime UpdatedAt { get; set; }
 
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();

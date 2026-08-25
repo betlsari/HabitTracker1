@@ -10,4 +10,6 @@ public class LoginDto
 
     [Required]
     public required string Password { get; set; }
+
+    public string? CaptchaToken { get; set; }
 }

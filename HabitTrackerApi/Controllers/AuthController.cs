@@ -1,4 +1,3 @@
-
 using Microsoft.AspNetCore.Identity;
 using Models;
 using Dtos;
@@ -30,10 +29,13 @@ public class AuthController : ControllerBase
 
     private readonly AppDbContext _context;
 
+    // DÜZELTİLDİ: IEmailQueue artık DB destekli outbox'a yazıyor
+    // (bkz. Services/EmailOutboxService.cs); Enqueue -> EnqueueAsync.
     private readonly IEmailQueue _emailQueue;
     private readonly TwoFactorLockoutService _twoFactorLockout;
-
-       private readonly SecurityStampCache _securityStampCache;
+    private readonly SecurityStampCache _securityStampCache;
+    private readonly CaptchaVerifier _captchaVerifier;
+    private readonly TwoFactorFallbackCodeService _twoFactorFallbackCodeService;
 
     public AuthController(
         UserManager<User> userManager,
@@ -45,6 +47,8 @@ public class AuthController : ControllerBase
         AppDbContext context,
         TwoFactorLockoutService twoFactorLockout,
         SecurityStampCache securityStampCache,
+        CaptchaVerifier captchaVerifier,
+        TwoFactorFallbackCodeService twoFactorFallbackCodeService,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -56,17 +60,22 @@ public class AuthController : ControllerBase
         _context = context;
         _twoFactorLockout = twoFactorLockout;
         _securityStampCache = securityStampCache;
+        _captchaVerifier = captchaVerifier;
+        _twoFactorFallbackCodeService = twoFactorFallbackCodeService;
         _logger = logger;
     }
 
+    private async Task<bool> ValidateCaptchaAsync(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return !_captchaVerifier.IsEnabled;
+        }
 
-    // DÜZELTİLDİ (🔴 güvenlik): PreAuthToken artık SecurityStamp taşıyor (bkz.
-    // TokenService.GeneratePreAuthToken). Token doğrulandıktan sonra, içindeki
-    // SecurityStamp kullanıcının GÜNCEL SecurityStamp'i ile karşılaştırılıyor.
-    // Böylece login akışının ortasında (şifre doğrulandı, 2FA kodu bekleniyor)
-    // başka bir yerden şifre değiştirme/2FA kapatma gibi bir işlem yapılırsa,
-    // elde kalan eski PreAuthToken artık kullanılamıyor — normal access
-    // token'lardaki anlık iptal koruması (sstamp) bu akışa da taşınmış oldu.
+        return await _captchaVerifier.ValidateAsync(token);
+    }
+
+
     [HttpPost("2fa/login")]
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> TwoFactorLogin(TwoFactorLoginDto dto)
@@ -102,6 +111,14 @@ public class AuthController : ControllerBase
 
         if (!codeValid)
         {
+            if (await _twoFactorFallbackCodeService.ValidateCodeAsync(user.Id, dto.Code))
+            {
+                await _twoFactorLockout.ResetAsync(userId);
+                var (fallbackAccessToken, fallbackRefreshToken) = await IssueTokensAsync(user);
+                await _authAudit.RecordAsync(HttpContext, "two-factor-login", true, user, detail: "email-fallback");
+                return Ok(new { Token = fallbackAccessToken, RefreshToken = fallbackRefreshToken });
+            }
+
             var recoveryValid = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.Code);
             if (!recoveryValid.Succeeded)
             {
@@ -117,10 +134,6 @@ public class AuthController : ControllerBase
         return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
-    // DÜZELTİLDİ: 2FA kurulum başlatma (secret/QR üretimi) artık audit
-    // trail'e yazılıyor. Kurulum tek başına 2FA'yı etkinleştirmez ama bir
-    // hesapta authenticator secret'inin sıfırlanmasını (ResetAuthenticatorKeyAsync)
-    // içerir; login/2fa-login/email-change ile tutarlı olması için izleniyor.
     [HttpPost("2fa/setup")]
     [Authorize]
     public async Task<IActionResult> SetupTwoFactor()
@@ -146,8 +159,6 @@ public class AuthController : ControllerBase
         return Ok(new { SharedKey = unformattedKey, AuthenticatorUri = authenticatorUri });
     }
 
-    // DÜZELTİLDİ: 2FA etkinleştirme başarılı/başarısız denemeleri artık
-    // audit trail'e yazılıyor.
     [HttpPost("2fa/enable")]
     [Authorize]
     public async Task<IActionResult> EnableTwoFactor(EnableTwoFactorDto dto)
@@ -195,6 +206,11 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Register(RegisterDto registerDto)
     {
+        if (!await ValidateCaptchaAsync(registerDto.CaptchaToken))
+        {
+            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
+        }
+
         var user = new User
         {
             UserName = registerDto.Email,
@@ -217,7 +233,7 @@ public class AuthController : ControllerBase
         }
 
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        _emailQueue.Enqueue(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
+        await _emailQueue.EnqueueAsync(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
     }
 
@@ -225,6 +241,11 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Login(LoginDto loginDto)
     {
+        if (!await ValidateCaptchaAsync(loginDto.CaptchaToken))
+        {
+            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
+        }
+
         var user = await _userManager.FindByEmailAsync(loginDto.Email);
         if (user == null)
         {
@@ -252,10 +273,16 @@ public class AuthController : ControllerBase
         {
             await _authAudit.RecordAsync(HttpContext, "login-password", true, user, detail: "two-factor-required");
             var preAuthToken = _tokenService.GeneratePreAuthToken(user);
+            var emailFallbackCode = await _twoFactorFallbackCodeService.GenerateCodeAsync(user.Id);
+            await _emailQueue.EnqueueAsync(new EmailMessage(
+                user.Email!,
+                "2FA güvenlik kodu",
+                $"İki adımlı doğrulama için güvenlik kodunuz: {emailFallbackCode}. Bu kod 10 dakika boyunca geçerli olacaktır."));
             return Ok(new
             {
                 RequiresTwoFactor = true,
-                PreAuthToken = preAuthToken
+                PreAuthToken = preAuthToken,
+                EmailFallbackSent = true
             });
         }
 
@@ -278,9 +305,6 @@ public class AuthController : ControllerBase
         return Ok(new { Enabled = user.TwoFactorEnabled });
     }
 
-    // DÜZELTİLDİ: 2FA devre dışı bırakma başarılı/başarısız denemeleri
-    // artık audit trail'e yazılıyor. 2FA'yı kapatmak hesabın güvenlik
-    // seviyesini düşüren en hassas işlemlerden biri olduğu için önemli.
     [HttpPost("2fa/disable")]
     [Authorize]
     public async Task<IActionResult> DisableTwoFactor(DisableTwoFactorDto dto)
@@ -464,18 +488,6 @@ public class AuthController : ControllerBase
         };
     }
 
-    // DÜZELTİLDİ: Bu uç e-posta gönderimi tetiklediği için (spam/email
-    // bombing riski) AuthPolicy (5/dk/IP) rate limitine alındı. Önceden sadece
-    // global limitere (120/dk/kullanıcı) tabiydi; yetkili herhangi bir
-    // kullanıcı, üçüncü bir kişinin adresini NewEmail olarak vererek o
-    // adrese dakikada onlarca onay kodu e-postası tetikleyebiliyordu.
-    //
-    // DÜZELTİLDİ (🔴 güvenlik): [EmailRateLimit] eklendi. AuthPolicy sadece
-    // IP bazlı sınırlıyordu; farklı IP'lerden (ör. bir botnet/proxy havuzu)
-    // aynı NewEmail adresine yönelik istekler AuthPolicy'yi hiç doldurmadan
-    // geçebiliyordu. EmailRateLimitAttribute, DTO'daki Email/NewEmail alanını
-    // okuyup adres bazlı (IP'den bağımsız) bir pencere de uyguluyor —
-    // böylece IP değiştirilerek yapılan email bombing artık engelleniyor.
     [HttpPost("email-change")]
     [Authorize]
     [EnableRateLimiting("AuthPolicy")]
@@ -514,7 +526,7 @@ public class AuthController : ControllerBase
         if (!string.IsNullOrWhiteSpace(oldEmail) &&
             !string.Equals(oldEmail, dto.NewEmail, StringComparison.OrdinalIgnoreCase))
         {
-            _emailQueue.Enqueue(new EmailMessage(
+            await _emailQueue.EnqueueAsync(new EmailMessage(
                 oldEmail,
                 "Hesap email adresiniz değiştirildi",
                 $"Hesabınızın email adresi '{dto.NewEmail}' olarak değiştirildi. " +
@@ -540,9 +552,6 @@ public class AuthController : ControllerBase
         return Ok("Email doğrulandı.");
     }
 
-    // DÜZELTİLDİ (🔴 güvenlik): [EmailRateLimit] eklendi. Önceden sadece IP
-    // bazlı AuthPolicy (5/dk) vardı; farklı IP'lerden gelen istekler aynı
-    // email adresine sınırsız doğrulama maili tetikleyebiliyordu.
     [HttpPost("resend-confirmation")]
     [EnableRateLimiting("AuthPolicy")]
     [EmailRateLimit]
@@ -552,22 +561,22 @@ public class AuthController : ControllerBase
         if (user != null && !await _userManager.IsEmailConfirmedAsync(user))
         {
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-            _emailQueue.Enqueue(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
+            await _emailQueue.EnqueueAsync(new EmailMessage(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}"));
         }
 
         return Ok("Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, yeni bir doğrulama kodu gönderildi.");
     }
 
-    // DÜZELTİLDİ (🔴 güvenlik): [EmailRateLimit] eklendi. Önceden sadece IP
-    // bazlı AuthPolicy (5/dk) vardı; bir saldırgan farklı IP'lerden aynı
-    // kurbanın email adresine sınırsız şifre sıfırlama maili tetikleyebiliyordu
-    // (email bombing / rahatsız etme saldırısı). Artık adres bazlı bir pencere
-    // de (varsayılan: 15 dakikada 8 istek) uygulanıyor, IP'den bağımsız olarak.
     [HttpPost("forgot-password")]
     [EnableRateLimiting("AuthPolicy")]
     [EmailRateLimit]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
     {
+        if (!await ValidateCaptchaAsync(dto.CaptchaToken))
+        {
+            return BadRequest("Captcha doğrulanamadı. Lütfen tekrar deneyin.");
+        }
+
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
@@ -575,7 +584,7 @@ public class AuthController : ControllerBase
         }
 
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        _emailQueue.Enqueue(new EmailMessage(user.Email!, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}"));
+        await _emailQueue.EnqueueAsync(new EmailMessage(user.Email!, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}"));
 
         return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
     }
@@ -620,10 +629,6 @@ public class AuthController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ (madde: eksik audit trail): Şifre sıfırlama artık başarılı
-    // ve başarısız denemelerde audit trail'e yazılıyor. Önceden bu hassas
-    // işlem hiç izlenmiyordu; kullanıcı /api/auth/audit-log üzerinden kendi
-    // şifresinin ne zaman sıfırlandığını göremiyordu.
     [HttpPost("reset-password")]
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
@@ -647,11 +652,6 @@ public class AuthController : ControllerBase
         return Ok("Şifre başarıyla sıfırlandı.");
     }
 
-    // DÜZELTİLDİ (madde: eksik audit trail + brute-force koruması): Şifre
-    // değiştirme artık audit trail'e yazılıyor ve AuthPolicy (5/dk/IP) rate
-    // limitine alındı. Önceden sadece global limitere (120/dk/kullanıcı)
-    // tabiydi; bir saldırgan geçerli bir oturumla CurrentPassword'ü
-    // deneme-yanılma ile deneyebiliyordu.
     [HttpPost("change-password")]
     [Authorize]
     [EnableRateLimiting("AuthPolicy")]
@@ -708,15 +708,30 @@ public class AuthController : ControllerBase
         {
             return NotFound();
         }
-        return Ok(new { user.Email, user.TotalXp, user.TimeZoneId, user.TwoFactorEnabled });
+        return Ok(new { user.Email, user.DisplayName, user.AvatarUrl, user.TotalXp, user.TimeZoneId, user.TwoFactorEnabled });
     }
 
-    // DÜZELTİLDİ (madde: eksik audit trail + brute-force koruması): Hesap
-    // silme artık AuthPolicy rate limitine alındı ve (başarılı/başarısız)
-    // audit trail'e yazılıyor. Kayıt, hesap silinmeden ÖNCE yazılıyor;
-    // AuthAuditEvent kasıtlı olarak User'a FK ile bağlı değil (bkz.
-    // Models/AuthAuditEvent.cs), bu sayede hesap silindikten sonra da bu
-    // kritik olay denetim izinde kalmaya devam eder.
+    [HttpPut("me/profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile(UpdateProfileDto dto)
+    {
+        var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        user.DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? null : dto.DisplayName.Trim();
+        user.AvatarUrl = string.IsNullOrWhiteSpace(dto.AvatarUrl) ? null : dto.AvatarUrl.Trim();
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            return BadRequest(result.Errors);
+        }
+
+        return Ok(new { user.Email, user.DisplayName, user.AvatarUrl, user.TotalXp, user.TimeZoneId });
+    }
+
     [HttpDelete("me")]
     [Authorize]
     [EnableRateLimiting("AuthPolicy")]
@@ -744,7 +759,7 @@ if (!result.Succeeded)
     return BadRequest(result.Errors);
 }
 
-_securityStampCache.Invalidate(userId!);  
+await _securityStampCache.InvalidateAsync(userId!);
 
         return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }
@@ -757,8 +772,6 @@ _securityStampCache.Invalidate(userId!);
             Token = TokenService.HashToken(refreshToken),
             UserId = user.Id,
             CreatedAt = DateTime.UtcNow,
-            // DÜZELTİLDİ (madde 8): hardcoded AddDays(7) yerine konfigüre
-            // edilebilir TokenService.RefreshTokenLifetime kullanılıyor.
             ExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime),
             RevokedAt = null,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
@@ -841,8 +854,9 @@ public async Task<IActionResult> RegenerateRecoveryCodes(RegenerateRecoveryCodes
         }
 
        
-       
-        _securityStampCache.Invalidate(userId);
+       // DÜZELTİLDİ: SecurityStampCache artık dağıtık (Redis) — bu çağrı
+       // TÜM API instance'larındaki cache'i geçersiz kılar.
+       await _securityStampCache.InvalidateAsync(userId);
 
         return activeTokens.Count;
     }

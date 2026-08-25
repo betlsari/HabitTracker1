@@ -10,6 +10,7 @@ using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Configuration;
 using Asp.Versioning;
+using Filters;
 
 namespace Controllers;
 
@@ -19,6 +20,8 @@ namespace Controllers;
 [Authorize]
 public class BooksController : ControllerBase
 {
+    private const long MaxCoverSize = 5 * 1024 * 1024;
+    private readonly IWebHostEnvironment _environment;
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
 
@@ -44,6 +47,7 @@ public class BooksController : ControllerBase
         NotificationService notificationService,
         IRecalculationQueue recalculationQueue,
         IOptions<AppLimitsOptions> limits,
+        IWebHostEnvironment environment,
         ILogger<BooksController> logger)
     {
         _context = context;
@@ -53,6 +57,7 @@ public class BooksController : ControllerBase
         _notificationService = notificationService;
         _recalculationQueue = recalculationQueue;
         _maxBooksPerUser = limits.Value.MaxBooksPerUser;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -126,6 +131,7 @@ public class BooksController : ControllerBase
     }
 
     [HttpPost]
+    [SanitizeText]
     public async Task<ActionResult<BookDto>> CreateBook(CreateBookDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -136,6 +142,16 @@ public class BooksController : ControllerBase
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
+            if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+            {
+                var existing = await _context.Books.AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.UserId == userId && b.ClientRequestId == dto.ClientRequestId);
+                if (existing != null)
+                {
+                    return BookService.ToDto(existing);
+                }
+            }
+
             await _context.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtext({"book:" + userId}))");
 
@@ -144,15 +160,24 @@ public class BooksController : ControllerBase
                 return Conflict($"En fazla {_maxBooksPerUser} kitap oluşturabilirsiniz.");
             }
 
+            var normalizedTitle = dto.Title.Trim();
+            var normalizedTitleKey = normalizedTitle.ToUpperInvariant();
+            if (await _context.Books.AnyAsync(b => b.UserId == userId && b.NormalizedTitle == normalizedTitleKey))
+            {
+                return Conflict("Bu başlıkta zaten bir kitabınız var.");
+            }
+
             var book = new Book
             {
-                Title = dto.Title,
+                Title = normalizedTitle,
+                NormalizedTitle = normalizedTitleKey,
                 Author = dto.Author,
                 GoalType = dto.GoalType,
                 Period = dto.Period,
                 TotalPages = dto.TotalPages,
                 DailyGoalAmount = dto.DailyGoalAmount,
                 Notes = dto.Notes,
+                ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
                 CoverImageUrl = dto.CoverImageUrl,
                 UserId = userId,
                 CreatedAt = DateTime.UtcNow
@@ -171,6 +196,7 @@ public class BooksController : ControllerBase
     // kontratı bozmuyor (bkz. HabitsController.UpdateHabit üzerindeki
     // açıklama).
     [HttpPut("{id:int}")]
+    [SanitizeText]
     public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -194,6 +220,45 @@ public class BooksController : ControllerBase
         var user = await _userManager.FindByIdAsync(userId);
         _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, user?.TimeZoneId);
 
+        return BookService.ToDto(book);
+    }
+
+    [HttpPost("{id:int}/cover")]
+    [RequestSizeLimit(MaxCoverSize)]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<BookDto>> UploadCover(int id, IFormFile file)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (book == null)
+        {
+            return NotFound();
+        }
+
+        if (file.Length == 0 || file.Length > MaxCoverSize ||
+            file.ContentType is not ("image/jpeg" or "image/png" or "image/webp"))
+        {
+            return BadRequest("Kapak görseli JPEG, PNG veya WebP formatında ve en fazla 5 MB olmalıdır.");
+        }
+
+        var extension = file.ContentType switch
+        {
+            "image/jpeg" => ".jpg",
+            "image/png" => ".png",
+            _ => ".webp"
+        };
+        var relativeDirectory = Path.Combine("uploads", "covers");
+        var directory = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), relativeDirectory);
+        Directory.CreateDirectory(directory);
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var path = Path.Combine(directory, fileName);
+        await using (var stream = System.IO.File.Create(path))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        book.CoverImageUrl = $"/uploads/covers/{fileName}";
+        await _context.SaveChangesAsync();
         return BookService.ToDto(book);
     }
 
@@ -293,22 +358,9 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        var totalXpFromLogs = await _context.BookReadingLogs
-            .Where(l => l.BookId == id)
-            .SumAsync(l => (int?)l.XpEarned) ?? 0;
-
-        var manualCompletionXp = book.ManuallyCompleted && book.CompletionBonusAwarded
-            ? BookService.CompletionBonusXp
-            : 0;
-        var totalXpToRemove = totalXpFromLogs + manualCompletionXp;
-
-        _context.Books.Remove(book);
+        book.IsArchived = true;
+        book.ArchivedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
-
-        if (totalXpToRemove != 0)
-        {
-            await ApplyXpDeltaAsync(userId, -totalXpToRemove);
-        }
 
         await transaction.CommitAsync();
         return NoContent();

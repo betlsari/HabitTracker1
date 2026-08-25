@@ -1,34 +1,38 @@
+using System.Diagnostics;
 using Data;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Models;
+using Services.Observability;
 
 namespace Services;
 
-// DÜZELTİLDİ (🟡 N+1 / performans): Önceden habit ve book toplamları
-// (LoadPeriodTotalsAsync) her habit/book için AYRI AYRI çağrılıyordu — bu
-// job her dakika çalıştığı için kullanıcı sayısı arttıkça DB'ye ciddi yük
-// biniyordu. Artık habit'ler/kitaplar (Period, TimeZoneId) kombinasyonuna
-// göre gruplanıp her grup için TEK toplu sorgu (LoadPeriodTotalsBatchAsync)
-// atılıyor. Ayrıca aynı totals haritası hem "hatırlatma" hem de "kaçırıldı"
-// geçişinde tekrar kullanılıyor — önceden bu iki geçiş birbirinden habersiz,
-// aynı veriyi iki kez sorguluyordu.
-public class ReminderBackgroundService : BackgroundService
+
+public class ReminderBackgroundService : BackgroundService   
 {
+    private const int MaxAttempts = 3;
+    private const int BatchSize = 10;
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan[] RetryDelays =
+    {
+        TimeSpan.FromSeconds(15),
+        TimeSpan.FromMinutes(2)
+    };
+
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IConfiguration _configuration;
     private readonly ILogger<ReminderBackgroundService> _logger;
-    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
-    private const int MinuteTolerance = 1;
+
+    private readonly string _workerId =
+        $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
 
     public ReminderBackgroundService(
-        IServiceScopeFactory scopeFactory,
-        IConfiguration configuration,
-        ILogger<ReminderBackgroundService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _configuration = configuration;
-        _logger = logger;
-    }
+    IServiceScopeFactory scopeFactory,
+    ILogger<ReminderBackgroundService> logger)
+{
+    _scopeFactory = scopeFactory;
+    _logger = logger;
+}
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -36,24 +40,16 @@ public class ReminderBackgroundService : BackgroundService
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
-                var progress = scope.ServiceProvider.GetRequiredService<HabitProgressService>();
-                var bookService = scope.ServiceProvider.GetRequiredService<BookService>();
-                var missedHour = _configuration.GetValue("Notifications:MissedHabitLocalHour", 21);
-
-                await RunHabitPassAsync(db, notifications, progress, missedHour, stoppingToken);
-                await RunBookPassAsync(db, notifications, bookService, missedHour, stoppingToken);
+                await ProcessBatchAsync(stoppingToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Hatırlatma job'ı sırasında hata oluştu.");
+                _logger.LogError(ex, "Recalculation outbox işlenirken beklenmedik hata oluştu.");
             }
 
             try
             {
-                await Task.Delay(Interval, stoppingToken);
+                await Task.Delay(PollInterval, stoppingToken);
             }
             catch (TaskCanceledException)
             {
@@ -61,236 +57,170 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
-    private static async Task RunHabitPassAsync(
-        AppDbContext db,
-        NotificationService notifications,
-        HabitProgressService progress,
-        int missedHour,
-        CancellationToken cancellationToken)
+    private async Task ProcessBatchAsync(CancellationToken stoppingToken)
     {
-        var now = DateTime.UtcNow;
-        var habits = await db.Habits.AsNoTracking()
-            .Include(h => h.User)
-            .Where(h => !h.IsArchived)
-            .ToListAsync(cancellationToken);
+        using var claimScope = _scopeFactory.CreateScope();
+        var processor = claimScope.ServiceProvider.GetRequiredService<IRecalculationOutboxProcessor>();
 
-        if (habits.Count == 0)
+        var batch = await processor.ClaimBatchAsync(BatchSize, _workerId, stoppingToken);
+        if (batch.Count == 0)
         {
             return;
         }
 
-        var tzByHabit = habits.ToDictionary(h => h.Id, h => TimeZones.Resolve(h.User?.TimeZoneId));
-        var totalsByHabit = await LoadHabitTotalsGroupedAsync(progress, habits, tzByHabit, cancellationToken);
-
-        await SendRemindersAsync(habits, tzByHabit, totalsByHabit, notifications, now, cancellationToken);
-        await SendMissedAsync(habits, tzByHabit, totalsByHabit, notifications, missedHour, now, cancellationToken);
-    }
-
-    private static async Task<Dictionary<int, Dictionary<DateTime, int>>> LoadHabitTotalsGroupedAsync(
-        HabitProgressService progress,
-        List<Habit> habits,
-        Dictionary<int, TimeZoneInfo> tzByHabit,
-        CancellationToken cancellationToken)
-    {
-        var result = new Dictionary<int, Dictionary<DateTime, int>>();
-
-        foreach (var group in habits.GroupBy(h => (h.Period, TzId: tzByHabit[h.Id].Id)))
+        foreach (var job in batch)
         {
-            var habitIds = group.Select(h => h.Id).ToArray();
-            var tz = tzByHabit[group.First().Id];
-            var batch = await progress.LoadPeriodTotalsBatchAsync(habitIds, group.Key.Period, tz, cancellationToken);
-            foreach (var kv in batch)
-            {
-                result[kv.Key] = kv.Value;
-            }
-        }
-
-        return result;
-    }
-
-    private static async Task SendRemindersAsync(
-        List<Habit> habits,
-        Dictionary<int, TimeZoneInfo> tzByHabit,
-        Dictionary<int, Dictionary<DateTime, int>> totalsByHabit,
-        NotificationService notifications,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        foreach (var habit in habits)
-        {
-            if (habit.ReminderTime == null)
-            {
-                continue;
-            }
-
-            var tz = tzByHabit[habit.Id];
-            var local = TimeZones.ToLocal(now, tz);
-            var reminderTime = habit.ReminderTime.Value.ToTimeSpan();
-            if (Math.Abs((local.TimeOfDay - reminderTime).TotalMinutes) > MinuteTolerance)
-            {
-                continue;
-            }
-
-            var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
-            var periodStart = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
-            if (HabitProgressService.IsGoalReached(habit, totals, periodStart))
-            {
-                continue;
-            }
-
-            var localDate = local.Date.ToString("yyyy-MM-dd");
-            await notifications.TryEnqueueAsync(
-                habit.UserId,
-                NotificationTypes.Reminder,
-                "Alışkanlık hatırlatması",
-                $"{habit.Name} için belirlediğin saat geldi.",
-                habit.Id,
-                $"reminder:{habit.Id}:{localDate}",
-                cancellationToken);
+            await ProcessJobWithOutcomeAsync(job, stoppingToken);
         }
     }
 
-    private static async Task SendMissedAsync(
-        List<Habit> habits,
-        Dictionary<int, TimeZoneInfo> tzByHabit,
-        Dictionary<int, Dictionary<DateTime, int>> totalsByHabit,
-        NotificationService notifications,
-        int missedHour,
-        DateTime now,
-        CancellationToken cancellationToken)
+    private async Task ProcessJobWithOutcomeAsync(RecalculationOutboxItem job, CancellationToken stoppingToken)
     {
-        foreach (var habit in habits)
+        var activityName = job.JobType == RecalculationJobType.Habit ? "RecalculateHabit" : "RecalculateBook";
+        using var activity = AppDiagnostics.ActivitySource.StartActivity(activityName, ActivityKind.Internal);
+        activity?.SetTag("habittracker.user_id", job.UserId);
+        activity?.SetTag("habittracker.attempt", job.AttemptCount + 1);
+        if (job.HabitId.HasValue) activity?.SetTag("habittracker.habit_id", job.HabitId.Value);
+        if (job.BookId.HasValue) activity?.SetTag("habittracker.book_id", job.BookId.Value);
+
+        var stopwatch = Stopwatch.StartNew();
+
+        // İşi bilinçli olarak claim scope'undan AYRI, yeni bir scope
+        // içinde çalıştırıyoruz: bu sayede uzun süren bir iş (örn. çok
+        // completion'lı bir habit) claim/ack DbContext'ini uzun süre
+        // meşgul etmez.
+        using var workScope = _scopeFactory.CreateScope();
+
+        try
         {
-            var tz = tzByHabit[habit.Id];
-            if (!HabitSchedule.IsEndOfPeriodWindow(now, habit.Period, tz, missedHour, MinuteTolerance))
-            {
-                continue;
-            }
+            await ProcessJobAsync(workScope, job, stoppingToken);
+            stopwatch.Stop();
+            AppDiagnostics.RecalculationDurationMs.Record(stopwatch.Elapsed.TotalMilliseconds);
+            AppDiagnostics.RecalculationSucceeded.Add(1);
 
-            var totals = totalsByHabit.TryGetValue(habit.Id, out var t) ? t : new Dictionary<DateTime, int>();
-            var periodStart = HabitSchedule.PeriodStartLocal(now, habit.Period, tz);
-            if (HabitProgressService.IsGoalReached(habit, totals, periodStart))
-            {
-                continue;
-            }
+            var processor = workScope.ServiceProvider.GetRequiredService<IRecalculationOutboxProcessor>();
+            await processor.MarkCompletedAsync(job.Id, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
 
-            var keyDate = periodStart.ToString("yyyy-MM-dd");
-            var periodLabel = habit.Period switch
-            {
-                HabitPeriod.Weekly => "haftalık",
-                HabitPeriod.Monthly => "aylık",
-                _ => "günlük"
-            };
+            var processor = workScope.ServiceProvider.GetRequiredService<IRecalculationOutboxProcessor>();
+            var nextAttemptNumber = job.AttemptCount + 1;
 
-            var previousPeriodStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, habit.Period);
-            var lostStreak = HabitProgressService.CountStreak(habit, totals, previousPeriodStart, tz);
-
-            if (lostStreak > 0)
+            if (nextAttemptNumber < MaxAttempts)
             {
-                await notifications.TryEnqueueAsync(
-                    habit.UserId,
-                    NotificationTypes.StreakBroken,
-                    "Serin bozuldu",
-                    $"{habit.Name} alışkanlığındaki {lostStreak} {periodLabel} zincirin bozuldu. Bugün yeniden başlayabilirsin.",
-                    habit.Id,
-                    $"streakbroken:{habit.Id}:{keyDate}",
-                    cancellationToken);
+                var delay = RetryDelays[Math.Min(job.AttemptCount, RetryDelays.Length - 1)];
+                _logger.LogWarning(ex,
+                    "Arka plan yeniden hesaplama başarısız (deneme {Attempt}/{Max}). JobType={JobType} UserId={UserId} Id={Id}",
+                    nextAttemptNumber, MaxAttempts, job.JobType, job.UserId, job.Id);
+                await processor.MarkFailedAsync(job.Id, ex.Message, DateTime.UtcNow.Add(delay), stoppingToken);
             }
             else
             {
-                await notifications.TryEnqueueAsync(
-                    habit.UserId,
-                    NotificationTypes.Missed,
-                    "Kaçırılan alışkanlık",
-                    $"{habit.Name} bu dönem tamamlanmadı. Yarın zinciri yeniden kurabilirsin.",
-                    habit.Id,
-                    $"missed:{habit.Id}:{keyDate}",
-                    cancellationToken);
+                AppDiagnostics.RecalculationFailed.Add(1);
+                _logger.LogError(ex,
+                    "Arka plan yeniden hesaplama tüm denemelerden sonra kalıcı olarak başarısız oldu. JobType={JobType} UserId={UserId} Id={Id}",
+                    job.JobType, job.UserId, job.Id);
+                await processor.MarkFailedAsync(job.Id, ex.Message, null, stoppingToken);
             }
         }
     }
 
-    private static async Task RunBookPassAsync(
-        AppDbContext db,
-        NotificationService notifications,
-        BookService bookService,
-        int missedHour,
+    private static async Task ProcessJobAsync(
+        IServiceScope scope, RecalculationOutboxItem job, CancellationToken cancellationToken)
+    {
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+
+        if (job.JobType == RecalculationJobType.Habit)
+        {
+            await ProcessHabitJobAsync(scope, context, userManager, job, cancellationToken);
+        }
+        else
+        {
+            await ProcessBookJobAsync(scope, context, userManager, job, cancellationToken);
+        }
+    }
+
+    private static async Task ProcessHabitJobAsync(
+        IServiceScope scope,
+        AppDbContext context,
+        UserManager<User> userManager,
+        RecalculationOutboxItem job,
         CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
-        var books = await db.Books.AsNoTracking()
-            .Include(b => b.User)
-            .Where(b => !b.IsCompleted && !b.IsArchived && b.DailyGoalAmount > 0)
-            .ToListAsync(cancellationToken);
-
-        if (books.Count == 0)
+        if (job.HabitId is not int habitId)
         {
             return;
         }
 
-        var tzByBook = books.ToDictionary(b => b.Id, b => TimeZones.Resolve(b.User?.TimeZoneId));
-        var totalsByBook = new Dictionary<int, Dictionary<DateTime, int>>();
-
-        foreach (var group in books.GroupBy(b => (b.Period, TzId: tzByBook[b.Id].Id)))
+        var habit = await context.Habits.FirstOrDefaultAsync(h => h.Id == habitId, cancellationToken);
+        if (habit == null)
         {
-            var bookIds = group.Select(b => b.Id).ToArray();
-            var tz = tzByBook[group.First().Id];
-            var batch = await bookService.LoadPeriodTotalsBatchAsync(bookIds, group.Key.Period, tz, cancellationToken);
-            foreach (var kv in batch)
+            // Habit bu arada silinmiş olabilir; bu durumda iş sessizce
+            // "tamamlandı" sayılır (yapılacak bir şey kalmadı).
+            return;
+        }
+
+        var progressService = scope.ServiceProvider.GetRequiredService<HabitProgressService>();
+        var petGrowthService = scope.ServiceProvider.GetRequiredService<PetGrowthService>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<RecalculationBackgroundService>>();
+
+        var recalc = await progressService.RecalculateHabitAsync(habit, job.TimeZoneId, cancellationToken);
+
+        if (recalc.XpDelta != 0)
+        {
+            var user = await userManager.FindByIdAsync(job.UserId);
+            if (user != null)
             {
-                totalsByBook[kv.Key] = kv.Value;
+                user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
+                var updateResult = await userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(logger, "habit-recalc-background-xp", job.UserId);
             }
         }
 
-        foreach (var book in books)
+        if (recalc.PetStreakBonusDelta > 0)
         {
-            var tz = tzByBook[book.Id];
-            if (!HabitSchedule.IsEndOfPeriodWindow(now, book.Period, tz, missedHour, MinuteTolerance))
-            {
-                continue;
-            }
+            await petGrowthService.AddStreakBonusXpAsync(job.UserId, recalc.PetStreakBonusDelta, cancellationToken);
+        }
+        else if (recalc.PetStreakBonusDelta < 0)
+        {
+            await petGrowthService.RemoveStreakBonusXpAsync(job.UserId, -recalc.PetStreakBonusDelta, cancellationToken);
+        }
+    }
 
-            var totals = totalsByBook.TryGetValue(book.Id, out var t) ? t : new Dictionary<DateTime, int>();
-            var periodStart = HabitSchedule.PeriodStartLocal(now, book.Period, tz);
-            var totalInPeriod = totals.TryGetValue(periodStart, out var amount) ? amount : 0;
-            if (totalInPeriod >= book.DailyGoalAmount)
-            {
-                continue;
-            }
+    private static async Task ProcessBookJobAsync(
+        IServiceScope scope,
+        AppDbContext context,
+        UserManager<User> userManager,
+        RecalculationOutboxItem job,
+        CancellationToken cancellationToken)
+    {
+        if (job.BookId is not int bookId)
+        {
+            return;
+        }
 
-            var keyDate = periodStart.ToString("yyyy-MM-dd");
-            var periodLabel = book.Period switch
-            {
-                HabitPeriod.Weekly => "haftalık",
-                HabitPeriod.Monthly => "aylık",
-                _ => "günlük"
-            };
+        var book = await context.Books.FirstOrDefaultAsync(b => b.Id == bookId, cancellationToken);
+        if (book == null)
+        {
+            return;
+        }
 
-            var previousPeriodStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, book.Period);
-            var lostStreak = BookService.CountStreakFromTotals(
-                totals, previousPeriodStart, book.DailyGoalAmount, book.CreatedAt, book.Period, tz);
+        var bookService = scope.ServiceProvider.GetRequiredService<BookService>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<RecalculationBackgroundService>>();
 
-            if (lostStreak > 0)
+        var xpDelta = await bookService.RecalculateBookAsync(book, job.TimeZoneId, cancellationToken);
+        if (xpDelta != 0)
+        {
+            var user = await userManager.FindByIdAsync(job.UserId);
+            if (user != null)
             {
-                await notifications.TryEnqueueAsync(
-                    book.UserId,
-                    NotificationTypes.BookStreakBroken,
-                    "Okuma serin bozuldu",
-                    $"{book.Title} için {lostStreak} {periodLabel} okuma zincirin bozuldu. Bugün yeniden başlayabilirsin.",
-                    habitId: null,
-                    dedupKey: $"bookstreakbroken:{book.Id}:{keyDate}",
-                    cancellationToken);
-            }
-            else
-            {
-                await notifications.TryEnqueueAsync(
-                    book.UserId,
-                    NotificationTypes.BookMissed,
-                    "Kaçırılan okuma hedefi",
-                    $"{book.Title} için bu dönem okuma hedefin tamamlanmadı.",
-                    habitId: null,
-                    dedupKey: $"bookmissed:{book.Id}:{keyDate}",
-                    cancellationToken);
+                user.TotalXp = Math.Max(0, user.TotalXp + xpDelta);
+                var updateResult = await userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(logger, "book-recalc-background-xp", job.UserId);
             }
         }
     }

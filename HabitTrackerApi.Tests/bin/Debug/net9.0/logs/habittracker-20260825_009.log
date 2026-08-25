@@ -1,0 +1,6 @@
+[2026-08-25 21:03:39 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:03:39 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:03:39 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:03:39 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:03:39 WRN] 6b384ab78ea743b2b7683cfcee325fa4 Failed to determine the https port for redirect.
+[2026-08-25 21:03:39 WRN] ab960257faa540cdb42d7b9824adf17f Failed to determine the https port for redirect.

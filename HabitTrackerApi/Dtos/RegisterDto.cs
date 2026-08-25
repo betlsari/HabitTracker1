@@ -9,7 +9,6 @@ public class RegisterDto
     [EmailAddress]
     public required string Email { get; set; }
 
-    
     [Required]
     [StrongPassword]
     public required string Password { get; set; }
@@ -17,4 +16,6 @@ public class RegisterDto
     [Required]
     [Compare(nameof(Password), ErrorMessage = "Şifreler eşleşmiyor.")]
     public required string ConfirmPassword { get; set; }
+
+    public string? CaptchaToken { get; set; }
 }

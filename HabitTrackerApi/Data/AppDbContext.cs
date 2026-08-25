@@ -37,8 +37,14 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
     public DbSet<TwoFactorAttempt> TwoFactorAttempts { get; set; }
 
-    
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
+
+    // YENİ: Kalıcı (DB-backed) outbox tabloları. Bkz.
+    // Services/EmailOutboxService.cs ve Services/RecalculationOutboxService.cs
+    public DbSet<EmailOutboxItem> EmailOutboxItems { get; set; }
+    public DbSet<RecalculationOutboxItem> RecalculationOutboxItems { get; set; }
+    public DbSet<EmailDeadLetter> EmailDeadLetters { get; set; }
+    public DbSet<NotificationDigestDelivery> NotificationDigestDeliveries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -53,6 +59,8 @@ public class AppDbContext : IdentityDbContext<User>
         builder.Entity<Habit>(entity =>
         {
             entity.HasIndex(h => new { h.UserId, h.NormalizedName }).IsUnique();
+            entity.HasIndex(h => new { h.UserId, h.ClientRequestId })
+                .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
             entity.HasIndex(h => new { h.UserId, h.IsArchived });
         });
         builder.Entity<RefreshToken>(entity =>
@@ -75,12 +83,6 @@ public class AppDbContext : IdentityDbContext<User>
             );
         });
 
-        // DÜZELTİLDİ: TwoFactorAttempt artık User'a FK'li. Önceden bu
-        // entity'nin hiçbir navigasyonu/FK'si yoktu; hesap silindiğinde
-        // (UserManager.DeleteAsync) bu satır veritabanında UserId'si artık
-        // var olmayan bir kullanıcıya işaret eden öksüz bir kayıt olarak
-        // kalıyordu. Cascade delete ile artık User silinince otomatik
-        // temizleniyor.
         builder.Entity<TwoFactorAttempt>(entity =>
         {
             entity.HasIndex(t => t.UserId).IsUnique();
@@ -131,6 +133,16 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<EmailDeadLetter>(entity =>
+        {
+            entity.HasIndex(e => new { e.ToEmail, e.FailedAt });
+        });
+
+        builder.Entity<NotificationDigestDelivery>(entity =>
+        {
+            entity.HasIndex(d => new { d.UserId, d.DigestDate }).IsUnique();
+        });
+
         builder.Entity<DeviceToken>(entity =>
         {
             entity.HasIndex(d => new { d.UserId, d.Token }).IsUnique();
@@ -140,11 +152,6 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // NOT: AuthAuditEvent kasıtlı olarak User'a FK ile bağlanmıyor.
-        // Sebebi için bkz. Models/AuthAuditEvent.cs üzerindeki açıklama:
-        // bu kayıtlar hesap silindikten sonra da denetim izi (audit trail)
-        // olarak saklanmalı; cascade delete ile birlikte silinmemeli.
-        // Süresiz büyümeyi AuthAuditCleanupService zaman bazlı temizliyor.
         builder.Entity<AuthAuditEvent>(entity =>
         {
             entity.HasIndex(e => new { e.UserId, e.CreatedAt });
@@ -154,6 +161,9 @@ public class AppDbContext : IdentityDbContext<User>
         builder.Entity<Book>(entity =>
         {
             entity.HasIndex(b => b.UserId);
+            entity.HasIndex(b => new { b.UserId, b.NormalizedTitle }).IsUnique();
+            entity.HasIndex(b => new { b.UserId, b.ClientRequestId })
+                .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
             entity.HasIndex(b => b.CreatedAt);
             entity.HasIndex(b => new { b.UserId, b.IsArchived });
             entity.HasOne(b => b.User)
@@ -184,7 +194,12 @@ public class AppDbContext : IdentityDbContext<User>
                 .HasFilter("\"ClientRequestId\" IS NOT NULL");
         });
 
-        builder.Entity<Pet>(entity => entity.HasIndex(p => p.CreatedAt));
+        builder.Entity<Pet>(entity =>
+        {
+            entity.HasIndex(p => p.CreatedAt);
+            entity.HasIndex(p => new { p.UserId, p.ClientRequestId })
+                .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
+        });
 
         builder.Entity<PetAccessoryUnlock>(entity =>
         {
@@ -202,6 +217,22 @@ public class AppDbContext : IdentityDbContext<User>
                 .WithMany(u => u.BackgroundUnlocks)
                 .HasForeignKey(u => u.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // YENİ: EmailOutboxItems — worker'ın "Pending & NextAttemptAt geçmiş"
+        // satırları hızlıca bulabilmesi için composite index. CreatedAt da
+        // ORDER BY için dahil edildi (FIFO işleme).
+        builder.Entity<EmailOutboxItem>(entity =>
+        {
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt, e.CreatedAt })
+                .HasDatabaseName("IX_EmailOutboxItems_Status_NextAttemptAt_CreatedAt");
+        });
+
+        // YENİ: RecalculationOutboxItems — aynı gerekçeyle.
+        builder.Entity<RecalculationOutboxItem>(entity =>
+        {
+            entity.HasIndex(r => new { r.Status, r.NextAttemptAt, r.CreatedAt })
+                .HasDatabaseName("IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt");
         });
 
         foreach (var entityType in builder.Model.GetEntityTypes()
@@ -227,6 +258,13 @@ public class AppDbContext : IdentityDbContext<User>
 
     private void SetConcurrencyTokens()
     {
+        foreach (var entry in ChangeTracker.Entries<Book>()
+                     .Where(e => e.State is EntityState.Added or EntityState.Modified))
+        {
+            entry.Entity.Title = entry.Entity.Title.Trim();
+            entry.Entity.NormalizedTitle = entry.Entity.Title.ToUpperInvariant();
+        }
+
         foreach (var entry in ChangeTracker.Entries<IHasConcurrencyToken>())
         {
             if (entry.State == EntityState.Added && entry.Entity.ConcurrencyToken == Guid.Empty)

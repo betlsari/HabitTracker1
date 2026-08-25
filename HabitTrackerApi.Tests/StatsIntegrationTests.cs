@@ -51,6 +51,20 @@ public sealed class StatsIntegrationTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task GetMonthlySummary_MaximumMonthsBack_ReturnsSixtyMonths()
+    {
+        using var client = _factory.CreateClient();
+        var token = await _factory.CreateAccessTokenAsync();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/stats/monthly?monthsBack=60");
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<MonthlySummaryResponse>();
+        Assert.Equal(60, result!.Months.Count);
+    }
+
+    [Fact]
     public async Task Unauthenticated_request_is_rejected()
     {
         using var client = _factory.CreateClient();

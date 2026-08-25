@@ -59,6 +59,7 @@ public class PetsController : ControllerBase
         if (pageSize < 1 || pageSize > 200) pageSize = 50;
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
         var query = _context.Pets.AsNoTracking()
             .Where(p => p.UserId == userId)
             .OrderByDescending(p => p.CreatedAt);
@@ -98,6 +99,16 @@ public class PetsController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
+        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        {
+            var existing = await _context.Pets.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.ClientRequestId == dto.ClientRequestId);
+            if (existing != null)
+            {
+                return ToDto(existing);
+            }
+        }
+
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
 
@@ -128,6 +139,7 @@ public class PetsController : ControllerBase
         var pet = new Pet
         {
             Type = dto.Type,
+            ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
             Level = 0,
             Xp = 0,
             Mood = "Egg",

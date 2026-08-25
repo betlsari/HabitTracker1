@@ -2,7 +2,6 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Services;
 
-
 public class RecalculationQueueHealthCheck : IHealthCheck
 {
     private const int DegradedThreshold = 50;

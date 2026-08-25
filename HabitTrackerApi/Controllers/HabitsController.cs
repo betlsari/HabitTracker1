@@ -10,6 +10,7 @@ using Services;
 using Microsoft.Extensions.Options;
 using Configuration;
 using Asp.Versioning;
+using Filters;
 
 namespace Controllers;
 
@@ -152,6 +153,7 @@ public class HabitsController : ControllerBase
     }
 
     [HttpPost]
+    [SanitizeText]
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -161,6 +163,16 @@ public class HabitsController : ControllerBase
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+            if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+            {
+                var existing = await _context.Habits.AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.UserId == userId && h.ClientRequestId == dto.ClientRequestId);
+                if (existing != null)
+                {
+                    return ToDto(existing);
+                }
+            }
 
             await _context.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtext({"habit:" + userId}))");
@@ -204,6 +216,7 @@ public class HabitsController : ControllerBase
                 TargetTime = dto.TargetTime,
                 ReminderTime = dto.ReminderTime,
                 Notes = dto.Notes,
+                ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
                 UserId = userId,
                 CreatedAt = DateTime.UtcNow
             };
@@ -236,6 +249,7 @@ public class HabitsController : ControllerBase
     // RecalculationQueue'ya yazılıyor ve RecalculationBackgroundService
     // tarafından arka planda işleniyor.
     [HttpPut("{id:int}")]
+    [SanitizeText]
     public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -406,41 +420,9 @@ public class HabitsController : ControllerBase
             return NotFound();
         }
 
-        var completionQuery = _context.HabitCompletions.Where(c => c.HabitId == id);
-
-        var totalXpFromCompletions = await completionQuery.SumAsync(c => (int?)c.XpEarned) ?? 0;
-        var totalPetStreakBonus = await completionQuery.SumAsync(c => (int?)c.PetStreakBonusXp) ?? 0;
-        var totalAmount = await completionQuery.SumAsync(c => (int?)c.Amount) ?? 0;
-
-        if (HabitCategories.IsWater(habit.Category) && totalAmount != 0)
-        {
-            await _flowerService.AddWaterAsync(userId!, -totalAmount);
-        }
-
-        if (HabitCategories.IsFocus(habit.Category) && totalAmount != 0)
-        {
-            await _petGrowthService.RemoveFocusXpAsync(userId!, totalAmount);
-        }
-
-        if (totalPetStreakBonus > 0)
-        {
-            await _petGrowthService.RemoveStreakBonusXpAsync(userId!, totalPetStreakBonus);
-        }
-
-        _context.Habits.Remove(habit);
+        habit.IsArchived = true;
+        habit.ArchivedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
-
-        var totalXpToRemove = totalXpFromCompletions + _xpService.GetHabitCreationXp();
-        if (totalXpToRemove != 0)
-        {
-            var user = await _userManager.FindByIdAsync(userId!);
-            if (user != null)
-            {
-                user.TotalXp = Math.Max(0, user.TotalXp - totalXpToRemove);
-                var updateResult = await _userManager.UpdateAsync(user);
-                updateResult.EnsureSucceeded(_logger, "habit-delete-xp-removal", userId!);
-            }
-        }
 
         await transaction.CommitAsync();
         return NoContent();

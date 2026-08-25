@@ -17,6 +17,11 @@ public class Book : IHasConcurrencyToken
 
     public required string Title { get; set; }
 
+    public string NormalizedTitle { get; set; } = string.Empty;
+
+    [MaxLength(100)]
+    public string? ClientRequestId { get; set; }
+
     // DÜZELTİLDİ (madde 7): Author için de diğer DTO'larla (Name, Title vb.)
     // tutarlı bir üst sınır eklendi; önceden sınırsız uzunlukta metin DB'ye
     // yazılabiliyordu.

@@ -23,23 +23,33 @@ public class DashboardController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly HabitProgressService _habitProgressService;
     private readonly FlowerService _flowerService;
+    private readonly DashboardCacheService _dashboardCacheService;
 
     public DashboardController(
         AppDbContext context,
         UserManager<User> userManager,
         HabitProgressService habitProgressService,
-        FlowerService flowerService)
+        FlowerService flowerService,
+        DashboardCacheService dashboardCacheService)
     {
         _context = context;
         _userManager = userManager;
         _habitProgressService = habitProgressService;
         _flowerService = flowerService;
+        _dashboardCacheService = dashboardCacheService;
     }
 
     [HttpGet]
     public async Task<ActionResult<DashboardDto>> GetDashboard()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        var cached = await _dashboardCacheService.GetAsync(userId);
+        if (cached is not null)
+        {
+            return Ok(cached);
+        }
+
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null)
         {
@@ -78,6 +88,8 @@ public class DashboardController : ControllerBase
             Flower = flower != null ? FlowerService.ToDto(flower) : null,
             UnreadNotificationCount = unreadCount
         };
+
+        await _dashboardCacheService.SetAsync(userId, dashboard);
 
         return Ok(dashboard);
     }

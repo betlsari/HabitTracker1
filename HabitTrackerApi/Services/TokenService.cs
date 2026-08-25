@@ -28,6 +28,11 @@ public class TokenService
     // AuthController bu değeri IssueTokensAsync/Refresh içinde kullanıyor.
     public TimeSpan RefreshTokenLifetime => TimeSpan.FromDays(_jwtOptions.RefreshTokenLifetimeDays);
 
+    public TokenService(IConfiguration configuration)
+        : this(configuration, Options.Create(new JwtOptions()))
+    {
+    }
+
     public TokenService(IConfiguration configuration, IOptions<JwtOptions> jwtOptions)
     {
         _configuration = configuration;

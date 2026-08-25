@@ -2,42 +2,43 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Services;
 
-
+/// <summary>
+/// DÜZELTİLDİ: Artık kalıcı (DB-backed) EmailOutboxItems tablosundaki
+/// GERÇEK bekleyen satır sayısını okuyor (önceden in-memory channel'ın
+/// anlık Reader.Count'unu okuyordu — restart sonrası bu sayı her zaman
+/// sıfırdan başlıyordu, dolayısıyla "birikmiş iş" hiç tespit edilemiyordu).
+/// </summary>
 public class EmailQueueHealthCheck : IHealthCheck
 {
     private const int DegradedThreshold = 100;
     private const int UnhealthyThreshold = 1000;
 
-    private readonly IEmailQueue _queue;
+    private readonly IEmailOutboxProcessor _processor;
 
-    public EmailQueueHealthCheck(IEmailQueue queue)
+    public EmailQueueHealthCheck(IEmailOutboxProcessor processor)
     {
-        _queue = queue;
+        _processor = processor;
     }
 
-    public Task<HealthCheckResult> CheckHealthAsync(
+    public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        if (_queue is not EmailQueue concreteQueue)
-        {
-            return Task.FromResult(HealthCheckResult.Healthy("Email kuyruğu durumu izlenemiyor (bilinmeyen implementasyon)."));
-        }
-
-        var pending = concreteQueue.PendingCount;
+        var pending = await _processor.PendingCountAsync(cancellationToken);
         var data = new Dictionary<string, object> { ["pendingCount"] = pending };
 
         if (pending >= UnhealthyThreshold)
         {
-            return Task.FromResult(HealthCheckResult.Unhealthy(
-                $"Email kuyruğunda {pending} bekleyen mesaj var. EmailSenderBackgroundService çalışmıyor olabilir.", data: data));
+            return HealthCheckResult.Unhealthy(
+                $"Email outbox'ta {pending} bekleyen mesaj var. EmailSenderBackgroundService çalışmıyor olabilir.",
+                data: data);
         }
 
         if (pending >= DegradedThreshold)
         {
-            return Task.FromResult(HealthCheckResult.Degraded(
-                $"Email kuyruğunda {pending} bekleyen mesaj var.", data: data));
+            return HealthCheckResult.Degraded(
+                $"Email outbox'ta {pending} bekleyen mesaj var.", data: data);
         }
 
-        return Task.FromResult(HealthCheckResult.Healthy("Email kuyruğu normal.", data));
+        return HealthCheckResult.Healthy("Email outbox normal.", data);
     }
 }

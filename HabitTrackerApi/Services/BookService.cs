@@ -32,6 +32,11 @@ public class BookService
     private readonly AppDbContext _context;
     private readonly int _maxHistoryLookbackDays;
 
+    public BookService(AppDbContext context)
+        : this(context, Options.Create(new AppLimitsOptions()))
+    {
+    }
+
     public BookService(AppDbContext context, IOptions<AppLimitsOptions> limits)
     {
         _context = context;

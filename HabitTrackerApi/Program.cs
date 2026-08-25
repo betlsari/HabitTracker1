@@ -18,10 +18,14 @@ using Serilog;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using OpenTelemetry.Resources;
+using System.Security.Cryptography;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Sentry is optional; an empty DSN keeps local and test environments disabled.
+builder.WebHost.UseSentry();
 
 
 Log.Logger = new LoggerConfiguration()
@@ -97,12 +101,30 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
+// YENİ (🔴 ölçeklenebilirlik): Dağıtık cache (SecurityStampCache bunun
+// üzerine kurulu). Redis:ConnectionString tanımlıysa Redis kullanılır —
+// böylece birden fazla API instance'ı aynı SecurityStamp iptal durumunu
+// görür. Tanımlı değilse (yalnızca Development/Testing'de izin verilir)
+// bellek içi bir IDistributedCache'e düşülür; Production'da Redis
+// zorunludur (aşağıdaki fail-fast kontrolüne bakın).
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = "habittracker:";
+    });
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
     .AddCheck<EmailQueueHealthCheck>("email-queue", tags: new[] { "dependency" })
     .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" })
-    // YENİ (madde 2): Recalculation kuyruğu için health check.
     .AddCheck<RecalculationQueueHealthCheck>("recalculation-queue", tags: new[] { "dependency" });
 
 // Options Configuration
@@ -120,13 +142,15 @@ builder.Services.AddOptions<JwtOptions>()
 
 builder.Services.AddOptions<AppLimitsOptions>()
     .Bind(builder.Configuration.GetSection(AppLimitsOptions.SectionName))
-    // YENİ (bir önceki turdan kalan eksik): MaxHistoryLookbackDays için
-    // alt/üst sınır validasyonu yoktu; biri yanlışlıkla 0 veya negatif bir
-    // değer girerse tüm istatistikler/progress hesapları sessizce boş
-    // dönebiliyordu. Artık başlangıçta fail-fast ile engelleniyor.
     .Validate(options => options.MaxHistoryLookbackDays is > 0 and <= 3650,
         "AppLimits:MaxHistoryLookbackDays 1 ile 3650 (10 yıl) gün arasında olmalıdır.")
     .ValidateOnStart();
+
+builder.Services.AddOptions<CaptchaOptions>()
+    .Bind(builder.Configuration.GetSection(CaptchaOptions.SectionName))
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<CaptchaVerifier>();
 
 // Production Validations
 if (builder.Environment.IsProduction())
@@ -136,6 +160,12 @@ if (builder.Environment.IsProduction())
     {
         throw new InvalidOperationException(
             "Production ortamında Cors:AllowedOrigins boş olamaz. appsettings.Production.json veya ortam değişkeni ile en az bir origin tanımlayın.");
+    }
+
+    if (string.IsNullOrWhiteSpace(redisConnectionString))
+    {
+        throw new InvalidOperationException(
+            "Production ortamında Redis:ConnectionString boş olamaz. SecurityStampCache ve dashboard cache için dağıtık bir cache gereklidir.");
     }
 
     var smtpHost = builder.Configuration["Email:SmtpHost"];
@@ -155,6 +185,18 @@ if (builder.Environment.IsProduction())
     {
         throw new InvalidOperationException(
             "Production ortamında HealthCheck:ApiKey boş olamaz. Aksi halde /health endpoint'i monitoring/load balancer dahil herkes için erişilemez hale gelir. Ortam değişkeni veya secret store üzerinden tanımlayın.");
+    }
+
+    // YENİ (🔴 ölçeklenebilirlik fail-fast): Production'da Redis
+    // zorunludur. Aksi halde birden fazla instance'ta SecurityStamp
+    // iptalleri (şifre değişimi, 2FA kapatma, hesap silme) tutarsız
+    // davranır — bu sessiz bir güvenlik açığıdır, bu yüzden başlangıçta
+    // gürültülü şekilde engelleniyor.
+    if (string.IsNullOrWhiteSpace(redisConnectionString))
+    {
+        throw new InvalidOperationException(
+            "Production ortamında Redis:ConnectionString boş olamaz. SecurityStampCache birden fazla instance arasında " +
+            "tutarlı çalışabilmek için dağıtık bir cache'e (Redis) ihtiyaç duyar.");
     }
 }
 
@@ -183,7 +225,8 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// Memory Cache
+// Memory Cache (yerel, kısa ömürlü amaçlar için hâlâ kullanılabilir;
+// SecurityStampCache artık IDistributedCache üzerine kurulu)
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SecurityStampCache>();
 
@@ -232,7 +275,8 @@ builder.Services.AddAuthentication(options =>
             }
 
             var stampCache = context.HttpContext.RequestServices.GetRequiredService<SecurityStampCache>();
-            if (!stampCache.TryGet(userId, out var currentStamp))
+            var (found, currentStamp) = await stampCache.TryGetAsync(userId);
+            if (!found)
             {
                 var userManager = context.HttpContext.RequestServices
                     .GetRequiredService<UserManager<Models.User>>();
@@ -245,12 +289,12 @@ builder.Services.AddAuthentication(options =>
                 }
 
                 currentStamp = user.SecurityStamp;
-                stampCache.Set(userId, currentStamp);
+                await stampCache.SetAsync(userId, currentStamp);
             }
 
             if (currentStamp != tokenStamp)
             {
-                context.Fail("Oturum geçersiz kılınmış. Lütfen tekrar giriş yapın.");
+                context.Fail("Oturumunuz güvenlik nedeniyle geçersiz kılındı. Lütfen tekrar giriş yapın.");
             }
         }
     };
@@ -322,12 +366,22 @@ builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
 
 // Dependency Injection (Services)
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
-builder.Services.AddSingleton<IEmailQueue, EmailQueue>();
 
-// YENİ (madde 1): Recalculation kuyruğu singleton olarak kayıtlı — hem
-// controller'lar (yazar) hem RecalculationBackgroundService (okuyucu) aynı
-// örneği paylaşmalı.
-builder.Services.AddSingleton<IRecalculationQueue, RecalculationQueue>();
+// DÜZELTİLDİ (🔴 kalıcılık): EmailQueue/RecalculationQueue artık singleton
+// in-memory Channel değil; her ikisi de AppDbContext kullandığı için Scoped
+// olarak kayıtlı. Aynı somut instance hem "yazma" (IEmailQueue/
+// IRecalculationQueue) hem "worker okuma" (IEmailOutboxProcessor/
+// IRecalculationOutboxProcessor) arayüzlerine map'leniyor — böylece aynı
+// HTTP isteği/scope içinde tek bir DbContext üzerinden çalışılır.
+builder.Services.AddScoped<EmailOutboxService>();
+builder.Services.AddScoped<IEmailQueue>(sp => sp.GetRequiredService<EmailOutboxService>());
+builder.Services.AddScoped<IEmailOutboxProcessor>(sp => sp.GetRequiredService<EmailOutboxService>());
+
+builder.Services.AddScoped<RecalculationOutboxService>();
+builder.Services.AddScoped<IRecalculationQueue>(sp => sp.GetRequiredService<RecalculationOutboxService>());
+builder.Services.AddScoped<IRecalculationOutboxProcessor>(sp => sp.GetRequiredService<RecalculationOutboxService>());
+
+builder.Services.AddScoped<DashboardCacheService>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthAuditService>();
@@ -344,22 +398,19 @@ builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddScoped<PetCosmeticsService>();
 builder.Services.AddScoped<TwoFactorLockoutService>();
 builder.Services.AddScoped<UserDataExportService>();
+builder.Services.AddScoped<NotificationDigestService>();
+builder.Services.AddScoped<TwoFactorFallbackCodeService>();
 
 // Hosted Services (Background Tasks)
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddHostedService<AuthAuditCleanupService>();
+// DÜZELTİLDİ: Artık DB outbox tablosunu poll ediyor (bkz. yukarıdaki not).
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
-// YENİ (madde 1): Habit/kitap yeniden hesaplama işlerini arka planda işler.
 builder.Services.AddHostedService<RecalculationBackgroundService>();
+builder.Services.AddHostedService<NotificationDigestBackgroundService>();
 
-// YENİ (madde 2 - observability): OpenTelemetry tracing + metrics.
-// Otel:OtlpEndpoint boşsa (varsayılan) hiçbir dış servise veri gönderilmez;
-// sadece Development ortamında konsola basılır. Bir collector (Jaeger,
-// Tempo, Honeycomb, Sentry'nin OTLP ingestion'ı vb.) bağlamak için
-// appsettings'te Otel:OtlpEndpoint'i veya standart
-// OTEL_EXPORTER_OTLP_ENDPOINT ortam değişkenini set etmek yeterli.
 var otlpEndpoint = builder.Configuration["Otel:OtlpEndpoint"];
 
 builder.Services.AddOpenTelemetry()
@@ -372,8 +423,6 @@ builder.Services.AddOpenTelemetry()
             .AddSource(AppDiagnostics.ServiceName)
             .AddAspNetCoreInstrumentation(options =>
             {
-                // Health check endpoint'lerinin trace'leri gereksiz gürültü
-                // yaratmasın diye dışlanıyor.
                 options.Filter = httpContext =>
                     !httpContext.Request.Path.StartsWithSegments("/health");
             })
@@ -456,6 +505,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseCors("DefaultCorsPolicy");
 app.UseAuthentication();
@@ -470,7 +520,17 @@ async ValueTask<object?> HealthCheckApiKeyFilter(EndpointFilterInvocationContext
     {
         var expectedKey = app.Configuration["HealthCheck:ApiKey"];
         var providedKey = context.HttpContext.Request.Headers["X-Health-Key"].FirstOrDefault();
-        if (string.IsNullOrEmpty(expectedKey) || providedKey != expectedKey)
+
+        if (string.IsNullOrEmpty(expectedKey))
+        {
+            return Results.NotFound();
+        }
+
+        var expectedBytes = Encoding.UTF8.GetBytes(expectedKey);
+        var providedBytes = Encoding.UTF8.GetBytes(providedKey ?? string.Empty);
+
+        if (expectedBytes.Length != providedBytes.Length ||
+            !CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes))
         {
             return Results.NotFound();
         }

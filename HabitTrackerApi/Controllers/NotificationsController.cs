@@ -30,6 +30,14 @@ public class NotificationsController : ControllerBase
         return await _notificationService.ListAsync(userId, unreadOnly, page, pageSize);
     }
 
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<NotificationDto>> Get(int id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var notification = await _notificationService.GetAsync(userId, id);
+        return notification == null ? NotFound() : Ok(notification);
+    }
+
     [HttpPost("{id:int}/read")]
     public async Task<IActionResult> MarkRead(int id)
     {

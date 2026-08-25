@@ -141,6 +141,18 @@ public class NotificationService
         return true;
     }
 
+    public async Task<NotificationDto?> GetAsync(string userId, int id, CancellationToken cancellationToken = default)
+    {
+        return await _context.UserNotifications.AsNoTracking()
+            .Where(n => n.UserId == userId && n.Id == id)
+            .Select(n => new NotificationDto
+            {
+                Id = n.Id, Type = n.Type, Title = n.Title, Body = n.Body,
+                HabitId = n.HabitId, IsRead = n.IsRead, CreatedAt = n.CreatedAt
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     // YENİ (🟡 eksik uç nokta): Bir bildirimi yanlışlıkla "okundu" yapan
     // kullanıcının bunu geri alabilmesinin (okunmadı işaretleme) hiçbir yolu
     // yoktu; sadece tekil/toplu "okundu" işaretleme vardı.

@@ -1,7 +1,7 @@
 namespace Services;
 
+
 public interface IEmailQueue
 {
-    void Enqueue(EmailMessage message);
-    IAsyncEnumerable<EmailMessage> DequeueAllAsync(CancellationToken cancellationToken);
+    Task EnqueueAsync(EmailMessage message, CancellationToken cancellationToken = default);
 }

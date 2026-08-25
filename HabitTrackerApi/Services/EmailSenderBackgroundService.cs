@@ -1,73 +1,98 @@
 namespace Services;
 
-/// <summary>
-/// Kuyruktaki e-postaları arka planda gönderir. Başarısız denemelerde
-/// üstel geri çekilme (exponential backoff) ile sınırlı sayıda tekrar dener;
-/// tüm denemeler tükenirse kaybolmasın diye loglar (production'da burada
-/// bir "dead letter" tabloya/kalıcı depoya yazmak önerilir).
-/// </summary>
+
 public class EmailSenderBackgroundService : BackgroundService
 {
-    private const int MaxAttempts = 3;
+    private const int MaxAttempts = 5;
+    private const int BatchSize = 20;
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
+
+    
     private static readonly TimeSpan[] RetryDelays =
     {
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(30)
+        TimeSpan.FromSeconds(30),
+        TimeSpan.FromMinutes(2),
+        TimeSpan.FromMinutes(10),
+        TimeSpan.FromMinutes(30)
     };
 
-    private readonly IEmailQueue _queue;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<EmailSenderBackgroundService> _logger;
 
+    
+    private readonly string _workerId =
+        $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
+
     public EmailSenderBackgroundService(
-        IEmailQueue queue,
         IServiceScopeFactory scopeFactory,
         ILogger<EmailSenderBackgroundService> logger)
     {
-        _queue = queue;
         _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var message in _queue.DequeueAllAsync(stoppingToken))
-        {
-            await SendWithRetryAsync(message, stoppingToken);
-        }
-    }
-
-    private async Task SendWithRetryAsync(EmailMessage message, CancellationToken stoppingToken)
-    {
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var emailService = scope.ServiceProvider.GetRequiredService<EmailService>();
-                await emailService.SendEmailAsync(message.ToEmail, message.Subject, message.Body);
-                return;
-            }
-            catch (Exception ex) when (attempt < MaxAttempts)
-            {
-                _logger.LogWarning(ex,
-                    "Email gönderimi başarısız (deneme {Attempt}/{Max}). To={To}",
-                    attempt, MaxAttempts, message.ToEmail);
-
-                try
-                {
-                    await Task.Delay(RetryDelays[attempt - 1], stoppingToken);
-                }
-                catch (TaskCanceledException)
-                {
-                    return;
-                }
+                await ProcessBatchAsync(stoppingToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
-                    "Email gönderimi tüm denemelerden sonra başarısız oldu. To={To} Subject={Subject}",
-                    message.ToEmail, message.Subject);
+                _logger.LogError(ex, "Email outbox işlenirken beklenmedik hata oluştu.");
+            }
+
+            try
+            {
+                await Task.Delay(PollInterval, stoppingToken);
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        }
+    }
+
+    private async Task ProcessBatchAsync(CancellationToken stoppingToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var processor = scope.ServiceProvider.GetRequiredService<IEmailOutboxProcessor>();
+        var emailService = scope.ServiceProvider.GetRequiredService<EmailService>();
+
+        var batch = await processor.ClaimBatchAsync(BatchSize, _workerId, stoppingToken);
+        if (batch.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in batch)
+        {
+            try
+            {
+                await emailService.SendEmailAsync(item.ToEmail, item.Subject, item.Body);
+                await processor.MarkSentAsync(item.Id, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                
+                var nextAttemptNumber = item.AttemptCount + 1;
+                if (nextAttemptNumber < MaxAttempts)
+                {
+                    var delay = RetryDelays[Math.Min(item.AttemptCount, RetryDelays.Length - 1)];
+                    _logger.LogWarning(ex,
+                        "Email gönderimi başarısız (deneme {Attempt}/{Max}). To={To} Id={Id}",
+                        nextAttemptNumber, MaxAttempts, item.ToEmail, item.Id);
+                    await processor.MarkFailedAsync(item.Id, ex.Message, DateTime.UtcNow.Add(delay), stoppingToken);
+                }
+                else
+                {
+                    _logger.LogError(ex,
+                        "Email gönderimi tüm denemelerden sonra kalıcı olarak başarısız oldu. To={To} Subject={Subject} Id={Id}",
+                        item.ToEmail, item.Subject, item.Id);
+                    await processor.MoveToDeadLetterAsync(item.Id, ex.Message, stoppingToken);
+                }
             }
         }
     }

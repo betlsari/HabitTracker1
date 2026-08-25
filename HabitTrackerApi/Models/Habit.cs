@@ -11,6 +11,9 @@ public class Habit : IHasConcurrencyToken
 
     public string NormalizedName { get; set; } = string.Empty;
 
+    [MaxLength(100)]
+    public string? ClientRequestId { get; set; }
+
     [Range(1, CreateHabitDto.MaxDailyGoal)]
     public int DailyGoal { get; set; }
     [MinLength(1)]

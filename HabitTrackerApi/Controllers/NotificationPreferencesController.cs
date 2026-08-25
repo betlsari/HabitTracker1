@@ -55,6 +55,8 @@ public class NotificationPreferencesController : ControllerBase
         pref.DisabledTypes = string.Join(',', dto.DisabledTypes.Distinct());
         pref.QuietHoursStart = dto.QuietHoursStart;
         pref.QuietHoursEnd = dto.QuietHoursEnd;
+        pref.DigestEnabled = dto.DigestEnabled;
+        pref.DigestHourUtc = dto.DigestHourUtc;
         pref.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -90,6 +92,8 @@ public class NotificationPreferencesController : ControllerBase
             ? new List<string>()
             : pref.DisabledTypes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
         QuietHoursStart = pref.QuietHoursStart,
-        QuietHoursEnd = pref.QuietHoursEnd
+        QuietHoursEnd = pref.QuietHoursEnd,
+        DigestEnabled = pref.DigestEnabled,
+        DigestHourUtc = pref.DigestHourUtc
     };
 }

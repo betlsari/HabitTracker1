@@ -4,6 +4,12 @@ namespace Models;
 
 public class User : IdentityUser
 {
+    [System.ComponentModel.DataAnnotations.MaxLength(100)]
+    public string? DisplayName { get; set; }
+
+    [System.ComponentModel.DataAnnotations.MaxLength(2048)]
+    public string? AvatarUrl { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public List<Habit> Habits { get; set; } = new List<Habit>();

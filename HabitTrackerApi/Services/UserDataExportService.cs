@@ -93,6 +93,8 @@ public class UserDataExportService
             {
                 Id = user.Id,
                 Email = user.Email ?? string.Empty,
+                DisplayName = user.DisplayName,
+                AvatarUrl = user.AvatarUrl,
                 CreatedAt = user.CreatedAt,
                 TotalXp = user.TotalXp,
                 TimeZoneId = user.TimeZoneId,

@@ -26,6 +26,8 @@ public class UserAccountExportDto
 {
     public required string Id { get; set; }
     public required string Email { get; set; }
+    public string? DisplayName { get; set; }
+    public string? AvatarUrl { get; set; }
     public DateTime CreatedAt { get; set; }
     public int TotalXp { get; set; }
     public required string TimeZoneId { get; set; }

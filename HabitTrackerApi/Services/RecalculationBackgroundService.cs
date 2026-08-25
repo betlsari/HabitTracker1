@@ -17,26 +17,64 @@ public class RecalculationBackgroundService : BackgroundService
         TimeSpan.FromSeconds(10)
     };
 
-    private readonly IRecalculationQueue _queue;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<RecalculationBackgroundService> _logger;
+    private readonly string _workerId =
+        $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
 
     public RecalculationBackgroundService(
-        IRecalculationQueue queue,
         IServiceScopeFactory scopeFactory,
         ILogger<RecalculationBackgroundService> logger)
     {
-        _queue = queue;
         _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var job in _queue.DequeueAllAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await ProcessWithRetryAsync(job, stoppingToken);
+            await ProcessPendingBatchAsync(stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
+    }
+
+    public async Task<int> ProcessPendingBatchAsync(CancellationToken cancellationToken = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var processor = scope.ServiceProvider.GetRequiredService<IRecalculationOutboxProcessor>();
+        var batch = await processor.ClaimBatchAsync(100, _workerId, cancellationToken);
+
+        foreach (var item in batch)
+        {
+            try
+            {
+                RecalculationJob? job = item.JobType switch
+                {
+                    RecalculationJobType.Habit when item.HabitId.HasValue =>
+                        new HabitRecalculationJob(item.HabitId.Value, item.UserId, item.TimeZoneId),
+                    RecalculationJobType.Book when item.BookId.HasValue =>
+                        new BookRecalculationJob(item.BookId.Value, item.UserId, item.TimeZoneId),
+                    _ => null
+                };
+
+                if (job == null)
+                {
+                    await processor.MarkFailedAsync(item.Id, "Geçersiz recalculation outbox kaydı.", null, cancellationToken);
+                    continue;
+                }
+
+                await ProcessWithRetryAsync(job, cancellationToken);
+                await processor.MarkCompletedAsync(item.Id, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await processor.MarkFailedAsync(item.Id, ex.Message, DateTime.UtcNow.AddSeconds(30), cancellationToken);
+                _logger.LogError(ex, "Recalculation outbox kaydı işlenemedi. Id={Id}", item.Id);
+            }
+        }
+
+        return batch.Count;
     }
 
     private async Task ProcessWithRetryAsync(RecalculationJob job, CancellationToken stoppingToken)

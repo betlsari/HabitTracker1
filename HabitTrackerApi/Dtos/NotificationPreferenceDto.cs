@@ -7,6 +7,8 @@ public class NotificationPreferenceDto
     public List<string> DisabledTypes { get; set; } = new();
     public TimeOnly? QuietHoursStart { get; set; }
     public TimeOnly? QuietHoursEnd { get; set; }
+    public bool DigestEnabled { get; set; }
+    public int DigestHourUtc { get; set; }
 }
 
 public class UpdateNotificationPreferenceDto : IValidatableObject
@@ -16,6 +18,9 @@ public class UpdateNotificationPreferenceDto : IValidatableObject
 
     public TimeOnly? QuietHoursStart { get; set; }
     public TimeOnly? QuietHoursEnd { get; set; }
+    public bool DigestEnabled { get; set; }
+    [Range(0, 23)]
+    public int DigestHourUtc { get; set; } = 19;
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
