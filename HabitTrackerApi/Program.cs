@@ -360,20 +360,20 @@ builder.Services.AddScoped<PetMoodService>();
 builder.Services.AddScoped<BookService>();
 builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddScoped<PetCosmeticsService>();
-builder.Services.AddScoped<UserDataExportService>();
-builder.Services.AddScoped<NotificationDigestService>();
+
+
 builder.Services.AddScoped<ReminderService>();
 
 // Hosted Services (Background Tasks)
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
-builder.Services.AddHostedService<ArchivedRecordsCleanupService>();
+
 builder.Services.AddHostedService<OutboxCleanupService>();
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
 builder.Services.AddHostedService<PushSenderBackgroundService>();
 builder.Services.AddHostedService<RecalculationBackgroundService>();
-builder.Services.AddHostedService<NotificationDigestBackgroundService>();
+
 
 var otlpEndpoint = builder.Configuration["Otel:OtlpEndpoint"];
 
