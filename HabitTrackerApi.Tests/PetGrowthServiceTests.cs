@@ -10,11 +10,12 @@ namespace HabitTrackerApi.Tests;
 
 public class PetGrowthServiceTests
 {
-    private sealed class NoOpPushSender : IPushNotificationSender
-    {
-        public Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-    }
+  
+private sealed class NoOpPushQueue : IPushQueue
+{
+    public Task EnqueueAsync(string userId, string title, string body, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
 
     private static (PetGrowthService Service, AppDbContext Context) CreateService(
         string dbName, int maxPetLevel = 100)
@@ -23,7 +24,7 @@ public class PetGrowthServiceTests
             .UseInMemoryDatabase(dbName)
             .Options);
         var cosmetics = new PetCosmeticsService(context);
-        var notifications = new NotificationService(context, new NoOpPushSender());
+       var notifications = new NotificationService(context, new NoOpPushQueue());
         var limits = Options.Create(new AppLimitsOptions { MaxPetLevel = maxPetLevel });
         var service = new PetGrowthService(context, notifications, cosmetics, limits);
         return (service, context);

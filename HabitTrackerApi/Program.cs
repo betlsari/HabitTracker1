@@ -101,12 +101,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
-// YENİ (🔴 ölçeklenebilirlik): Dağıtık cache (SecurityStampCache bunun
-// üzerine kurulu). Redis:ConnectionString tanımlıysa Redis kullanılır —
-// böylece birden fazla API instance'ı aynı SecurityStamp iptal durumunu
-// görür. Tanımlı değilse (yalnızca Development/Testing'de izin verilir)
-// bellek içi bir IDistributedCache'e düşülür; Production'da Redis
-// zorunludur (aşağıdaki fail-fast kontrolüne bakın).
+
 var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
 if (!string.IsNullOrWhiteSpace(redisConnectionString))
 {
@@ -121,11 +116,18 @@ else
     builder.Services.AddDistributedMemoryCache();
 }
 
-builder.Services.AddHealthChecks()
+var healthChecksBuilder = builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
     .AddCheck<EmailQueueHealthCheck>("email-queue", tags: new[] { "dependency" })
+    .AddCheck<PushQueueHealthCheck>("push-queue", tags: new[] { "dependency" })
     .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" })
     .AddCheck<RecalculationQueueHealthCheck>("recalculation-queue", tags: new[] { "dependency" });
+
+
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "critical" });
+}
 
 // Options Configuration
 builder.Services.AddOptions<JwtOptions>()
@@ -391,6 +393,12 @@ builder.Services.AddScoped<XpService>();
 builder.Services.AddScoped<HabitProgressService>();
 builder.Services.AddScoped<FlowerService>();
 builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>();
+
+
+builder.Services.AddScoped<PushOutboxService>();
+builder.Services.AddScoped<IPushQueue>(sp => sp.GetRequiredService<PushOutboxService>());
+builder.Services.AddScoped<IPushOutboxProcessor>(sp => sp.GetRequiredService<PushOutboxService>());
+
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BadgeService>();
 builder.Services.AddScoped<PetMoodService>();
@@ -410,8 +418,8 @@ builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddHostedService<AuthAuditCleanupService>();
 builder.Services.AddHostedService<ArchivedRecordsCleanupService>();
 builder.Services.AddHostedService<OutboxCleanupService>();
-// DÜZELTİLDİ: Artık DB outbox tablosunu poll ediyor (bkz. yukarıdaki not).
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
+builder.Services.AddHostedService<PushSenderBackgroundService>();
 builder.Services.AddHostedService<RecalculationBackgroundService>();
 builder.Services.AddHostedService<NotificationDigestBackgroundService>();
 

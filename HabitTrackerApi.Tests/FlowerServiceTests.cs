@@ -7,9 +7,10 @@ namespace HabitTrackerApi.Tests;
 
 public class FlowerServiceTests
 {
-    private sealed class NoOpPushSender : IPushNotificationSender
+    // DÜZELTİLDİ: IPushNotificationSender yerine IPushQueue kullanılıyor.
+    private sealed class NoOpPushQueue : IPushQueue
     {
-        public Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
+        public Task EnqueueAsync(string userId, string title, string body, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 
@@ -19,7 +20,7 @@ public class FlowerServiceTests
             .UseInMemoryDatabase(dbName)
             .Options);
         var cosmetics = new PetCosmeticsService(context);
-        var notifications = new NotificationService(context, new NoOpPushSender());
+        var notifications = new NotificationService(context, new NoOpPushQueue());
         var service = new FlowerService(context, notifications, cosmetics);
         return (service, context);
     }

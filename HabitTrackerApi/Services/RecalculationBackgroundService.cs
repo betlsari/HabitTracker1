@@ -148,6 +148,21 @@ public class RecalculationBackgroundService : BackgroundService
         }
     }
 
+    // DÜZELTİLDİ (🔴 rozet senkronizasyonu eksikliği): Önceden bu metod
+    // sadece XP delta'sını ve pet streak bonus delta'sını uyguluyordu.
+    // Retroaktif bir düzenleme (ör. DailyGoal/Period değişikliği) mevcut
+    // dönemin streak'ini 3/7/30 eşiğine taşısa bile hiçbir rozet
+    // (STREAK_3/7/30, READING_STREAK_7) verilmiyordu — bu değerlendirme
+    // sadece senkron tekil completion akışlarında (HabitCompletionsController,
+    // SyncController) yapılıyordu. Artık recalculation tamamlandıktan sonra
+    // güncel dönem ilerlemesi (HabitProgressService.GetProgressAsync) okunup
+    // BadgeService.EvaluateAfterCompletionAsync'e sentetik bir
+    // CompletionSnapshot ile besleniyor; böylece geriye dönük düzenlemeler de
+    // rozet kazanımını tetikleyebiliyor. AwardAsync idempotent olduğu için
+    // bu ekstra çağrının yan etkisi yoktur (zaten kazanılmış rozetler
+    // tekrar verilmez). Pet mood, ayrı bir periyodik job
+    // (PetMoodBackgroundService, 6 saatte bir) tarafından zaten toptan
+    // yeniden hesaplandığından burada tekrar tetiklenmiyor.
     private static async Task ProcessHabitJobAsync(
         IServiceScope scope,
         AppDbContext context,
@@ -164,6 +179,8 @@ public class RecalculationBackgroundService : BackgroundService
 
         var progressService = scope.ServiceProvider.GetRequiredService<HabitProgressService>();
         var petGrowthService = scope.ServiceProvider.GetRequiredService<PetGrowthService>();
+        var badgeService = scope.ServiceProvider.GetRequiredService<BadgeService>();
+        var flowerService = scope.ServiceProvider.GetRequiredService<FlowerService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<RecalculationBackgroundService>>();
 
         var recalc = await progressService.RecalculateHabitAsync(habit, job.TimeZoneId, cancellationToken);
@@ -187,8 +204,49 @@ public class RecalculationBackgroundService : BackgroundService
         {
             await petGrowthService.RemoveStreakBonusXpAsync(job.UserId, -recalc.PetStreakBonusDelta, cancellationToken);
         }
+
+        // YENİ: Recalculation sonrası güncel dönem durumunu okuyup rozet
+        // değerlendirmesini tetikle (bkz. yukarıdaki not).
+        try
+        {
+            var progress = await progressService.GetProgressAsync(habit, job.TimeZoneId, cancellationToken);
+
+            Flower? flower = null;
+            if (HabitCategories.IsWater(habit.Category))
+            {
+                flower = await flowerService.GetOrCreateAsync(job.UserId, cancellationToken);
+            }
+
+            var snapshot = new CompletionSnapshot
+            {
+                TotalBeforeInPeriod = 0,
+                TotalAfterInPeriod = progress.TotalInPeriod,
+                GoalJustReached = progress.IsCompleted,
+                PreviousPeriodGoalMet = progress.IsCompleted,
+                StreakAfter = progress.CurrentStreak,
+                PeriodStartLocal = progress.PeriodStart
+            };
+
+            await badgeService.EvaluateAfterCompletionAsync(job.UserId, habit, snapshot, flower, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Rozet değerlendirmesi asıl recalculation işinin başarısını
+            // etkilememeli; sorun olursa sadece loglanır, iş yine de
+            // tamamlanmış sayılır (rozetler idempotent olduğu için bir
+            // sonraki completion/recalculation'da tekrar değerlendirilir).
+            logger.LogWarning(ex,
+                "Recalculation sonrası rozet değerlendirmesi başarısız oldu. HabitId={HabitId} UserId={UserId}",
+                job.HabitId, job.UserId);
+        }
     }
 
+    // DÜZELTİLDİ (🔴 rozet senkronizasyonu eksikliği): Habit tarafındaki
+    // aynı gerekçeyle, kitap recalculation'ı sonrası da güncel okuma serisi
+    // (BookService.GetProgressAsync üzerinden) okunup
+    // BadgeService.EvaluateAfterBookLogAsync tekrar çağrılıyor. Böylece
+    // geçmişe dönük bir reading-log düzenlemesi READING_STREAK_7 eşiğine
+    // ulaştırsa bile rozet artık kaçırılmıyor.
     private static async Task ProcessBookJobAsync(
         IServiceScope scope,
         AppDbContext context,
@@ -203,6 +261,7 @@ public class RecalculationBackgroundService : BackgroundService
         }
 
         var bookService = scope.ServiceProvider.GetRequiredService<BookService>();
+        var badgeService = scope.ServiceProvider.GetRequiredService<BadgeService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<RecalculationBackgroundService>>();
 
         var xpDelta = await bookService.RecalculateBookAsync(book, job.TimeZoneId, cancellationToken);
@@ -215,6 +274,20 @@ public class RecalculationBackgroundService : BackgroundService
                 var updateResult = await userManager.UpdateAsync(user);
                 updateResult.EnsureSucceeded(logger, "book-recalc-background-xp", job.UserId);
             }
+        }
+
+        // YENİ: Recalculation sonrası güncel okuma serisini okuyup
+        // READING_STREAK_7 rozetini tekrar değerlendir.
+        try
+        {
+            var progress = await bookService.GetProgressAsync(book, job.TimeZoneId, cancellationToken);
+            await badgeService.EvaluateAfterBookLogAsync(job.UserId, progress.CurrentStreak, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Recalculation sonrası kitap rozet değerlendirmesi başarısız oldu. BookId={BookId} UserId={UserId}",
+                job.BookId, job.UserId);
         }
     }
 }

@@ -8,12 +8,13 @@ namespace Services;
 public class NotificationService
 {
     private readonly AppDbContext _context;
-    private readonly IPushNotificationSender _pushSender;
+    private readonly IPushQueue _pushQueue;
 
-    public NotificationService(AppDbContext context, IPushNotificationSender pushSender)
+   
+    public NotificationService(AppDbContext context, IPushQueue pushQueue)
     {
         _context = context;
-        _pushSender = pushSender;
+        _pushQueue = pushQueue;
     }
 
     public async Task<bool> TryEnqueueAsync(
@@ -31,12 +32,6 @@ public class NotificationService
             return false;
         }
 
-        // YENİ (madde 6): Kullanıcı bu türü kapattıysa bildirim kaydı hiç
-        // oluşturulmaz (madde 6 - "hangi bildirim türünü almak istediğini
-        // kapatamıyor" eksikliğini giderir). Bildirim geçmişinde de
-        // görünmesini istemeyen kullanıcılar için bu davranış tercih edildi;
-        // sadece push'u susturmak isteyenler DisabledTypes yerine sadece
-        // QuietHoursStart/End kullanabilir.
         var preference = await _context.NotificationPreferences.AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
 
@@ -66,21 +61,18 @@ public class NotificationService
             return false;
         }
 
-        // YENİ (madde 6): Sessiz saatler içindeyse bildirim kaydı DB'ye
-        // yazılır (kullanıcı uygulamayı açtığında görsün diye) ama anlık
-        // push gönderimi atlanır.
+        // Sessiz saatler içindeyse bildirim kaydı DB'ye yazılır (kullanıcı
+        // uygulamayı açtığında görsün diye) ama push kuyruğuna hiç
+        // eklenmez.
         if (preference != null && await IsWithinQuietHoursAsync(userId, preference, cancellationToken))
         {
             return true;
         }
 
-        var tokens = await _context.DeviceTokens
-            .AsNoTracking()
-            .Where(t => t.UserId == userId)
-            .Select(t => t.Token)
-            .ToListAsync(cancellationToken);
-
-        await _pushSender.SendAsync(tokens, title, body, cancellationToken);
+        // DÜZELTİLDİ: Doğrudan gönderim yerine kalıcı kuyruğa yazılıyor.
+        // Cihaz token'ları burada OKUNMUYOR — worker gönderim anında güncel
+        // listeyi kendisi çeker (bkz. PushSenderBackgroundService).
+        await _pushQueue.EnqueueAsync(userId, title, body, cancellationToken);
         return true;
     }
 
@@ -153,9 +145,6 @@ public class NotificationService
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    // YENİ (🟡 eksik uç nokta): Bir bildirimi yanlışlıkla "okundu" yapan
-    // kullanıcının bunu geri alabilmesinin (okunmadı işaretleme) hiçbir yolu
-    // yoktu; sadece tekil/toplu "okundu" işaretleme vardı.
     public async Task<bool> MarkUnreadAsync(string userId, int id, CancellationToken cancellationToken = default)
     {
         var notification = await _context.UserNotifications
@@ -244,7 +233,6 @@ public class NotificationService
         var localNow = TimeZones.ToLocal(DateTime.UtcNow, tz);
         var localTime = TimeOnly.FromDateTime(localNow);
 
-        // start > end => aralık gece yarısını geçiyor (ör. 22:00 - 08:00).
         return start <= end
             ? localTime >= start && localTime < end
             : localTime >= start || localTime < end;

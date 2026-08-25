@@ -59,28 +59,20 @@ public class UserDataExportService
             .Where(d => d.UserId == user.Id)
             .ToListAsync(cancellationToken);
 
-        // YENİ: Pet aksesuar kilitleri.
         var petAccessoryUnlocks = petIds.Count == 0
             ? new List<PetAccessoryUnlock>()
             : await _context.PetAccessoryUnlocks.AsNoTracking()
                 .Where(u => petIds.Contains(u.PetId))
                 .ToListAsync(cancellationToken);
 
-        // YENİ: Arka plan kilitleri.
         var backgroundUnlocks = await _context.UserBackgroundUnlocks.AsNoTracking()
             .Where(u => u.UserId == user.Id)
             .Select(u => u.Background)
             .ToListAsync(cancellationToken);
 
-        // YENİ: Bildirim tercihleri.
         var notificationPreference = await _context.NotificationPreferences.AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == user.Id, cancellationToken);
 
-        // YENİ: Bu kullanıcıya ait auth audit olayları (login/2FA/şifre
-        // geçmişi). Hem doğrudan UserId ile eşleşenler hem de (ör. hesap
-        // henüz oluşturulmadan önceki bazı olaylarda olduğu gibi) email
-        // üzerinden eşleşenler dahil edilir — AuthController.GetAuditLog
-        // ile aynı sorgu deseni.
         var authAuditEvents = await _context.AuthAuditEvents.AsNoTracking()
             .Where(e => e.UserId == user.Id || (user.Email != null && e.Email == user.Email))
             .OrderByDescending(e => e.CreatedAt)
@@ -101,40 +93,65 @@ public class UserDataExportService
                 TwoFactorEnabled = user.TwoFactorEnabled,
                 EquippedBackground = user.EquippedBackground
             },
+            // DÜZELTİLDİ: CustomCategoryName, Unit, TargetTime, ReminderTime,
+            // Notes, IsArchived, ArchivedAt eklendi.
             Habits = habits.Select(h => new HabitExportDto
             {
                 Id = h.Id,
                 Name = h.Name,
                 Category = h.Category,
+                CustomCategoryName = h.CustomCategoryName,
+                Unit = h.Unit.ToString(),
                 DailyGoal = h.DailyGoal,
                 Period = h.Period.ToString(),
+                TargetTime = h.TargetTime,
+                ReminderTime = h.ReminderTime,
+                Notes = h.Notes,
+                IsArchived = h.IsArchived,
+                ArchivedAt = h.ArchivedAt,
                 CreatedAt = h.CreatedAt
             }).ToList(),
+            // DÜZELTİLDİ: IsOnTime, PetStreakBonusXp eklendi.
             HabitCompletions = completions.Select(c => new HabitCompletionExportDto
             {
                 HabitId = c.HabitId,
                 CompletionDate = c.CompletionDate,
                 Amount = c.Amount,
-                XpEarned = c.XpEarned
+                XpEarned = c.XpEarned,
+                IsOnTime = c.IsOnTime,
+                PetStreakBonusXp = c.PetStreakBonusXp
             }).ToList(),
+            // DÜZELTİLDİ: Period, DailyGoalAmount, Notes, CoverImageUrl,
+            // IsArchived, ArchivedAt, CompletedAt eklendi.
             Books = books.Select(b => new BookExportDto
             {
                 Id = b.Id,
                 Title = b.Title,
                 Author = b.Author,
                 GoalType = b.GoalType.ToString(),
+                Period = b.Period.ToString(),
+                DailyGoalAmount = b.DailyGoalAmount,
                 TotalPages = b.TotalPages,
                 CurrentPage = b.CurrentPage,
+                TotalMinutesRead = b.TotalMinutesRead,
                 IsCompleted = b.IsCompleted,
-                CreatedAt = b.CreatedAt
+                CreatedAt = b.CreatedAt,
+                CompletedAt = b.CompletedAt,
+                IsArchived = b.IsArchived,
+                ArchivedAt = b.ArchivedAt,
+                Notes = b.Notes,
+                CoverImageUrl = b.CoverImageUrl
             }).ToList(),
+            // DÜZELTİLDİ: PageReachedAt eklendi.
             BookReadingLogs = readingLogs.Select(l => new BookReadingLogExportDto
             {
                 BookId = l.BookId,
                 ReadDate = l.ReadDate,
                 Amount = l.Amount,
+                PageReachedAt = l.PageReachedAt,
                 XpEarned = l.XpEarned
             }).ToList(),
+            // DÜZELTİLDİ: Mood, EquippedAccessory, HatchedAt eklendi.
             Pets = pets.Select(p => new PetExportDto
             {
                 Id = p.Id,
@@ -142,7 +159,10 @@ public class UserDataExportService
                 Nickname = p.Nickname,
                 Level = p.Level,
                 Xp = p.Xp,
+                Mood = p.Mood,
                 Stage = p.Stage.ToString(),
+                HatchedAt = p.HatchedAt,
+                EquippedAccessory = p.EquippedAccessory,
                 CreatedAt = p.CreatedAt
             }).ToList(),
             Badges = badges.Select(ub => new BadgeExportDto
@@ -151,11 +171,14 @@ public class UserDataExportService
                 Name = ub.Badge?.Name ?? string.Empty,
                 EarnedAt = ub.EarnedAt
             }).ToList(),
+            // DÜZELTİLDİ: HabitId, DedupKey eklendi.
             Notifications = notifications.Select(n => new NotificationExportDto
             {
                 Type = n.Type,
                 Title = n.Title,
                 Body = n.Body,
+                HabitId = n.HabitId,
+                DedupKey = n.DedupKey,
                 IsRead = n.IsRead,
                 CreatedAt = n.CreatedAt
             }).ToList(),

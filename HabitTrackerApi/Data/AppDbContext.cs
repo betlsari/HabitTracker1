@@ -39,12 +39,14 @@ public class AppDbContext : IdentityDbContext<User>
 
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
-    // YENİ: Kalıcı (DB-backed) outbox tabloları. Bkz.
-    // Services/EmailOutboxService.cs ve Services/RecalculationOutboxService.cs
     public DbSet<EmailOutboxItem> EmailOutboxItems { get; set; }
     public DbSet<RecalculationOutboxItem> RecalculationOutboxItems { get; set; }
     public DbSet<EmailDeadLetter> EmailDeadLetters { get; set; }
     public DbSet<NotificationDigestDelivery> NotificationDigestDeliveries { get; set; }
+
+    // YENİ: Kalıcı (DB-backed) push bildirim outbox tablosu. Bkz.
+    // Services/PushOutboxService.cs ve Services/PushSenderBackgroundService.cs
+    public DbSet<PushOutboxItem> PushOutboxItems { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -221,20 +223,25 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // YENİ: EmailOutboxItems — worker'ın "Pending & NextAttemptAt geçmiş"
-        // satırları hızlıca bulabilmesi için composite index. CreatedAt da
-        // ORDER BY için dahil edildi (FIFO işleme).
         builder.Entity<EmailOutboxItem>(entity =>
         {
             entity.HasIndex(e => new { e.Status, e.NextAttemptAt, e.CreatedAt })
                 .HasDatabaseName("IX_EmailOutboxItems_Status_NextAttemptAt_CreatedAt");
         });
 
-        // YENİ: RecalculationOutboxItems — aynı gerekçeyle.
         builder.Entity<RecalculationOutboxItem>(entity =>
         {
             entity.HasIndex(r => new { r.Status, r.NextAttemptAt, r.CreatedAt })
                 .HasDatabaseName("IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt");
+        });
+
+        // YENİ: EmailOutboxItems/RecalculationOutboxItems ile aynı gerekçe —
+        // worker'ın "Pending & NextAttemptAt geçmiş" satırları hızlıca
+        // bulabilmesi için composite index.
+        builder.Entity<PushOutboxItem>(entity =>
+        {
+            entity.HasIndex(p => new { p.Status, p.NextAttemptAt, p.CreatedAt })
+                .HasDatabaseName("IX_PushOutboxItems_Status_NextAttemptAt_CreatedAt");
         });
 
         foreach (var entityType in builder.Model.GetEntityTypes()

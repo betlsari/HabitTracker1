@@ -14,8 +14,6 @@ public class UserDataExportDto
     public FlowerExportDto? Flower { get; set; }
     public required List<DeviceTokenExportDto> DeviceTokens { get; set; }
 
-    // YENİ: GDPR/KVKK veri taşınabilirliği kapsamında önceden export'a hiç
-    // dahil edilmeyen veri türleri eklendi.
     public required List<PetAccessoryUnlockExportDto> PetAccessoryUnlocks { get; set; }
     public required List<string> BackgroundUnlocks { get; set; }
     public NotificationPreferenceExportDto? NotificationPreference { get; set; }
@@ -35,15 +33,24 @@ public class UserAccountExportDto
     public required string EquippedBackground { get; set; }
 }
 
+
 public class HabitExportDto
 {
     public int Id { get; set; }
     public required string Name { get; set; }
     public required string Category { get; set; }
+    public string? CustomCategoryName { get; set; }
+    public required string Unit { get; set; }
     public int DailyGoal { get; set; }
     public required string Period { get; set; }
+    public TimeOnly? TargetTime { get; set; }
+    public TimeOnly? ReminderTime { get; set; }
+    public string? Notes { get; set; }
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+
 
 public class HabitCompletionExportDto
 {
@@ -51,7 +58,10 @@ public class HabitCompletionExportDto
     public DateTime CompletionDate { get; set; }
     public int Amount { get; set; }
     public int XpEarned { get; set; }
+    public bool IsOnTime { get; set; }
+    public int PetStreakBonusXp { get; set; }
 }
+
 
 public class BookExportDto
 {
@@ -59,19 +69,30 @@ public class BookExportDto
     public required string Title { get; set; }
     public string? Author { get; set; }
     public required string GoalType { get; set; }
+    public required string Period { get; set; }
+    public int DailyGoalAmount { get; set; }
     public int? TotalPages { get; set; }
     public int CurrentPage { get; set; }
+    public int TotalMinutesRead { get; set; }
     public bool IsCompleted { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? Notes { get; set; }
+    public string? CoverImageUrl { get; set; }
 }
+
 
 public class BookReadingLogExportDto
 {
     public int BookId { get; set; }
     public DateTime ReadDate { get; set; }
     public int Amount { get; set; }
+    public int? PageReachedAt { get; set; }
     public int XpEarned { get; set; }
 }
+
 
 public class PetExportDto
 {
@@ -80,7 +101,10 @@ public class PetExportDto
     public string? Nickname { get; set; }
     public int Level { get; set; }
     public int Xp { get; set; }
+    public required string Mood { get; set; }
     public required string Stage { get; set; }
+    public DateTime? HatchedAt { get; set; }
+    public string? EquippedAccessory { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -91,11 +115,14 @@ public class BadgeExportDto
     public DateTime EarnedAt { get; set; }
 }
 
+
 public class NotificationExportDto
 {
     public required string Type { get; set; }
     public required string Title { get; set; }
     public required string Body { get; set; }
+    public int? HabitId { get; set; }
+    public required string DedupKey { get; set; }
     public bool IsRead { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -114,7 +141,6 @@ public class DeviceTokenExportDto
     public DateTime LastSeenAt { get; set; }
 }
 
-// YENİ
 public class PetAccessoryUnlockExportDto
 {
     public int PetId { get; set; }
@@ -122,7 +148,6 @@ public class PetAccessoryUnlockExportDto
     public DateTime UnlockedAt { get; set; }
 }
 
-// YENİ
 public class NotificationPreferenceExportDto
 {
     public required List<string> DisabledTypes { get; set; }
@@ -130,7 +155,6 @@ public class NotificationPreferenceExportDto
     public TimeOnly? QuietHoursEnd { get; set; }
 }
 
-// YENİ: Sadece bu kullanıcıya ait audit olayları (login, 2FA, şifre işlemleri vb.)
 public class AuthAuditEventExportDto
 {
     public required string EventType { get; set; }
