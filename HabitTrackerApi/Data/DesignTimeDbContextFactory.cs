@@ -12,11 +12,18 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile("appsettings.Development.json", optional: true)
+            
+            .AddUserSecrets<AppDbContext>(optional: true)
             .AddEnvironmentVariables()
             .Build();
 
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Database=habittracker;Username=postgres;Password=postgres";
+        
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            connectionString = "Host=localhost;Database=habittracker;Username=postgres;Password=postgres";
+        }
+
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(connectionString)
             .Options;
