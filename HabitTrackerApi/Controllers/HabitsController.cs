@@ -164,6 +164,9 @@ public class HabitsController : ControllerBase
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({"habit:" + userId}))");
+
             if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
             {
                 var existing = await _context.Habits.AsNoTracking()
@@ -173,9 +176,6 @@ public class HabitsController : ControllerBase
                     return ToDto(existing);
                 }
             }
-
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({"habit:" + userId}))");
 
             if (await _context.Habits.CountAsync(h => h.UserId == userId) >= _maxHabitsPerUser)
             {
@@ -222,7 +222,22 @@ public class HabitsController : ControllerBase
             };
 
             _context.Habits.Add(habit);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+            {
+                await transaction.RollbackAsync();
+                var raced = await _context.Habits.AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.UserId == userId && h.ClientRequestId == dto.ClientRequestId);
+                if (raced != null)
+                {
+                    return ToDto(raced);
+                }
+
+                throw;
+            }
             var user = await _userManager.FindByIdAsync(userId);
             if (user != null)
             {
@@ -355,7 +370,7 @@ public class HabitsController : ControllerBase
 
             if (goalOrScheduleChanged)
             {
-                _recalculationQueue.EnqueueHabitRecalculation(habit.Id, userId!, userTimeZoneId);
+                await _recalculationQueue.EnqueueHabitRecalculationAsync(habit.Id, userId!, userTimeZoneId, HttpContext.RequestAborted);
             }
 
             return ToDto(habit);

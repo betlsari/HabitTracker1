@@ -13,7 +13,7 @@ public sealed class RecalculationOutboxService : IRecalculationQueue, IRecalcula
         _context = context;
     }
 
-    public void EnqueueHabitRecalculation(int habitId, string userId, string? timeZoneId)
+    public async Task EnqueueHabitRecalculationAsync(int habitId, string userId, string? timeZoneId, CancellationToken cancellationToken = default)
     {
         _context.RecalculationOutboxItems.Add(new RecalculationOutboxItem
         {
@@ -25,10 +25,10 @@ public sealed class RecalculationOutboxService : IRecalculationQueue, IRecalcula
             CreatedAt = DateTime.UtcNow
         });
 
-        _context.SaveChanges();
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public void EnqueueBookRecalculation(int bookId, string userId, string? timeZoneId)
+    public async Task EnqueueBookRecalculationAsync(int bookId, string userId, string? timeZoneId, CancellationToken cancellationToken = default)
     {
         _context.RecalculationOutboxItems.Add(new RecalculationOutboxItem
         {
@@ -40,7 +40,7 @@ public sealed class RecalculationOutboxService : IRecalculationQueue, IRecalcula
             CreatedAt = DateTime.UtcNow
         });
 
-        _context.SaveChanges();
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public int PendingCount => _context.RecalculationOutboxItems

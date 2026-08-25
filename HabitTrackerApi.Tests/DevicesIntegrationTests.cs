@@ -54,7 +54,11 @@ public sealed class DevicesIntegrationTests : IClassFixture<ApiFactory>
         var deviceToken = "device-token-" + Guid.NewGuid().ToString("N");
         await client.PostAsJsonAsync("/api/devices", new { token = deviceToken, platform = "ios" });
 
-        var deleteResponse = await client.DeleteAsync($"/api/devices?token={deviceToken}");
+        using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/devices")
+        {
+            Content = JsonContent.Create(new { token = deviceToken })
+        };
+        var deleteResponse = await client.SendAsync(deleteRequest);
 
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
     }
@@ -66,7 +70,11 @@ public sealed class DevicesIntegrationTests : IClassFixture<ApiFactory>
         var token = await _factory.CreateAccessTokenAsync();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.DeleteAsync("/api/devices?token=nonexistent-token");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/devices")
+        {
+            Content = JsonContent.Create(new { token = "nonexistent-token" })
+        };
+        var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

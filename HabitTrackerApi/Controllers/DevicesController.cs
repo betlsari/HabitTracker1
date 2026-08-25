@@ -132,16 +132,11 @@ public class DevicesController : ControllerBase
     }
 
     [HttpDelete]
-    public async Task<IActionResult> Unregister([FromQuery] string token)
+    public async Task<IActionResult> Unregister(UnregisterDeviceDto dto)
     {
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return BadRequest("token zorunludur.");
-        }
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var existing = await _context.DeviceTokens
-            .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == token);
+            .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == dto.Token);
         if (existing == null)
         {
             return NotFound();

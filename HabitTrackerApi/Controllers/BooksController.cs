@@ -142,6 +142,9 @@ public class BooksController : ControllerBase
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({"book:" + userId}))");
+
             if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
             {
                 var existing = await _context.Books.AsNoTracking()
@@ -151,9 +154,6 @@ public class BooksController : ControllerBase
                     return BookService.ToDto(existing);
                 }
             }
-
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({"book:" + userId}))");
 
             if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
             {
@@ -184,7 +184,22 @@ public class BooksController : ControllerBase
             };
 
             _context.Books.Add(book);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+            {
+                await transaction.RollbackAsync();
+                var raced = await _context.Books.AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.UserId == userId && b.ClientRequestId == dto.ClientRequestId);
+                if (raced != null)
+                {
+                    return BookService.ToDto(raced);
+                }
+
+                throw;
+            }
 
             await transaction.CommitAsync();
             return BookService.ToDto(book);
@@ -218,7 +233,7 @@ public class BooksController : ControllerBase
         await _context.SaveChangesAsync();
 
         var user = await _userManager.FindByIdAsync(userId);
-        _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, user?.TimeZoneId);
+        await _recalculationQueue.EnqueueBookRecalculationAsync(book.Id, userId, user?.TimeZoneId, HttpContext.RequestAborted);
 
         return BookService.ToDto(book);
     }
@@ -241,7 +256,13 @@ public class BooksController : ControllerBase
             return BadRequest("Kapak görseli JPEG, PNG veya WebP formatında ve en fazla 5 MB olmalıdır.");
         }
 
-        var extension = file.ContentType switch
+        var detectedContentType = await DetectImageContentTypeAsync(file, HttpContext.RequestAborted);
+        if (!string.Equals(detectedContentType, file.ContentType, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest("Kapak görselinin gerçek içeriği Content-Type ile eşleşmiyor.");
+        }
+
+        var extension = detectedContentType switch
         {
             "image/jpeg" => ".jpg",
             "image/png" => ".png",
@@ -260,6 +281,29 @@ public class BooksController : ControllerBase
         book.CoverImageUrl = $"/uploads/covers/{fileName}";
         await _context.SaveChangesAsync();
         return BookService.ToDto(book);
+    }
+
+    private static async Task<string?> DetectImageContentTypeAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var stream = file.OpenReadStream();
+        var header = new byte[12];
+        var read = await stream.ReadAsync(header.AsMemory(), cancellationToken);
+        if (read >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (read >= 8 && header.AsSpan(0, 8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }))
+        {
+            return "image/png";
+        }
+
+        if (read >= 12 && header.AsSpan(0, 4).SequenceEqual("RIFF"u8) && header.AsSpan(8, 4).SequenceEqual("WEBP"u8))
+        {
+            return "image/webp";
+        }
+
+        return null;
     }
 
     [HttpPut("{id:int}/archive")]
@@ -569,7 +613,7 @@ public class BooksController : ControllerBase
 
         await transaction.CommitAsync();
 
-        _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, userTimeZoneId);
+        await _recalculationQueue.EnqueueBookRecalculationAsync(book.Id, userId, userTimeZoneId, HttpContext.RequestAborted);
 
         return BookService.ToLogDto(log);
         });
@@ -610,7 +654,7 @@ public class BooksController : ControllerBase
 
         await transaction.CommitAsync();
 
-        _recalculationQueue.EnqueueBookRecalculation(book.Id, userId, userTimeZoneId);
+        await _recalculationQueue.EnqueueBookRecalculationAsync(book.Id, userId, userTimeZoneId, HttpContext.RequestAborted);
 
         return NoContent();
         });

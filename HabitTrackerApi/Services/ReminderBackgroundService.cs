@@ -58,29 +58,43 @@ public sealed class ReminderService
     {
         var habits = await _context.Habits.AsNoTracking().Where(h => !h.IsArchived).ToListAsync(cancellationToken);
         var books = await _context.Books.AsNoTracking().Where(b => !b.IsArchived).ToListAsync(cancellationToken);
+        var userIds = habits.Select(h => h.UserId).Concat(books.Select(b => b.UserId)).Distinct().ToArray();
+        var timeZones = await _context.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.TimeZoneId, cancellationToken);
+        var habitIds = habits.Select(h => h.Id).ToArray();
+        var bookIds = books.Select(b => b.Id).ToArray();
+        var activitySinceUtc = utcNow.AddDays(-93);
+        var habitAmounts = (await _context.HabitCompletions.AsNoTracking()
+            .Where(c => habitIds.Contains(c.HabitId) && c.CompletionDate >= activitySinceUtc)
+            .Select(c => new ActivityAmount(c.HabitId, c.CompletionDate, c.Amount))
+            .ToListAsync(cancellationToken)).ToLookup(x => x.Id);
+        var bookAmounts = (await _context.BookReadingLogs.AsNoTracking()
+            .Where(l => bookIds.Contains(l.BookId) && l.ReadDate >= activitySinceUtc)
+            .Select(l => new ActivityAmount(l.BookId, l.ReadDate, l.Amount))
+            .ToListAsync(cancellationToken)).ToLookup(x => x.Id);
 
         foreach (var habit in habits)
         {
-            await ProcessHabitAsync(habit, utcNow, cancellationToken);
+            timeZones.TryGetValue(habit.UserId, out var timeZoneId);
+            await ProcessHabitAsync(habit, utcNow, timeZoneId, habitAmounts[habit.Id], cancellationToken);
         }
 
         foreach (var book in books)
         {
-            await ProcessBookAsync(book, utcNow, cancellationToken);
+            timeZones.TryGetValue(book.UserId, out var timeZoneId);
+            await ProcessBookAsync(book, utcNow, timeZoneId, bookAmounts[book.Id], cancellationToken);
         }
     }
 
-    private async Task ProcessHabitAsync(Habit habit, DateTime utcNow, CancellationToken cancellationToken)
+    private async Task ProcessHabitAsync(Habit habit, DateTime utcNow, string? timeZoneId,
+        IEnumerable<ActivityAmount> activities, CancellationToken cancellationToken)
     {
-        var timeZoneId = await _context.Users.Where(u => u.Id == habit.UserId)
-            .Select(u => u.TimeZoneId).FirstOrDefaultAsync(cancellationToken);
         var tz = TimeZones.Resolve(timeZoneId);
         var localNow = TimeZones.ToLocal(utcNow, tz);
         var periodStart = HabitSchedule.PeriodStartLocal(utcNow, habit.Period, tz);
         var (startUtc, endUtc) = HabitSchedule.UtcRange(periodStart, habit.Period, tz);
-        var amount = await _context.HabitCompletions
-            .Where(c => c.HabitId == habit.Id && c.CompletionDate >= startUtc && c.CompletionDate < endUtc)
-            .SumAsync(c => (int?)c.Amount, cancellationToken) ?? 0;
+        var amount = activities.Where(c => c.AtUtc >= startUtc && c.AtUtc < endUtc).Sum(c => c.Amount);
 
         if (habit.ReminderTime is { } reminder && localNow.Hour == reminder.Hour && localNow.Minute == reminder.Minute && amount < habit.DailyGoal)
         {
@@ -100,9 +114,7 @@ public sealed class ReminderService
 
         var previousStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, habit.Period);
         var (previousUtc, previousEndUtc) = HabitSchedule.UtcRange(previousStart, habit.Period, tz);
-        var previousAmount = await _context.HabitCompletions
-            .Where(c => c.HabitId == habit.Id && c.CompletionDate >= previousUtc && c.CompletionDate < previousEndUtc)
-            .SumAsync(c => (int?)c.Amount, cancellationToken) ?? 0;
+        var previousAmount = activities.Where(c => c.AtUtc >= previousUtc && c.AtUtc < previousEndUtc).Sum(c => c.Amount);
         if (previousAmount >= habit.DailyGoal)
         {
             await _notifications.TryEnqueueAsync(habit.UserId, NotificationTypes.StreakBroken, "Aliskanlik zinciri bozuldu",
@@ -111,16 +123,13 @@ public sealed class ReminderService
         }
     }
 
-    private async Task ProcessBookAsync(Book book, DateTime utcNow, CancellationToken cancellationToken)
+    private async Task ProcessBookAsync(Book book, DateTime utcNow, string? timeZoneId,
+        IEnumerable<ActivityAmount> activities, CancellationToken cancellationToken)
     {
-        var timeZoneId = await _context.Users.Where(u => u.Id == book.UserId)
-            .Select(u => u.TimeZoneId).FirstOrDefaultAsync(cancellationToken);
         var tz = TimeZones.Resolve(timeZoneId);
         var periodStart = HabitSchedule.PeriodStartLocal(utcNow, book.Period, tz);
         var (startUtc, endUtc) = HabitSchedule.UtcRange(periodStart, book.Period, tz);
-        var amount = await _context.BookReadingLogs
-            .Where(l => l.BookId == book.Id && l.ReadDate >= startUtc && l.ReadDate < endUtc)
-            .SumAsync(l => (int?)l.Amount, cancellationToken) ?? 0;
+        var amount = activities.Where(l => l.AtUtc >= startUtc && l.AtUtc < endUtc).Sum(l => l.Amount);
 
         if (!HabitSchedule.IsEndOfPeriodWindow(utcNow, book.Period, tz, _missedHour, 1) || amount >= book.DailyGoalAmount)
         {
@@ -133,9 +142,7 @@ public sealed class ReminderService
 
         var previousStart = HabitSchedule.PreviousPeriodStartLocal(periodStart, book.Period);
         var (previousUtc, previousEndUtc) = HabitSchedule.UtcRange(previousStart, book.Period, tz);
-        var previousAmount = await _context.BookReadingLogs
-            .Where(l => l.BookId == book.Id && l.ReadDate >= previousUtc && l.ReadDate < previousEndUtc)
-            .SumAsync(l => (int?)l.Amount, cancellationToken) ?? 0;
+        var previousAmount = activities.Where(l => l.AtUtc >= previousUtc && l.AtUtc < previousEndUtc).Sum(l => l.Amount);
         if (previousAmount >= book.DailyGoalAmount)
         {
             await _notifications.TryEnqueueAsync(book.UserId, NotificationTypes.BookStreakBroken, "Kitap zinciri bozuldu",
@@ -143,4 +150,6 @@ public sealed class ReminderService
                 $"bookstreakbroken:{book.Id}:{periodStart:yyyyMMdd}", cancellationToken);
         }
     }
+
+    private sealed record ActivityAmount(int Id, DateTime AtUtc, int Amount);
 }

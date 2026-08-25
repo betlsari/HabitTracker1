@@ -42,6 +42,32 @@ public sealed class DashboardIntegrationTests : IClassFixture<ApiFactory>
         Assert.Single(dashboard.Pets);
     }
 
+        [Fact]
+        public async Task Dashboard_cache_is_invalidated_after_creating_a_habit()
+        {
+            using var client = _factory.CreateClient();
+            var token = await _factory.CreateAccessTokenAsync();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var initial = await client.GetAsync("/api/dashboard");
+            initial.EnsureSuccessStatusCode();
+
+            var create = await client.PostAsJsonAsync("/api/habits", new
+            {
+                name = $"Cache invalidation {Guid.NewGuid():N}",
+                category = "Spor",
+                dailyGoal = 1,
+                period = "Daily"
+            });
+            create.EnsureSuccessStatusCode();
+
+            var refreshed = await client.GetAsync("/api/dashboard");
+            refreshed.EnsureSuccessStatusCode();
+            var dashboard = await refreshed.Content.ReadFromJsonAsync<DashboardResponse>();
+
+            Assert.Single(dashboard!.Habits);
+        }
+
     private sealed class DashboardResponse
     {
         public int TotalXp { get; set; }

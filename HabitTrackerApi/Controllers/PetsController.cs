@@ -101,6 +101,9 @@ public class PetsController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
+
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {
             var existing = await _context.Pets.AsNoTracking()
@@ -110,9 +113,6 @@ public class PetsController : ControllerBase
                 return ToDto(existing);
             }
         }
-
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
 
         if (!PetTypes.IsValid(dto.Type))
         {
@@ -151,7 +151,22 @@ public class PetsController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
         _context.Pets.Add(pet);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        {
+            await transaction.RollbackAsync();
+            var raced = await _context.Pets.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.ClientRequestId == dto.ClientRequestId);
+            if (raced != null)
+            {
+                return ToDto(raced);
+            }
+
+            throw;
+        }
 
         await transaction.CommitAsync();
         return ToDto(pet);

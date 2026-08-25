@@ -237,15 +237,16 @@ builder.Services.AddAuthentication(options =>
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 }).AddJwtBearer(options =>
 {
+    var jwtConfiguration = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        ValidIssuer = jwtConfiguration.Issuer,
+        ValidAudience = jwtConfiguration.Audience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfiguration.Key))
     };
 
     options.Events = new JwtBearerEvents
@@ -512,6 +513,22 @@ app.UseRateLimiter();
 app.UseCors("DefaultCorsPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (context.User.Identity?.IsAuthenticated == true &&
+        context.Request.Method is not "GET" and not "HEAD" and not "OPTIONS")
+    {
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var dashboardCache = context.RequestServices.GetRequiredService<DashboardCacheService>();
+            await dashboardCache.InvalidateAsync(userId, context.RequestAborted);
+        }
+    }
+});
 
 app.MapControllers();
 

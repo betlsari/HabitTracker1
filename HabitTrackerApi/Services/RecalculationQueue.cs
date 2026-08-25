@@ -10,7 +10,7 @@ public sealed record BookRecalculationJob(int BookId, string UserId, string? Tim
 
 public interface IRecalculationQueue
 {
-    void EnqueueHabitRecalculation(int habitId, string userId, string? timeZoneId);
-    void EnqueueBookRecalculation(int bookId, string userId, string? timeZoneId);
+    Task EnqueueHabitRecalculationAsync(int habitId, string userId, string? timeZoneId, CancellationToken cancellationToken = default);
+    Task EnqueueBookRecalculationAsync(int bookId, string userId, string? timeZoneId, CancellationToken cancellationToken = default);
     int PendingCount { get; }
 }

@@ -17,3 +17,11 @@ public class RegisterDeviceTokenDto
     [MaxLength(MaxPlatformLength)]
     public string Platform { get; set; } = "unknown";
 }
+
+public sealed class UnregisterDeviceDto
+{
+    [Required]
+    [MinLength(8)]
+    [MaxLength(RegisterDeviceTokenDto.MaxTokenLength)]
+    public required string Token { get; set; }
+}

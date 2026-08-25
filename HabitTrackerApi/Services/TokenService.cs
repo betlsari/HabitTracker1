@@ -11,7 +11,6 @@ using System.Security.Cryptography;
 
 public class TokenService
 {
-    private readonly IConfiguration _configuration;
     private readonly JwtOptions _jwtOptions;
 
     private const string TwoFactorPurposeClaim = "purpose";
@@ -29,13 +28,17 @@ public class TokenService
     public TimeSpan RefreshTokenLifetime => TimeSpan.FromDays(_jwtOptions.RefreshTokenLifetimeDays);
 
     public TokenService(IConfiguration configuration)
-        : this(configuration, Options.Create(new JwtOptions()))
+        : this(configuration, Options.Create(new JwtOptions
+        {
+            Key = configuration["Jwt:Key"] ?? string.Empty,
+            Issuer = configuration["Jwt:Issuer"] ?? string.Empty,
+            Audience = configuration["Jwt:Audience"] ?? string.Empty
+        }))
     {
     }
 
     public TokenService(IConfiguration configuration, IOptions<JwtOptions> jwtOptions)
     {
-        _configuration = configuration;
         _jwtOptions = jwtOptions.Value;
     }
 
@@ -47,11 +50,11 @@ public class TokenService
             new Claim(ClaimTypes.Email, user.Email!),
             new Claim("sstamp", user.SecurityStamp ?? string.Empty)
         };
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
-            issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            issuer: _jwtOptions.Issuer,
+            audience: _jwtOptions.Audience,
             claims: claims,
             expires: DateTime.UtcNow.Add(AccessTokenLifetime),
             signingCredentials: credentials
@@ -84,11 +87,11 @@ public class TokenService
             new Claim(TwoFactorPurposeClaim, TwoFactorPurposeValue),
             new Claim("sstamp", user.SecurityStamp ?? string.Empty)
         };
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
-            issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            issuer: _jwtOptions.Issuer,
+            audience: _jwtOptions.Audience,
             claims: claims,
             expires: DateTime.UtcNow.Add(PreAuthTokenLifetime),
             signingCredentials: credentials);
@@ -98,15 +101,15 @@ public class TokenService
     public (string? UserId, string? SecurityStamp) ValidatePreAuthTokenAndGetUserId(string preAuthToken)
     {
         var handler = new JwtSecurityTokenHandler();
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
         var parameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = _configuration["Jwt:Issuer"],
-            ValidAudience = _configuration["Jwt:Audience"],
+            ValidIssuer = _jwtOptions.Issuer,
+            ValidAudience = _jwtOptions.Audience,
             IssuerSigningKey = key,
             ClockSkew = TimeSpan.FromSeconds(30)
         };

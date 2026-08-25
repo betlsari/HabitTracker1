@@ -17,6 +17,7 @@ public class Habit : IHasConcurrencyToken
     [Range(1, CreateHabitDto.MaxDailyGoal)]
     public int DailyGoal { get; set; }
     [MinLength(1)]
+    [MaxLength(CreateHabitDto.MaxCategoryLength)]
     public required string Category { get; set; }
 
     public DateTime CreatedAt { get; set; }

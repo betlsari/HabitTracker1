@@ -65,15 +65,7 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
-    private async Task<bool> ValidateCaptchaAsync(string? token)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return !_captchaVerifier.IsEnabled;
-        }
-
-        return await _captchaVerifier.ValidateAsync(token);
-    }
+    private Task<bool> ValidateCaptchaAsync(string? token) => _captchaVerifier.ValidateAsync(token);
 
 
     [HttpPost("2fa/login")]
@@ -136,13 +128,19 @@ public class AuthController : ControllerBase
 
     [HttpPost("2fa/setup")]
     [Authorize]
-    public async Task<IActionResult> SetupTwoFactor()
+    public async Task<IActionResult> SetupTwoFactor(SetupTwoFactorDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _userManager.FindByIdAsync(userId!);
         if (user == null)
         {
             return NotFound();
+        }
+
+        if (!await _userManager.CheckPasswordAsync(user, dto.CurrentPassword))
+        {
+            await _authAudit.RecordAsync(HttpContext, "two-factor-setup", false, user, detail: "invalid-password");
+            return BadRequest("Şifre hatalı.");
         }
 
         await _userManager.ResetAuthenticatorKeyAsync(user);
@@ -258,12 +256,12 @@ public class AuthController : ControllerBase
             if (result.IsNotAllowed)
             {
                 await _authAudit.RecordAsync(HttpContext, "login", false, user, detail: "email-not-confirmed");
-                return BadRequest("Email adresiniz doğrulanmamış. Lütfen email adresinizi doğrulayın.");
+                return Unauthorized();
             }
             if (result.IsLockedOut)
             {
                 await _authAudit.RecordAsync(HttpContext, "login-lockout", false, user, detail: "lockout");
-                return BadRequest("Çok fazla başarısız giriş denemesi. Hesabınız geçici olarak kilitlendi, lütfen daha sonra tekrar deneyin.");
+                return Unauthorized();
             }
             await _authAudit.RecordAsync(HttpContext, "login", false, user, detail: "invalid-password");
             return Unauthorized();
@@ -754,6 +752,32 @@ public class AuthController : ControllerBase
         {
             await _authAudit.RecordAsync(HttpContext, "account-delete", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı. Hesap silme işlemi iptal edildi.");
+        }
+
+        if (await _userManager.GetTwoFactorEnabledAsync(user))
+        {
+            if (await _twoFactorLockout.IsLockedOutAsync(user.Id))
+            {
+                return BadRequest("Çok fazla başarısız 2FA denemesi. Lütfen daha sonra tekrar deneyin.");
+            }
+
+            var codeValid = !string.IsNullOrWhiteSpace(dto.TwoFactorCode) &&
+                await _userManager.VerifyTwoFactorTokenAsync(
+                    user, TokenOptions.DefaultAuthenticatorProvider, dto.TwoFactorCode);
+            if (!codeValid && !string.IsNullOrWhiteSpace(dto.TwoFactorCode))
+            {
+                var recoveryResult = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, dto.TwoFactorCode);
+                codeValid = recoveryResult.Succeeded;
+            }
+
+            if (!codeValid)
+            {
+                await _twoFactorLockout.RecordFailureAsync(user.Id);
+                await _authAudit.RecordAsync(HttpContext, "account-delete", false, user, detail: "invalid-two-factor-code");
+                return BadRequest("Hesap silmek için geçerli bir 2FA kodu gereklidir.");
+            }
+
+            await _twoFactorLockout.ResetAsync(user.Id);
         }
 
         await _authAudit.RecordAsync(HttpContext, "account-delete", true, user);

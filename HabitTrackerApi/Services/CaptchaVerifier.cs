@@ -9,8 +9,6 @@ public sealed class CaptchaVerifier
     private readonly HttpClient _httpClient;
     private readonly CaptchaOptions _options;
 
-    public bool IsEnabled => _options.Enabled;
-
     public CaptchaVerifier(HttpClient httpClient, IOptions<CaptchaOptions> options)
     {
         _httpClient = httpClient;
