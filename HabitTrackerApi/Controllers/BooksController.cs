@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Models;
 using Services;
 using System.Security.Claims;
@@ -84,10 +85,10 @@ public class BooksController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim();
+            var term = EscapeLikePattern(search.Trim());
             query = query.Where(b =>
-                EF.Functions.ILike(b.Title, $"%{term}%") ||
-                (b.Author != null && EF.Functions.ILike(b.Author, $"%{term}%")));
+                EF.Functions.ILike(b.Title, $"%{term}%", "\\") ||
+                (b.Author != null && EF.Functions.ILike(b.Author, $"%{term}%", "\\")));
         }
 
         query = (sortBy.ToLowerInvariant(), sortDesc) switch
@@ -114,6 +115,9 @@ public class BooksController : ControllerBase
             TotalCount = totalCount
         };
     }
+
+    private static string EscapeLikePattern(string value) =>
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<BookDto>> GetBook(int id)
@@ -162,7 +166,7 @@ public class BooksController : ControllerBase
 
             var normalizedTitle = dto.Title.Trim();
             var normalizedTitleKey = normalizedTitle.ToUpperInvariant();
-            if (await _context.Books.AnyAsync(b => b.UserId == userId && b.NormalizedTitle == normalizedTitleKey))
+            if (await _context.Books.AnyAsync(b => b.UserId == userId && !b.IsArchived && b.NormalizedTitle == normalizedTitleKey))
             {
                 return Conflict("Bu başlıkta zaten bir kitabınız var.");
             }
@@ -278,9 +282,32 @@ public class BooksController : ControllerBase
             await file.CopyToAsync(stream);
         }
 
+        var previousCoverUrl = book.CoverImageUrl;
         book.CoverImageUrl = $"/uploads/covers/{fileName}";
         await _context.SaveChangesAsync();
+        DeleteLocalCover(previousCoverUrl);
         return BookService.ToDto(book);
+    }
+
+    private void DeleteLocalCover(string? coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(coverUrl) || !coverUrl.StartsWith("/uploads/covers/", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var fileName = Path.GetFileName(coverUrl);
+        if (fileName != coverUrl["/uploads/covers/".Length..])
+        {
+            return;
+        }
+
+        var root = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var path = Path.Combine(root, "uploads", "covers", fileName);
+        if (System.IO.File.Exists(path))
+        {
+            System.IO.File.Delete(path);
+        }
     }
 
     private static async Task<string?> DetectImageContentTypeAsync(IFormFile file, CancellationToken cancellationToken)
@@ -347,9 +374,14 @@ public class BooksController : ControllerBase
     }
 
     [HttpPost("{id:int}/complete")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<ActionResult<BookDto>> CompleteBook(int id)
     {
+        await using var transaction = await _context.Database.BeginTransactionAsync(HttpContext.RequestAborted);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"book-complete:" + id}))",
+            HttpContext.RequestAborted);
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
         {
@@ -382,6 +414,8 @@ public class BooksController : ControllerBase
             MotivationMessages.BookCompleted(book.Title),
             habitId: null,
             dedupKey: $"bookcompleted:{book.Id}");
+
+        await transaction.CommitAsync(HttpContext.RequestAborted);
 
         return BookService.ToDto(book);
     }
@@ -420,6 +454,10 @@ public class BooksController : ControllerBase
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtext({"book-reading:" + id}))",
+            HttpContext.RequestAborted);
 
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {

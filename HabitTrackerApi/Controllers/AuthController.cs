@@ -128,6 +128,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("2fa/setup")]
     [Authorize]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> SetupTwoFactor(SetupTwoFactorDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -137,8 +138,13 @@ public class AuthController : ControllerBase
             return NotFound();
         }
 
-        if (!await _userManager.CheckPasswordAsync(user, dto.CurrentPassword))
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
+        if (!passwordResult.Succeeded)
         {
+            if (passwordResult.IsLockedOut)
+            {
+                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
+            }
             await _authAudit.RecordAsync(HttpContext, "two-factor-setup", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı.");
         }
@@ -202,6 +208,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("register")]
     [EnableRateLimiting("AuthPolicy")]
+    [EmailRateLimit]
     public async Task<IActionResult> Register(RegisterDto registerDto)
     {
         if (!await ValidateCaptchaAsync(registerDto.CaptchaToken))
@@ -305,6 +312,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("2fa/disable")]
     [Authorize]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> DisableTwoFactor(DisableTwoFactorDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -314,9 +322,13 @@ public class AuthController : ControllerBase
             return NotFound();
         }
 
-        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
-        if (!passwordValid)
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
+        if (!passwordResult.Succeeded)
         {
+            if (passwordResult.IsLockedOut)
+            {
+                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
+            }
             await _authAudit.RecordAsync(HttpContext, "two-factor-disable", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı.");
         }
@@ -650,6 +662,10 @@ public class AuthController : ControllerBase
         }
 
         await RevokeAllRefreshTokensAsync(user.Id);
+        await _emailQueue.EnqueueAsync(new EmailMessage(
+            user.Email!,
+            "Şifreniz değiştirildi",
+            "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız derhal destek ekibiyle iletişime geçin."));
         await _authAudit.RecordAsync(HttpContext, "password-reset", true, user);
 
         return Ok("Şifre başarıyla sıfırlandı.");
@@ -667,6 +683,18 @@ public class AuthController : ControllerBase
             return NotFound();
         }
 
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
+        if (!passwordResult.Succeeded)
+        {
+            if (passwordResult.IsLockedOut)
+            {
+                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
+            }
+
+            await _authAudit.RecordAsync(HttpContext, "password-change", false, user, detail: "invalid-current-password");
+            return BadRequest("Mevcut şifre hatalı.");
+        }
+
         var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
         if (!result.Succeeded)
         {
@@ -675,6 +703,10 @@ public class AuthController : ControllerBase
         }
 
         await RevokeAllRefreshTokensAsync(user.Id);
+        await _emailQueue.EnqueueAsync(new EmailMessage(
+            user.Email!,
+            "Şifreniz değiştirildi",
+            "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız derhal destek ekibiyle iletişime geçin."));
         await _authAudit.RecordAsync(HttpContext, "password-change", true, user);
 
         return Ok("Şifre başarıyla değiştirildi.");
@@ -716,6 +748,7 @@ public class AuthController : ControllerBase
 
     [HttpPut("me/profile")]
     [Authorize]
+    [SanitizeText]
     public async Task<IActionResult> UpdateProfile(UpdateProfileDto dto)
     {
         var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -747,9 +780,13 @@ public class AuthController : ControllerBase
             return NotFound();
         }
 
-        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
-        if (!passwordValid)
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
+        if (!passwordResult.Succeeded)
         {
+            if (passwordResult.IsLockedOut)
+            {
+                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
+            }
             await _authAudit.RecordAsync(HttpContext, "account-delete", false, user, detail: "invalid-password");
             return BadRequest("Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
@@ -787,6 +824,12 @@ if (!result.Succeeded)
 {
     return BadRequest(result.Errors);
 }
+
+        // Audit events intentionally have no FK for forensics, so erase the
+        // user's historical PII explicitly as part of account deletion.
+        await _context.AuthAuditEvents
+            .Where(e => e.UserId == userId || e.Email == user.Email)
+            .ExecuteDeleteAsync();
 
 await _securityStampCache.InvalidateAsync(userId!);
 
@@ -849,9 +892,13 @@ public async Task<IActionResult> RegenerateRecoveryCodes(RegenerateRecoveryCodes
         return BadRequest("İki adımlı doğrulama etkin değil.");
     }
 
-    var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
-    if (!passwordValid)
+    var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
+    if (!passwordResult.Succeeded)
     {
+        if (passwordResult.IsLockedOut)
+        {
+            return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
+        }
         await _authAudit.RecordAsync(HttpContext, "recovery-codes-regenerate", false, user, detail: "invalid-password");
         return BadRequest("Şifre hatalı.");
     }

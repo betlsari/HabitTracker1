@@ -88,8 +88,8 @@ public class HabitsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim();
-            query = query.Where(h => EF.Functions.ILike(h.Name, $"%{term}%"));
+            var term = EscapeLikePattern(search.Trim());
+            query = query.Where(h => EF.Functions.ILike(h.Name, $"%{term}%", "\\"));
         }
 
         var rawCategoryFilter = (categories != null && categories.Length > 0)
@@ -130,6 +130,9 @@ public class HabitsController : ControllerBase
             TotalCount = totalCount
         };
     }
+
+    private static string EscapeLikePattern(string value) =>
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     [HttpGet("categories")]
     public ActionResult<IEnumerable<string>> GetAllowedCategories()
@@ -196,7 +199,7 @@ public class HabitsController : ControllerBase
             var normalizedName = dto.Name.Trim();
             var normalizedNameKey = normalizedName.ToUpperInvariant();
             var habitExist = await _context.Habits.AnyAsync(h =>
-                h.UserId == userId && h.NormalizedName == normalizedNameKey);
+                h.UserId == userId && !h.IsArchived && h.NormalizedName == normalizedNameKey);
             if (habitExist)
             {
                 return BadRequest("Bu isimde zaten bir alışkanlığınız var.");
@@ -291,7 +294,7 @@ public class HabitsController : ControllerBase
             var normalizedName = dto.Name.Trim();
             var normalizedNameKey = normalizedName.ToUpperInvariant();
             var nameTakenByAnother = await _context.Habits.AnyAsync(h =>
-                 h.UserId == userId && h.Id != id && h.NormalizedName == normalizedNameKey);
+                  h.UserId == userId && h.Id != id && !h.IsArchived && h.NormalizedName == normalizedNameKey);
             if (nameTakenByAnother)
             {
                 return BadRequest("Bu isimde zaten bir alışkanlığınız var.");

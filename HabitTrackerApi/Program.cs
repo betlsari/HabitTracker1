@@ -409,6 +409,7 @@ builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddHostedService<AuthAuditCleanupService>();
 builder.Services.AddHostedService<ArchivedRecordsCleanupService>();
+builder.Services.AddHostedService<OutboxCleanupService>();
 // DÜZELTİLDİ: Artık DB outbox tablosunu poll ediyor (bkz. yukarıdaki not).
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
 builder.Services.AddHostedService<RecalculationBackgroundService>();

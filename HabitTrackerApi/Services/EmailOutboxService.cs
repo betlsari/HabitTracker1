@@ -122,4 +122,9 @@ public sealed class EmailOutboxService : IEmailQueue, IEmailOutboxProcessor
         _context.EmailOutboxItems.CountAsync(
             e => e.Status == EmailOutboxStatus.Pending || e.Status == EmailOutboxStatus.Processing,
             cancellationToken);
+
+    public Task<int> CleanupSentAsync(DateTime cutoffUtc, CancellationToken cancellationToken) =>
+        _context.EmailOutboxItems
+            .Where(e => e.Status == EmailOutboxStatus.Sent && e.SentAt < cutoffUtc)
+            .ExecuteDeleteAsync(cancellationToken);
 }

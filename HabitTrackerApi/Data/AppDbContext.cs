@@ -58,7 +58,8 @@ public class AppDbContext : IdentityDbContext<User>
         });
         builder.Entity<Habit>(entity =>
         {
-            entity.HasIndex(h => new { h.UserId, h.NormalizedName }).IsUnique();
+            entity.HasIndex(h => new { h.UserId, h.NormalizedName })
+                .IsUnique().HasFilter("\"IsArchived\" = FALSE");
             entity.HasIndex(h => new { h.UserId, h.ClientRequestId })
                 .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
             entity.HasIndex(h => new { h.UserId, h.IsArchived });
@@ -161,7 +162,8 @@ public class AppDbContext : IdentityDbContext<User>
         builder.Entity<Book>(entity =>
         {
             entity.HasIndex(b => b.UserId);
-            entity.HasIndex(b => new { b.UserId, b.NormalizedTitle }).IsUnique();
+            entity.HasIndex(b => new { b.UserId, b.NormalizedTitle })
+                .IsUnique().HasFilter("\"IsArchived\" = FALSE");
             entity.HasIndex(b => new { b.UserId, b.ClientRequestId })
                 .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
             entity.HasIndex(b => b.CreatedAt);

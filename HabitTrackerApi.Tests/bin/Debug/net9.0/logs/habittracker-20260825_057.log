@@ -1,0 +1,77 @@
+[2026-08-25 21:50:58 INF] c3c440936f4e453d913678c4c561a4b7 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:50:58 INF] b73b4601bf814f4fa420174c5af67027 Executed DbCommand (0ms) [Parameters=[@__id_0='?' (DbType = Int32), @__userId_1='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id", "b"."ArchivedAt", "b"."Author", "b"."ClientRequestId", "b"."CompletedAt", "b"."CompletionBonusAwarded", "b"."ConcurrencyToken", "b"."CoverImageUrl", "b"."CreatedAt", "b"."CurrentPage", "b"."DailyGoalAmount", "b"."GoalType", "b"."IsArchived", "b"."IsCompleted", "b"."ManuallyCompleted", "b"."NormalizedTitle", "b"."Notes", "b"."Period", "b"."Title", "b"."TotalMinutesRead", "b"."TotalPages", "b"."UserId"
+FROM "Books" AS "b"
+WHERE "b"."Id" = @__id_0 AND "b"."UserId" = @__userId_1
+LIMIT 1
+[2026-08-25 21:50:58 INF] b73b4601bf814f4fa420174c5af67027 Executed DbCommand (0ms) [Parameters=[@p2='?' (DbType = Int32), @p0='?' (DbType = Guid), @p3='?' (DbType = Guid), @p1='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+UPDATE "Books" SET "ConcurrencyToken" = @p0, "DailyGoalAmount" = @p1
+WHERE "Id" = @p2 AND "ConcurrencyToken" = @p3
+RETURNING 1;
+[2026-08-25 21:50:58 INF] b73b4601bf814f4fa420174c5af67027 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:50:58 INF] b73b4601bf814f4fa420174c5af67027 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?' (DbType = Int32), @p2='?' (DbType = DateTime), @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (DbType = Int32), @p6='?' (DbType = Int32), @p7='?', @p8='?' (DbType = DateTime), @p9='?', @p10='?' (DbType = DateTime), @p11='?' (DbType = Int32), @p12='?' (Size = 15), @p13='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "RecalculationOutboxItems" ("AttemptCount", "BookId", "CompletedAt", "ConcurrencyToken", "CreatedAt", "HabitId", "JobType", "LastError", "LockedAt", "LockedBy", "NextAttemptAt", "Status", "TimeZoneId", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13)
+RETURNING "Id";
+[2026-08-25 21:50:58 INF] 62be56f212b74787a3dfd472ebe11602 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:50:58 INF] 5c089392394447ddb21575abb7f06af8 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
+FROM "AspNetUsers" AS "a"
+WHERE "a"."Id" = @__p_0
+LIMIT 1
+[2026-08-25 21:50:58 INF]  HabitTrackerApi başlatılıyor...
+[2026-08-25 21:50:58 INF] 5c089392394447ddb21575abb7f06af8 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "h"."Id"
+FROM "Habits" AS "h"
+WHERE "h"."UserId" = @__userId_0
+[2026-08-25 21:50:58 INF] 5c089392394447ddb21575abb7f06af8 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "b"."Id"
+FROM "Books" AS "b"
+WHERE "b"."UserId" = @__userId_0
+[2026-08-25 21:50:58 INF] 62be56f212b74787a3dfd472ebe11602 Executed DbCommand (0ms) [Parameters=[@p0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT pg_advisory_xact_lock(hashtext(@p0))
+[2026-08-25 21:50:58 INF]  Executed DbCommand (0ms) [Parameters=[@__book_Id_0='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT "r"."Id", "r"."AttemptCount", "r"."BookId", "r"."CompletedAt", "r"."ConcurrencyToken", "r"."CreatedAt", "r"."HabitId", "r"."JobType", "r"."LastError", "r"."LockedAt", "r"."LockedBy", "r"."NextAttemptAt", "r"."Status", "r"."TimeZoneId", "r"."UserId"
+FROM "RecalculationOutboxItems" AS "r"
+WHERE "r"."BookId" = @__book_Id_0
+LIMIT 2
+[2026-08-25 21:50:58 INF] 62be56f212b74787a3dfd472ebe11602 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36), @__dto_Token_1='?' (Size = 45)], CommandType='"Text"', CommandTimeout='30']
+SELECT "d"."Id", "d"."ConcurrencyToken", "d"."CreatedAt", "d"."LastSeenAt", "d"."Platform", "d"."Token", "d"."UserId"
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0 AND "d"."Token" = @__dto_Token_1
+LIMIT 1
+[2026-08-25 21:50:58 INF] 62be56f212b74787a3dfd472ebe11602 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM "DeviceTokens" AS "d"
+WHERE "d"."UserId" = @__userId_0
+[2026-08-25 21:50:58 INF] 62be56f212b74787a3dfd472ebe11602 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?' (DbType = DateTime), @p3='?' (Size = 3), @p4='?' (Size = 45), @p5='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+INSERT INTO "DeviceTokens" ("ConcurrencyToken", "CreatedAt", "LastSeenAt", "Platform", "Token", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5)
+RETURNING "Id";
+[2026-08-25 21:50:58 INF] f09ee5b713834453a04bda3bf6e49f74 Executed DbCommand (0ms) [Parameters=[@__userId_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
+SELECT "n"."Id", "n"."ConcurrencyToken", "n"."DigestEnabled", "n"."DigestHourUtc", "n"."DisabledTypes", "n"."QuietHoursEnd", "n"."QuietHoursStart", "n"."UpdatedAt", "n"."UserId"
+FROM "NotificationPreferences" AS "n"
+WHERE "n"."UserId" = @__userId_0
+LIMIT 1
+[2026-08-25 21:50:58 INF] 62be56f212b74787a3dfd472ebe11602 HTTP POST /api/devices responded 200 in 45.2877 ms
+[2026-08-25 21:50:58 INF] f09ee5b713834453a04bda3bf6e49f74 Executed DbCommand (0ms) [Parameters=[@p0='?' (DbType = Int32), @p1='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+DELETE FROM "NotificationPreferences"
+WHERE "Id" = @p0 AND "ConcurrencyToken" = @p1
+RETURNING 1;
+[2026-08-25 21:50:58 INF] f09ee5b713834453a04bda3bf6e49f74 HTTP DELETE /api/notificationpreferences responded 200 in 22.3875 ms
+[2026-08-25 21:50:58 INF]  Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+[2026-08-25 21:50:58 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
+[2026-08-25 21:50:58 INF] 5c089392394447ddb21575abb7f06af8 HTTP GET /api/stats/monthly responded 200 in 59.7691 ms

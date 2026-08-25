@@ -7,6 +7,7 @@ public class LogReadingDto : IValidatableObject
     public const int MaxAmount = 10_000;
     public const int MaxPageReached = 1_000_000;
     public const int MaxClientRequestIdLength = 100;
+    public const int MaxPastDays = 3650;
 
     public DateTime ReadDate { get; set; }
 
@@ -26,6 +27,13 @@ public class LogReadingDto : IValidatableObject
         {
             yield return new ValidationResult(
                 "Okuma tarihi gelecekte olamaz.",
+                new[] { nameof(ReadDate) });
+        }
+
+        if (ReadDate < DateTime.UtcNow.AddDays(-MaxPastDays))
+        {
+            yield return new ValidationResult(
+                $"Okuma tarihi en fazla {MaxPastDays} gün öncesine ait olabilir.",
                 new[] { nameof(ReadDate) });
         }
     }

@@ -11,6 +11,7 @@ using Services;
 using Microsoft.Extensions.Options;
 using Configuration;
 using Asp.Versioning;
+using Filters;
 
 namespace Controllers;
 
@@ -91,6 +92,7 @@ public class PetsController : ControllerBase
     // (pg_advisory_xact_lock) eklendi; kilit transaction sonunda otomatik
     // serbest kalır.
     [HttpPost]
+    [SanitizeText]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -256,6 +258,7 @@ public class PetsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [SanitizeText]
     public async Task<ActionResult<PetDto>> UpdatePet(int id, UpdatePetDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;

@@ -1,6 +1,0 @@
-[2026-08-25 21:32:04 WRN]  The WebRootPath was not found: C:\Users\betls\OneDrive\Masaüstü\HabitTracker\HabitTrackerApi\wwwroot. Static files may be unavailable.
-[2026-08-25 21:32:04 INF] 1c3880daaa334ccd905661ed2a396dc5 Executed DbCommand (0ms) [Parameters=[@__p_0='?' (Size = 36)], CommandType='"Text"', CommandTimeout='30']
-SELECT "a"."Id", "a"."AccessFailedCount", "a"."AvatarUrl", "a"."ConcurrencyStamp", "a"."CreatedAt", "a"."DisplayName", "a"."Email", "a"."EmailConfirmed", "a"."EquippedBackground", "a"."LockoutEnabled", "a"."LockoutEnd", "a"."NormalizedEmail", "a"."NormalizedUserName", "a"."PasswordHash", "a"."PhoneNumber", "a"."PhoneNumberConfirmed", "a"."SecurityStamp", "a"."TimeZoneId", "a"."TotalXp", "a"."TwoFactorEnabled", "a"."UserName"
-FROM "AspNetUsers" AS "a"
-WHERE "a"."Id" = @__p_0
-LIMIT 1
