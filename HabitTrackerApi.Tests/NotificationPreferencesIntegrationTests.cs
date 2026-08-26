@@ -22,7 +22,6 @@ public sealed class NotificationPreferencesIntegrationTests : IClassFixture<ApiF
         response.EnsureSuccessStatusCode();
         var pref = await response.Content.ReadFromJsonAsync<PreferenceResponse>();
         Assert.Empty(pref!.DisabledTypes);
-        Assert.Null(pref.QuietHoursStart);
     }
 
     [Fact]
@@ -34,9 +33,7 @@ public sealed class NotificationPreferencesIntegrationTests : IClassFixture<ApiF
 
         var putResponse = await client.PutAsJsonAsync("/api/notificationpreferences", new
         {
-            disabledTypes = new[] { "Reminder" },
-            quietHoursStart = "22:00",
-            quietHoursEnd = "08:00"
+            disabledTypes = new[] { "Reminder" }
         });
         putResponse.EnsureSuccessStatusCode();
 
@@ -80,7 +77,5 @@ public sealed class NotificationPreferencesIntegrationTests : IClassFixture<ApiF
     private sealed class PreferenceResponse
     {
         public List<string> DisabledTypes { get; set; } = new();
-        public TimeOnly? QuietHoursStart { get; set; }
-        public TimeOnly? QuietHoursEnd { get; set; }
     }
 }

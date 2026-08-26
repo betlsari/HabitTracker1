@@ -51,58 +51,46 @@ public class DevicesController : ControllerBase
         };
     }
 
-   
     [HttpPost]
     public async Task<IActionResult> Register(RegisterDeviceTokenDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<IActionResult>(async () =>
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        var existing = await _context.DeviceTokens
+            .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == dto.Token);
+
+        if (existing != null)
         {
-            _context.ChangeTracker.Clear();
-            await using var transaction = await _context.Database.BeginTransactionAsync();
-
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-            
-
-            var existing = await _context.DeviceTokens
-                .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == dto.Token);
-
-            if (existing != null)
-            {
-                existing.Platform = dto.Platform;
-                existing.LastSeenAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return Ok();
-            }
-
-            var currentCount = await _context.DeviceTokens.CountAsync(t => t.UserId == userId);
-            if (currentCount >= _maxDeviceTokensPerUser)
-            {
-                var oldest = await _context.DeviceTokens
-                    .Where(t => t.UserId == userId)
-                    .OrderBy(t => t.LastSeenAt)
-                    .FirstOrDefaultAsync();
-                if (oldest != null)
-                {
-                    _context.DeviceTokens.Remove(oldest);
-                }
-            }
-
-            _context.DeviceTokens.Add(new DeviceToken
-            {
-                UserId = userId,
-                Token = dto.Token,
-                Platform = dto.Platform,
-                CreatedAt = DateTime.UtcNow,
-                LastSeenAt = DateTime.UtcNow
-            });
+            existing.Platform = dto.Platform;
+            existing.LastSeenAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
-
-            await transaction.CommitAsync();
             return Ok();
+        }
+
+        var currentCount = await _context.DeviceTokens.CountAsync(t => t.UserId == userId);
+        if (currentCount >= _maxDeviceTokensPerUser)
+        {
+            var oldest = await _context.DeviceTokens
+                .Where(t => t.UserId == userId)
+                .OrderBy(t => t.LastSeenAt)
+                .FirstOrDefaultAsync();
+            if (oldest != null)
+            {
+                _context.DeviceTokens.Remove(oldest);
+            }
+        }
+
+        _context.DeviceTokens.Add(new DeviceToken
+        {
+            UserId = userId,
+            Token = dto.Token,
+            Platform = dto.Platform,
+            CreatedAt = DateTime.UtcNow,
+            LastSeenAt = DateTime.UtcNow
         });
+        await _context.SaveChangesAsync();
+
+        return Ok();
     }
 
     [HttpDelete("{id:int}")]

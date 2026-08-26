@@ -1,4 +1,3 @@
-// HabitTrackerApi/Controllers/PetsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Data;
 using Models;
@@ -17,7 +16,6 @@ namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-
 [Authorize]
 public class PetsController : ControllerBase
 {
@@ -28,7 +26,6 @@ public class PetsController : ControllerBase
     private readonly ILogger<PetsController> _logger;
     private readonly int _maxPetsPerUser;
 
-    
     private readonly int _eggCostXp;
     private readonly int _feedCostXp;
     private readonly int _feedXpGain;
@@ -81,17 +78,10 @@ public class PetsController : ControllerBase
         };
     }
 
-    
-       [HttpPost]
+    [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<PetDto>>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         if (!PetTypes.IsValid(dto.Type))
@@ -132,23 +122,13 @@ public class PetsController : ControllerBase
         _context.Pets.Add(pet);
         await _context.SaveChangesAsync();
 
-        await transaction.CommitAsync();
         return ToDto(pet);
-        });
     }
-   
+
     [HttpPost("{id}/feed")]
     public async Task<ActionResult<PetDto>> FeedPet(int id)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<PetDto>>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-        
 
         var pet = await _context.Pets.FindAsync(id);
         if (pet == null || pet.UserId != userId)
@@ -188,9 +168,7 @@ public class PetsController : ControllerBase
                 dedupKey: $"pethatch:{pet.Id}");
         }
 
-        await transaction.CommitAsync();
         return ToDto(pet);
-        });
     }
 
     [HttpGet("{id}")]

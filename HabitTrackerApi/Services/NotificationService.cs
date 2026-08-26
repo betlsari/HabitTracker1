@@ -11,7 +11,6 @@ public class NotificationService
     private readonly IPushNotificationSender _pushSender;
     private readonly ILogger<NotificationService> _logger;
 
-   
     public NotificationService(AppDbContext context, IPushNotificationSender pushSender, ILogger<NotificationService> logger)
     {
         _pushSender = pushSender;
@@ -54,24 +53,24 @@ public class NotificationService
         });
 
         try
-       {
-           var deviceTokens = await _context.DeviceTokens
-               .AsNoTracking()
-               .Where(t => t.UserId == userId)
-               .Select(t => t.Token)
-               .ToListAsync(cancellationToken);
+        {
+            var deviceTokens = await _context.DeviceTokens
+                .AsNoTracking()
+                .Where(t => t.UserId == userId)
+                .Select(t => t.Token)
+                .ToListAsync(cancellationToken);
 
-           if (deviceTokens.Count > 0)
-           {
-               await _pushSender.SendAsync(deviceTokens, title, body, cancellationToken);
-           }
-       }
-       catch (Exception ex)
-       {
-           _logger.LogWarning(ex, "Push bildirimi gönderilemedi. UserId={UserId}", userId);
-       }
+            if (deviceTokens.Count > 0)
+            {
+                await _pushSender.SendAsync(deviceTokens, title, body, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Push bildirimi gönderilemedi. UserId={UserId}", userId);
+        }
 
-       return true;
+        return true;
     }
 
     public async Task<PagedResultDto<NotificationDto>> ListAsync(
@@ -212,27 +211,5 @@ public class NotificationService
         return preference.DisabledTypes
             .Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Contains(type, StringComparer.Ordinal);
-    }
-
-    private async Task<bool> IsWithinQuietHoursAsync(
-        string userId, NotificationPreference preference, CancellationToken cancellationToken)
-    {
-        if (preference.QuietHoursStart is not { } start || preference.QuietHoursEnd is not { } end)
-        {
-            return false;
-        }
-
-        var user = await _context.Users.AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => new { u.TimeZoneId })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var tz = TimeZones.Resolve(user?.TimeZoneId);
-        var localNow = TimeZones.ToLocal(DateTime.UtcNow, tz);
-        var localTime = TimeOnly.FromDateTime(localNow);
-
-        return start <= end
-            ? localTime >= start && localTime < end
-            : localTime >= start || localTime < end;
     }
 }

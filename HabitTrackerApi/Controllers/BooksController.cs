@@ -16,7 +16,6 @@ using Filters;
 namespace Controllers;
 
 [ApiController]
-
 [Route("api/[controller]")]
 [Authorize]
 public class BooksController : ControllerBase
@@ -36,7 +35,7 @@ public class BooksController : ControllerBase
     private readonly BookService _bookService;
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
-    
+
     private readonly ILogger<BooksController> _logger;
     private readonly int _maxBooksPerUser;
 
@@ -132,54 +131,45 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-       [HttpPost]
+    [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<BookDto>> CreateBook(CreateBookDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<BookDto>>(async () =>
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
         {
-            _context.ChangeTracker.Clear();
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            return Conflict($"En fazla {_maxBooksPerUser} kitap oluşturabilirsiniz.");
+        }
 
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var normalizedTitle = dto.Title.Trim();
+        var normalizedTitleKey = normalizedTitle.ToUpperInvariant();
+        if (await _context.Books.AnyAsync(b => b.UserId == userId && !b.IsArchived && b.NormalizedTitle == normalizedTitleKey))
+        {
+            return Conflict("Bu başlıkta zaten bir kitabınız var.");
+        }
 
-            if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
-            {
-                return Conflict($"En fazla {_maxBooksPerUser} kitap oluşturabilirsiniz.");
-            }
+        var book = new Book
+        {
+            Title = normalizedTitle,
+            NormalizedTitle = normalizedTitleKey,
+            Author = dto.Author,
+            GoalType = dto.GoalType,
+            Period = dto.Period,
+            TotalPages = dto.TotalPages,
+            DailyGoalAmount = dto.DailyGoalAmount,
+            Notes = dto.Notes,
+            CoverImageUrl = dto.CoverImageUrl,
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow
+        };
 
-            var normalizedTitle = dto.Title.Trim();
-            var normalizedTitleKey = normalizedTitle.ToUpperInvariant();
-            if (await _context.Books.AnyAsync(b => b.UserId == userId && !b.IsArchived && b.NormalizedTitle == normalizedTitleKey))
-            {
-                return Conflict("Bu başlıkta zaten bir kitabınız var.");
-            }
+        _context.Books.Add(book);
+        await _context.SaveChangesAsync();
 
-            var book = new Book
-            {
-                Title = normalizedTitle,
-                NormalizedTitle = normalizedTitleKey,
-                Author = dto.Author,
-                GoalType = dto.GoalType,
-                Period = dto.Period,
-                TotalPages = dto.TotalPages,
-                DailyGoalAmount = dto.DailyGoalAmount,
-                Notes = dto.Notes,
-                CoverImageUrl = dto.CoverImageUrl,
-                UserId = userId,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.Books.Add(book);
-            await _context.SaveChangesAsync();
-
-            await transaction.CommitAsync();
-            return BookService.ToDto(book);
-        });
+        return BookService.ToDto(book);
     }
 
-    
     [HttpPut("{id:int}")]
     [SanitizeText]
     public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
@@ -343,9 +333,8 @@ public class BooksController : ControllerBase
     [EnableRateLimiting("AuthPolicy")]
     public async Task<ActionResult<BookDto>> CompleteBook(int id)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync(HttpContext.RequestAborted);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        
+
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
         {
@@ -362,7 +351,6 @@ public class BooksController : ControllerBase
             return BadRequest("Sayfa bazlı ve toplam sayfa sayısı belirtilmiş kitaplar, hedef sayfaya ulaşıldığında otomatik olarak tamamlanır.");
         }
 
-        
         var xpEarned = await _bookService.CompleteManuallyAsync(book);
         if (xpEarned != 0)
         {
@@ -377,20 +365,12 @@ public class BooksController : ControllerBase
             habitId: null,
             dedupKey: $"bookcompleted:{book.Id}");
 
-        await transaction.CommitAsync(HttpContext.RequestAborted);
-
         return BookService.ToDto(book);
     }
 
     [HttpDelete("{id:int}")]
     public async Task<ActionResult> DeleteBook(int id)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -402,19 +382,12 @@ public class BooksController : ControllerBase
         book.ArchivedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        await transaction.CommitAsync();
         return NoContent();
-        });
     }
 
-     [HttpPost("{id:int}/reading-logs")]
+    [HttpPost("{id:int}/reading-logs")]
     public async Task<ActionResult<BookReadingLogDto>> LogReading(int id, LogReadingDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<BookReadingLogDto>>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
@@ -431,9 +404,6 @@ public class BooksController : ControllerBase
 
         var user = await _userManager.FindByIdAsync(userId);
 
-        // NOT: AddReadingLogAsync burada senkron kalıyor — sadece TEK bir
-        // yeni log ekliyor ve o log için XP hesaplıyor, O(1)'e yakın bir
-        // işlem.
         var result = await _bookService.AddReadingLogAsync(book, dto, user?.TimeZoneId);
 
         if (user != null && result.XpEarned != 0)
@@ -468,9 +438,7 @@ public class BooksController : ControllerBase
                 dedupKey: $"bookcompleted:{book.Id}");
         }
 
-        await transaction.CommitAsync();
         return BookService.ToLogDto(result.Log);
-        });
     }
 
     [HttpGet("{id:int}/reading-logs")]
@@ -538,16 +506,9 @@ public class BooksController : ControllerBase
         return BookService.ToLogDto(log);
     }
 
-    
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<BookReadingLogDto>>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -560,8 +521,6 @@ public class BooksController : ControllerBase
         {
             return BadRequest("Okuma tarihi, kitabın oluşturulma tarihinden önce olamaz.");
         }
-
-       
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
         if (log == null)
@@ -577,33 +536,20 @@ public class BooksController : ControllerBase
         var user = await _userManager.FindByIdAsync(userId);
         var userTimeZoneId = user?.TimeZoneId;
 
-        await transaction.CommitAsync();
-
         await RecalculateBookAndApplyAsync(book, userId, userTimeZoneId, HttpContext.RequestAborted);
 
         return BookService.ToLogDto(log);
-        });
     }
 
-
-    
     [HttpDelete("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult> DeleteReadingLog(int id, int logId)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
         {
             return NotFound();
         }
-
-        
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
         if (log == null)
@@ -617,12 +563,9 @@ public class BooksController : ControllerBase
         var user = await _userManager.FindByIdAsync(userId);
         var userTimeZoneId = user?.TimeZoneId;
 
-        await transaction.CommitAsync();
-
         await RecalculateBookAndApplyAsync(book, userId, userTimeZoneId, HttpContext.RequestAborted);
 
         return NoContent();
-        });
     }
 
     [HttpGet("{id:int}/progress")]
@@ -708,7 +651,7 @@ public class BooksController : ControllerBase
         var updateResult = await _userManager.UpdateAsync(user);
         updateResult.EnsureSucceeded(_logger, "book-xp-delta", userId);
     }
-        
+
     private async Task RecalculateBookAndApplyAsync(
         Book book, string userId, string? timeZoneId, CancellationToken cancellationToken)
     {

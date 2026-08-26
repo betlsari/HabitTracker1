@@ -6,13 +6,10 @@ using Microsoft.EntityFrameworkCore;
 using Models;
 using System.Security.Claims;
 
-
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-
-
 [Authorize]
 public class NotificationPreferencesController : ControllerBase
 {
@@ -32,7 +29,6 @@ public class NotificationPreferencesController : ControllerBase
 
         if (pref == null)
         {
-            
             return new NotificationPreferenceDto();
         }
 
@@ -53,23 +49,12 @@ public class NotificationPreferencesController : ControllerBase
         }
 
         pref.DisabledTypes = string.Join(',', dto.DisabledTypes.Distinct());
-        pref.QuietHoursStart = dto.QuietHoursStart;
-        pref.QuietHoursEnd = dto.QuietHoursEnd;
-        pref.DigestEnabled = dto.DigestEnabled;
-        pref.DigestHourUtc = dto.DigestHourUtc;
         pref.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         return ToDto(pref);
     }
 
-    // YENİ (🟡 eksik uç nokta): Kullanıcının bildirim tercihini (kapatılmış
-    // türler + sessiz saatler) varsayılana döndürmesinin hiçbir yolu yoktu;
-    // istemci tek tek DisabledTypes'ı boşaltıp QuietHours alanlarını null
-    // göndererek PUT çağırmak zorundaydı. DELETE artık tercih kaydını
-    // tamamen kaldırıp GET'in zaten döndürdüğü "hiçbir şey yapılandırılmamış"
-    // varsayılan durumuna (tüm bildirimler açık, sessiz saat yok) geri
-    // döndürüyor.
     [HttpDelete]
     public async Task<ActionResult<NotificationPreferenceDto>> ResetToDefault()
     {
@@ -90,10 +75,6 @@ public class NotificationPreferencesController : ControllerBase
     {
         DisabledTypes = string.IsNullOrWhiteSpace(pref.DisabledTypes)
             ? new List<string>()
-            : pref.DisabledTypes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
-        QuietHoursStart = pref.QuietHoursStart,
-        QuietHoursEnd = pref.QuietHoursEnd,
-        DigestEnabled = pref.DigestEnabled,
-        DigestHourUtc = pref.DigestHourUtc
+            : pref.DisabledTypes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
     };
 }

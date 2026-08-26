@@ -1,4 +1,3 @@
-// HabitTrackerApi/Controllers/HabitCompletionsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Data;
@@ -12,7 +11,6 @@ using Services;
 namespace Controllers;
 
 [ApiController]
-
 [Route("api/habits/{habitId}/[controller]")]
 public class HabitCompletionsController : ControllerBase
 {
@@ -48,16 +46,9 @@ public class HabitCompletionsController : ControllerBase
         _logger = logger;
     }
 
-    
-       [HttpPost]
+    [HttpPost]
     public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, CreateCompletionDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<HabitCompletionDto>>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
         var habit = await _context.Habits.FindAsync(habitId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (habit == null || habit.UserId != userId)
@@ -131,9 +122,7 @@ public class HabitCompletionsController : ControllerBase
                 $"goal:{habit.Id}:{snapshot.PeriodStartLocal:yyyy-MM-dd}");
         }
 
-        await transaction.CommitAsync();
         return ToDto(newHabitCompletion);
-        });
     }
 
     [HttpGet]
@@ -204,18 +193,9 @@ public class HabitCompletionsController : ControllerBase
         return ToDto(completion);
     }
 
-    
     [HttpPut("{id}")]
     public async Task<ActionResult<HabitCompletionDto>> UpdateCompletion(int habitId, int id, CreateCompletionDto dto)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult<HabitCompletionDto>>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
-        
-
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (completion == null || completion.HabitId != habitId)
@@ -238,8 +218,6 @@ public class HabitCompletionsController : ControllerBase
         var oldAmount = completion.Amount;
         var oldXp = completion.XpEarned;
         var oldPetStreakBonus = completion.PetStreakBonusXp;
-
-        
 
         if (HabitCategories.IsWater(habit.Category) && oldAmount != 0)
         {
@@ -335,22 +313,12 @@ public class HabitCompletionsController : ControllerBase
                 $"goal:{habit.Id}:{periodStart:yyyy-MM-dd}");
         }
 
-        await transaction.CommitAsync();
         return ToDto(completion);
-        });
     }
 
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteCompletion(int habitId, int id)
     {
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ActionResult>(async () =>
-        {
-        _context.ChangeTracker.Clear();
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
-       
-
         var completion = await _context.HabitCompletions.FindAsync(id);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (completion == null || completion.HabitId != habitId)
@@ -362,8 +330,6 @@ public class HabitCompletionsController : ControllerBase
         {
             return NotFound();
         }
-
-        
 
         if (HabitCategories.IsWater(habit.Category) && completion.Amount != 0)
         {
@@ -394,9 +360,7 @@ public class HabitCompletionsController : ControllerBase
         _context.HabitCompletions.Remove(completion);
         await _context.SaveChangesAsync();
 
-        await transaction.CommitAsync();
         return NoContent();
-        });
     }
 
     private static HabitCompletionDto ToDto(HabitCompletion completion) => new()

@@ -109,31 +109,7 @@ public class NotificationServiceTests
         Assert.Equal(0, pushSender.SendCount);
     }
 
-    [Fact]
-    public async Task TryEnqueueAsync_WithinQuietHours_CreatesNotificationButDoesNotSendPush()
-    {
-        await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        await AddDeviceTokenAsync(context, "user-1");
-
-        var pushSender = new RecordingPushSender();
-        var service = new NotificationService(context, pushSender, NullLogger<NotificationService>.Instance);
-
-        // Gün boyu süren bir sessiz saat aralığı tanımla (00:00 - 23:59)
-        // böylece test, gerçek saat ne olursa olsun içinde kalsın.
-        context.NotificationPreferences.Add(new NotificationPreference
-        {
-            UserId = "user-1",
-            QuietHoursStart = new TimeOnly(0, 0),
-            QuietHoursEnd = new TimeOnly(23, 59)
-        });
-        await context.SaveChangesAsync();
-
-        var result = await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "Başlık", "Gövde", null, "dedup-quiet-1");
-
-        Assert.True(result);
-        Assert.Equal(1, await context.UserNotifications.CountAsync());
-        Assert.Equal(0, pushSender.SendCount);
-    }
+   
 
     [Fact]
     public async Task MarkAllReadAsync_MarksOnlyUnreadForGivenUser()
