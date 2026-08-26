@@ -4,6 +4,6 @@ namespace Dtos;
 
 public class UpdatePetDto
 {
-    [MaxLength(50)]
+    [MaxLength(100)]
     public string? Nickname { get; set; }
 }

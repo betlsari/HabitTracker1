@@ -80,14 +80,16 @@ public sealed class BadgeStreakIntegrationTests : IClassFixture<ApiFactory>
         // 3. Art arda 3 gün completion oluştur
         // ---------------------------------------------------------
 
-        var today = DateTime.UtcNow;
+        var istanbul = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+var nowUtc = DateTime.UtcNow;
+var todayLocalDate = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, istanbul).Date;
 
-        var completionDates = new[]
-        {
-            today.Date.AddDays(-2).AddHours(10),
-            today.Date.AddDays(-1).AddHours(10),
-            today.AddMinutes(-5)
-        };
+var completionDates = new[]
+{
+    TimeZoneInfo.ConvertTimeToUtc(todayLocalDate.AddDays(-2).AddHours(10), istanbul),
+    TimeZoneInfo.ConvertTimeToUtc(todayLocalDate.AddDays(-1).AddHours(10), istanbul),
+    nowUtc.AddMinutes(-5)
+};
 
         for (var i = 0; i < completionDates.Length; i++)
         {
@@ -106,13 +108,17 @@ public sealed class BadgeStreakIntegrationTests : IClassFixture<ApiFactory>
 
             Assert.True(
                 completionResponse.IsSuccessStatusCode,
+                
                 $"Habit completion oluşturulamadı.\n" +
                 $"Gün: {i + 1}\n" +
                 $"CompletionDate: {completionDate:O}\n" +
                 $"Status: {completionResponse.StatusCode}\n" +
                 $"Response: {responseBody}"
             );
+            
+
         }
+        
 
         // ---------------------------------------------------------
         // 4. Badge'leri kontrol et

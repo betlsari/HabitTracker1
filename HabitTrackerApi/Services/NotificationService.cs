@@ -15,6 +15,7 @@ public class NotificationService
     {
         _pushSender = pushSender;
         _logger = logger;
+         _context = context;
     }
 
     public async Task<bool> TryEnqueueAsync(
@@ -51,6 +52,7 @@ public class NotificationService
             IsRead = false,
             CreatedAt = DateTime.UtcNow
         });
+        await _context.SaveChangesAsync(cancellationToken); 
 
         try
         {

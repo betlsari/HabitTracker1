@@ -12,6 +12,7 @@ namespace Controllers;
 
 [ApiController]
 [Route("api/habits/{habitId}/[controller]")]
+[Authorize] 
 public class HabitCompletionsController : ControllerBase
 {
     private readonly AppDbContext _context;
