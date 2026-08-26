@@ -56,6 +56,15 @@ public class HabitCompletionsController : ControllerBase
         {
             return NotFound();
         }
+        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+    {
+        var existing = await _context.HabitCompletions.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
+        if (existing != null)
+        {
+            return ToDto(existing); // aynı istek tekrar geldi, XP tekrar verilmez
+        }
+    }
 
         var user = await _userManager.FindByIdAsync(userId!);
         var completionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
@@ -82,7 +91,8 @@ public class HabitCompletionsController : ControllerBase
             Amount = dto.Amount,
             XpEarned = xpEarned,
             PetStreakBonusXp = petStreakBonus,
-            IsOnTime = isOnTime
+            IsOnTime = isOnTime,
+            ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId
         }).Entity;
 
         if (user != null)

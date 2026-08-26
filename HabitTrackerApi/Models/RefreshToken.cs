@@ -11,11 +11,4 @@ public class RefreshToken
     public string? UserAgent { get; set; }
     public string UserId { get; set; } = string.Empty;
     public User? User { get; set; }
-
-    public Guid FamilyId { get; set; }
-
-   
-    public string? ReplacedByTokenHash { get; set; }
-
-    
 }

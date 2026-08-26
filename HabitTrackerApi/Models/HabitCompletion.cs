@@ -16,6 +16,8 @@ public class HabitCompletion
 
     public bool IsOnTime { get; set; }
 
+    public string? ClientRequestId { get; set; }
+
     
     
 

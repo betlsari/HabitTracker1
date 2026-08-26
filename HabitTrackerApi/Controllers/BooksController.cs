@@ -198,6 +198,8 @@ public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
 
     await _context.SaveChangesAsync();
 
+    
+
     if (!string.Equals(previousCoverUrl, book.CoverImageUrl, StringComparison.Ordinal))
     {
         _coverStorage.DeleteCoverFile(previousCoverUrl);
@@ -256,26 +258,7 @@ _coverStorage.DeleteCoverFile(previousCoverUrl);
 return BookService.ToDto(book);
     }
 
-    private void DeleteLocalCover(string? coverUrl)
-    {
-        if (string.IsNullOrWhiteSpace(coverUrl) || !coverUrl.StartsWith("/uploads/covers/", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var fileName = Path.GetFileName(coverUrl);
-        if (fileName != coverUrl["/uploads/covers/".Length..])
-        {
-            return;
-        }
-
-        var root = _environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot");
-        var path = Path.Combine(root, "uploads", "covers", fileName);
-        if (System.IO.File.Exists(path))
-        {
-            System.IO.File.Delete(path);
-        }
-    }
+    
 
     private static async Task<string?> DetectImageContentTypeAsync(IFormFile file, CancellationToken cancellationToken)
     {
@@ -406,6 +389,15 @@ return BookService.ToDto(book);
         {
             return NotFound();
         }
+         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+    {
+        var existingLog = await _context.BookReadingLogs.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.BookId == id && l.ClientRequestId == dto.ClientRequestId);
+        if (existingLog != null)
+        {
+            return BookService.ToLogDto(existingLog);
+        }
+    }
 
         var readDateUtc = DateTime.SpecifyKind(dto.ReadDate, DateTimeKind.Utc);
         if (readDateUtc.Date < book.CreatedAt.Date)

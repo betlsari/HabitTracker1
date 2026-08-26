@@ -17,7 +17,8 @@ public class LogReadingDto : IValidatableObject
     [Range(0, MaxPageReached)]
     public int? PageReachedAt { get; set; }
 
-   
+   [MaxLength(100)]
+public string? ClientRequestId { get; set; }
     
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

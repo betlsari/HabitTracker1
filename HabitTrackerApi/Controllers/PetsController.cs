@@ -194,8 +194,8 @@ public class PetsController : ControllerBase
             return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
         }
 
-        pet.Nickname = dto.Nickname;
-        await _context.SaveChangesAsync();
+        pet.Nickname = string.IsNullOrWhiteSpace(dto.Nickname) ? null : dto.Nickname.Trim();
+await _context.SaveChangesAsync();
 
         return ToDto(pet);
     }

@@ -13,7 +13,8 @@ public class CreateCompletionDto : IValidatableObject
     [Range(0, MaxAmount)]
     public int Amount { get; set; }
 
-
+[MaxLength(100)]
+public string? ClientRequestId { get; set; }
 
   
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

@@ -46,7 +46,7 @@ public class AppDbContext : IdentityDbContext<User>
         builder.Entity<RefreshToken>(entity =>
         {
             entity.HasIndex(rt => rt.Token).IsUnique();
-            entity.HasIndex(rt => rt.FamilyId);
+            
         });
 
         builder.Entity<Badge>(entity =>
@@ -127,23 +127,25 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        builder.Entity<BookReadingLog>(entity =>
-        {
-            entity.HasIndex(l => new { l.BookId, l.ReadDate });
-            entity.HasIndex(l => l.ReadDate);
-            
-            entity.HasOne(l => l.Book)
-                .WithMany(b => b.ReadingLogs)
-                .HasForeignKey(l => l.BookId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
         builder.Entity<HabitCompletion>(entity =>
-        {
-            entity.HasIndex(c => new { c.HabitId, c.CompletionDate });
-            entity.HasIndex(c => c.CompletionDate);
-            
-        });
+{
+    entity.HasIndex(c => new { c.HabitId, c.CompletionDate });
+    entity.HasIndex(c => c.CompletionDate);
+    entity.HasIndex(c => new { c.HabitId, c.ClientRequestId })
+        .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
+});
+
+builder.Entity<BookReadingLog>(entity =>
+{
+    entity.HasIndex(l => new { l.BookId, l.ReadDate });
+    entity.HasIndex(l => l.ReadDate);
+    entity.HasIndex(l => new { l.BookId, l.ClientRequestId })
+        .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
+    entity.HasOne(l => l.Book)
+        .WithMany(b => b.ReadingLogs)
+        .HasForeignKey(l => l.BookId)
+        .OnDelete(DeleteBehavior.Cascade);
+});
 
         builder.Entity<Pet>(entity =>
         {

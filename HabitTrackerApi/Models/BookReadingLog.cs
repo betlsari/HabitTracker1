@@ -15,7 +15,7 @@ public class BookReadingLog
 
     public int XpEarned { get; set; }
 
-    
+    public string? ClientRequestId { get; set; }
     
 
    

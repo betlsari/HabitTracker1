@@ -3,6 +3,7 @@ using System;
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HabitTrackerApi.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826221711_RemoveRefreshTokenFamilyTracking")]
+    partial class RemoveRefreshTokenFamilyTracking
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -333,9 +336,6 @@ namespace HabitTrackerApi.Migrations
                     b.Property<int>("BookId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("ClientRequestId")
-                        .HasColumnType("text");
-
                     b.Property<int?>("PageReachedAt")
                         .HasColumnType("integer");
 
@@ -348,10 +348,6 @@ namespace HabitTrackerApi.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ReadDate");
-
-                    b.HasIndex("BookId", "ClientRequestId")
-                        .IsUnique()
-                        .HasFilter("\"ClientRequestId\" IS NOT NULL");
 
                     b.HasIndex("BookId", "ReadDate");
 
@@ -511,9 +507,6 @@ namespace HabitTrackerApi.Migrations
                     b.Property<int>("Amount")
                         .HasColumnType("integer");
 
-                    b.Property<string>("ClientRequestId")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CompletionDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -532,10 +525,6 @@ namespace HabitTrackerApi.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CompletionDate");
-
-                    b.HasIndex("HabitId", "ClientRequestId")
-                        .IsUnique()
-                        .HasFilter("\"ClientRequestId\" IS NOT NULL");
 
                     b.HasIndex("HabitId", "CompletionDate");
 
