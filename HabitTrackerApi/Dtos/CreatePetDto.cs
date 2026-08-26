@@ -10,6 +10,5 @@ public class CreatePetDto
     [MaxLength(100)]
     public string? Nickname { get; set; }
 
-    [MaxLength(100)]
-    public string? ClientRequestId { get; set; }
+    
 }

@@ -74,10 +74,8 @@ builder.Services.AddDistributedMemoryCache();
 
 var healthChecksBuilder = builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
-    .AddCheck<EmailQueueHealthCheck>("email-queue", tags: new[] { "dependency" })
-    .AddCheck<PushQueueHealthCheck>("push-queue", tags: new[] { "dependency" })
-    .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" })
-    .AddCheck<RecalculationQueueHealthCheck>("recalculation-queue", tags: new[] { "dependency" });
+    .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" });
+    
 
 // Options Configuration
 builder.Services.AddOptions<JwtOptions>()
@@ -249,13 +247,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// DÜZELTİLDİ (rate limiting sadeleştirmesi): Önceki global limiter
-// authenticated/anonymous ayrımı yaparak user:{id} veya ip:{ip} partition
-// key'i seçiyordu. Bu ayrım ekstra karmaşıklık katıyordu ama pratikte
-// çoğu isteğin zaten Authorize ile korunduğu, bu yüzden partition
-// mantığının asıl kazandırdığı şey sadece "login olmuş kullanıcı IP
-// değiştirse bile aynı limit sayacını paylaşır" idi — kritik değil.
-// Artık tek tip: her zaman IP bazlı sabit pencere limiti.
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -293,13 +285,8 @@ builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
 // Dependency Injection (Services)
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
 
-builder.Services.AddScoped<EmailOutboxService>();
-builder.Services.AddScoped<IEmailQueue>(sp => sp.GetRequiredService<EmailOutboxService>());
-builder.Services.AddScoped<IEmailOutboxProcessor>(sp => sp.GetRequiredService<EmailOutboxService>());
 
-builder.Services.AddScoped<RecalculationOutboxService>();
-builder.Services.AddScoped<IRecalculationQueue>(sp => sp.GetRequiredService<RecalculationOutboxService>());
-builder.Services.AddScoped<IRecalculationOutboxProcessor>(sp => sp.GetRequiredService<RecalculationOutboxService>());
+
 
 builder.Services.AddScoped<DashboardCacheService>();
 
@@ -310,9 +297,7 @@ builder.Services.AddScoped<HabitProgressService>();
 builder.Services.AddScoped<FlowerService>();
 builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>();
 
-builder.Services.AddScoped<PushOutboxService>();
-builder.Services.AddScoped<IPushQueue>(sp => sp.GetRequiredService<PushOutboxService>());
-builder.Services.AddScoped<IPushOutboxProcessor>(sp => sp.GetRequiredService<PushOutboxService>());
+
 
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BadgeService>();
@@ -327,9 +312,9 @@ builder.Services.AddScoped<ReminderService>();
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<MaintenanceCleanupService>();
-builder.Services.AddHostedService<EmailSenderBackgroundService>();
-builder.Services.AddHostedService<PushSenderBackgroundService>();
-builder.Services.AddHostedService<RecalculationBackgroundService>();
+
+
+
 
 // Exception Handling
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

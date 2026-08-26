@@ -5,15 +5,16 @@ using Configuration;
 using Models;
 using Services;
 using Xunit;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HabitTrackerApi.Tests;
 
 public class PetGrowthServiceTests
 {
   
-private sealed class NoOpPushQueue : IPushQueue
+private sealed class NoOpPushSender : IPushNotificationSender
 {
-    public Task EnqueueAsync(string userId, string title, string body, CancellationToken cancellationToken = default)
+    public Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
@@ -24,7 +25,7 @@ private sealed class NoOpPushQueue : IPushQueue
             .UseInMemoryDatabase(dbName)
             .Options);
         var cosmetics = new PetCosmeticsService(context);
-       var notifications = new NotificationService(context, new NoOpPushQueue());
+       var notifications = new NotificationService(context, new NoOpPushSender(), NullLogger<NotificationService>.Instance);
         var limits = Options.Create(new AppLimitsOptions { MaxPetLevel = maxPetLevel });
         var service = new PetGrowthService(context, notifications, cosmetics, limits);
         return (service, context);

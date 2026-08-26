@@ -25,12 +25,6 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
-    public DbSet<EmailOutboxItem> EmailOutboxItems { get; set; }
-    public DbSet<RecalculationOutboxItem> RecalculationOutboxItems { get; set; }
-    // DÜZELTİLDİ: EmailDeadLetters ve NotificationDigestDeliveries kaldırıldı
-    // (admin/dead-letter sistemi ve digest servisi artık yok).
-
-    public DbSet<PushOutboxItem> PushOutboxItems { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -46,8 +40,7 @@ public class AppDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(h => new { h.UserId, h.NormalizedName })
                 .IsUnique().HasFilter("\"IsArchived\" = FALSE");
-            entity.HasIndex(h => new { h.UserId, h.ClientRequestId })
-                .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
+           
             entity.HasIndex(h => new { h.UserId, h.IsArchived });
         });
         builder.Entity<RefreshToken>(entity =>
@@ -125,8 +118,7 @@ public class AppDbContext : IdentityDbContext<User>
             entity.HasIndex(b => b.UserId);
             entity.HasIndex(b => new { b.UserId, b.NormalizedTitle })
                 .IsUnique().HasFilter("\"IsArchived\" = FALSE");
-            entity.HasIndex(b => new { b.UserId, b.ClientRequestId })
-                .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
+            
             entity.HasIndex(b => b.CreatedAt);
             entity.HasIndex(b => new { b.UserId, b.IsArchived });
             entity.HasOne(b => b.User)
@@ -139,9 +131,7 @@ public class AppDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(l => new { l.BookId, l.ReadDate });
             entity.HasIndex(l => l.ReadDate);
-            entity.HasIndex(l => new { l.BookId, l.ClientRequestId })
-                .IsUnique()
-                .HasFilter("\"ClientRequestId\" IS NOT NULL");
+            
             entity.HasOne(l => l.Book)
                 .WithMany(b => b.ReadingLogs)
                 .HasForeignKey(l => l.BookId)
@@ -152,16 +142,13 @@ public class AppDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(c => new { c.HabitId, c.CompletionDate });
             entity.HasIndex(c => c.CompletionDate);
-            entity.HasIndex(c => new { c.HabitId, c.ClientRequestId })
-                .IsUnique()
-                .HasFilter("\"ClientRequestId\" IS NOT NULL");
+            
         });
 
         builder.Entity<Pet>(entity =>
         {
             entity.HasIndex(p => p.CreatedAt);
-            entity.HasIndex(p => new { p.UserId, p.ClientRequestId })
-                .IsUnique().HasFilter("\"ClientRequestId\" IS NOT NULL");
+            
         });
 
         builder.Entity<PetAccessoryUnlock>(entity =>
@@ -182,46 +169,27 @@ public class AppDbContext : IdentityDbContext<User>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        builder.Entity<EmailOutboxItem>(entity =>
-        {
-            entity.HasIndex(e => new { e.Status, e.NextAttemptAt, e.CreatedAt })
-                .HasDatabaseName("IX_EmailOutboxItems_Status_NextAttemptAt_CreatedAt");
-        });
+       
 
-        builder.Entity<RecalculationOutboxItem>(entity =>
-        {
-            entity.HasIndex(r => new { r.Status, r.NextAttemptAt, r.CreatedAt })
-                .HasDatabaseName("IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt");
-        });
+        
+        
 
-        builder.Entity<PushOutboxItem>(entity =>
-        {
-            entity.HasIndex(p => new { p.Status, p.NextAttemptAt, p.CreatedAt })
-                .HasDatabaseName("IX_PushOutboxItems_Status_NextAttemptAt_CreatedAt");
-        });
-
-        foreach (var entityType in builder.Model.GetEntityTypes()
-                     .Where(t => typeof(IHasConcurrencyToken).IsAssignableFrom(t.ClrType)))
-        {
-            builder.Entity(entityType.ClrType)
-                .Property<Guid>(nameof(IHasConcurrencyToken.ConcurrencyToken))
-                .IsConcurrencyToken();
-        }
+       
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        SetConcurrencyTokens();
+       NormalizeBookTitles();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        SetConcurrencyTokens();
+        NormalizeBookTitles();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    private void SetConcurrencyTokens()
+    private void NormalizeBookTitles()
     {
         foreach (var entry in ChangeTracker.Entries<Book>()
                      .Where(e => e.State is EntityState.Added or EntityState.Modified))
@@ -230,16 +198,6 @@ public class AppDbContext : IdentityDbContext<User>
             entry.Entity.NormalizedTitle = entry.Entity.Title.ToUpperInvariant();
         }
 
-        foreach (var entry in ChangeTracker.Entries<IHasConcurrencyToken>())
-        {
-            if (entry.State == EntityState.Added && entry.Entity.ConcurrencyToken == Guid.Empty)
-            {
-                entry.Entity.ConcurrencyToken = Guid.NewGuid();
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                entry.Entity.ConcurrencyToken = Guid.NewGuid();
-            }
-        }
+        
     }
 }

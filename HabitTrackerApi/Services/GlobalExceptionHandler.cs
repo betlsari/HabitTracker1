@@ -16,18 +16,10 @@ public class GlobalExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
-        // DÜZELTİLDİ (🟠 tutarsızlık): Program.cs'de builder.Services.AddProblemDetails()
-        // kayıtlı olmasına rağmen önceden özel bir anonim JSON şeması
-        // ({ error, statusCode }) dönülüyordu. Bu, framework'ün üretim tarzı
-        // (validation hataları, 404 vb. için) ürettiği standart RFC7807
-        // ProblemDetails ({type, title, status, detail, instance}) ile
-        // tutarsızdı. Artık bu handler da aynı standart şemayı kullanıyor.
+        
         var (statusCode, title, detail) = exception switch
         {
-            DbUpdateConcurrencyException => (
-                StatusCodes.Status409Conflict,
-                "Eşzamanlılık çakışması",
-                "Bu kayıt sizden önce başka bir işlem tarafından değiştirilmiş/silinmiş. Lütfen sayfayı yenileyip tekrar deneyin."),
+        
 
             DbUpdateException dbEx when IsUniqueConstraintViolation(dbEx) => (
                 StatusCodes.Status409Conflict,

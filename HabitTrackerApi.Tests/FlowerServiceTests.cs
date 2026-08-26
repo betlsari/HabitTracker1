@@ -2,15 +2,15 @@ using Data;
 using Microsoft.EntityFrameworkCore;
 using Services;
 using Xunit;
-
+using Microsoft.Extensions.Logging.Abstractions;
 namespace HabitTrackerApi.Tests;
 
 public class FlowerServiceTests
 {
-    // DÜZELTİLDİ: IPushNotificationSender yerine IPushQueue kullanılıyor.
-    private sealed class NoOpPushQueue : IPushQueue
+   
+    private sealed class NoOpPushSender : IPushNotificationSender
     {
-        public Task EnqueueAsync(string userId, string title, string body, CancellationToken cancellationToken = default)
+        public Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 
@@ -20,7 +20,7 @@ public class FlowerServiceTests
             .UseInMemoryDatabase(dbName)
             .Options);
         var cosmetics = new PetCosmeticsService(context);
-        var notifications = new NotificationService(context, new NoOpPushQueue());
+        var notifications = new NotificationService(context, new NoOpPushSender(), NullLogger<NotificationService>.Instance);
         var service = new FlowerService(context, notifications, cosmetics);
         return (service, context);
     }

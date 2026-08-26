@@ -8,13 +8,14 @@ namespace Services;
 public class NotificationService
 {
     private readonly AppDbContext _context;
-    private readonly IPushQueue _pushQueue;
+    private readonly IPushNotificationSender _pushSender;
+    private readonly ILogger<NotificationService> _logger;
 
    
-    public NotificationService(AppDbContext context, IPushQueue pushQueue)
+    public NotificationService(AppDbContext context, IPushNotificationSender pushSender, ILogger<NotificationService> logger)
     {
-        _context = context;
-        _pushQueue = pushQueue;
+        _pushSender = pushSender;
+        _logger = logger;
     }
 
     public async Task<bool> TryEnqueueAsync(
@@ -53,27 +54,24 @@ public class NotificationService
         });
 
         try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            return false;
-        }
+       {
+           var deviceTokens = await _context.DeviceTokens
+               .AsNoTracking()
+               .Where(t => t.UserId == userId)
+               .Select(t => t.Token)
+               .ToListAsync(cancellationToken);
 
-        // Sessiz saatler içindeyse bildirim kaydı DB'ye yazılır (kullanıcı
-        // uygulamayı açtığında görsün diye) ama push kuyruğuna hiç
-        // eklenmez.
-        if (preference != null && await IsWithinQuietHoursAsync(userId, preference, cancellationToken))
-        {
-            return true;
-        }
+           if (deviceTokens.Count > 0)
+           {
+               await _pushSender.SendAsync(deviceTokens, title, body, cancellationToken);
+           }
+       }
+       catch (Exception ex)
+       {
+           _logger.LogWarning(ex, "Push bildirimi gönderilemedi. UserId={UserId}", userId);
+       }
 
-        // DÜZELTİLDİ: Doğrudan gönderim yerine kalıcı kuyruğa yazılıyor.
-        // Cihaz token'ları burada OKUNMUYOR — worker gönderim anında güncel
-        // listeyi kendisi çeker (bkz. PushSenderBackgroundService).
-        await _pushQueue.EnqueueAsync(userId, title, body, cancellationToken);
-        return true;
+       return true;
     }
 
     public async Task<PagedResultDto<NotificationDto>> ListAsync(

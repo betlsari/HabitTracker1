@@ -6,7 +6,7 @@ public class LogReadingDto : IValidatableObject
 {
     public const int MaxAmount = 10_000;
     public const int MaxPageReached = 1_000_000;
-    public const int MaxClientRequestIdLength = 100;
+
     public const int MaxPastDays = 3650;
 
     public DateTime ReadDate { get; set; }
@@ -18,8 +18,7 @@ public class LogReadingDto : IValidatableObject
     public int? PageReachedAt { get; set; }
 
    
-    [MaxLength(MaxClientRequestIdLength)]
-    public string? ClientRequestId { get; set; }
+    
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

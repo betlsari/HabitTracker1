@@ -3,7 +3,7 @@ using Dtos;
 
 namespace Models;
 
-public class Habit : IHasConcurrencyToken
+public class Habit 
 {
     public int Id { get; set; }
     [MinLength(1)]
@@ -11,8 +11,7 @@ public class Habit : IHasConcurrencyToken
 
     public string NormalizedName { get; set; } = string.Empty;
 
-    [MaxLength(100)]
-    public string? ClientRequestId { get; set; }
+    
 
     [Range(1, CreateHabitDto.MaxDailyGoal)]
     public int DailyGoal { get; set; }
@@ -45,7 +44,7 @@ public class Habit : IHasConcurrencyToken
     [MaxLength(1000)]
     public string? Notes { get; set; }
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+  
 
     [MaxLength(100)]
 public string? CustomCategoryName { get; set; }

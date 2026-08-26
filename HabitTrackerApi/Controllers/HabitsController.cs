@@ -35,7 +35,7 @@ public class HabitsController : ControllerBase
     private readonly FlowerService _flowerService;
     private readonly PetGrowthService _petGrowthService;
     private readonly BadgeService _badgeService;
-    private readonly IRecalculationQueue _recalculationQueue;
+    
     private readonly ILogger<HabitsController> _logger;
     private readonly int _maxHabitsPerUser;
 
@@ -47,7 +47,6 @@ public class HabitsController : ControllerBase
         FlowerService flowerService,
         PetGrowthService petGrowthService,
         BadgeService badgeService,
-        IRecalculationQueue recalculationQueue,
         IOptions<AppLimitsOptions> limits,
         ILogger<HabitsController> logger)
     {
@@ -58,7 +57,6 @@ public class HabitsController : ControllerBase
         _flowerService = flowerService;
         _petGrowthService = petGrowthService;
         _badgeService = badgeService;
-        _recalculationQueue = recalculationQueue;
         _maxHabitsPerUser = limits.Value.MaxHabitsPerUser;
         _logger = logger;
     }
@@ -155,7 +153,7 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    [HttpPost]
+        [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
     {
@@ -169,16 +167,6 @@ public class HabitsController : ControllerBase
 
             await _context.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtext({"habit:" + userId}))");
-
-            if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-            {
-                var existing = await _context.Habits.AsNoTracking()
-                    .FirstOrDefaultAsync(h => h.UserId == userId && h.ClientRequestId == dto.ClientRequestId);
-                if (existing != null)
-                {
-                    return ToDto(existing);
-                }
-            }
 
             if (await _context.Habits.CountAsync(h => h.UserId == userId) >= _maxHabitsPerUser)
             {
@@ -219,28 +207,13 @@ public class HabitsController : ControllerBase
                 TargetTime = dto.TargetTime,
                 ReminderTime = dto.ReminderTime,
                 Notes = dto.Notes,
-                ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
                 UserId = userId,
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Habits.Add(habit);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-            {
-                await transaction.RollbackAsync();
-                var raced = await _context.Habits.AsNoTracking()
-                    .FirstOrDefaultAsync(h => h.UserId == userId && h.ClientRequestId == dto.ClientRequestId);
-                if (raced != null)
-                {
-                    return ToDto(raced);
-                }
+            await _context.SaveChangesAsync();
 
-                throw;
-            }
             var user = await _userManager.FindByIdAsync(userId);
             if (user != null)
             {
@@ -254,18 +227,7 @@ public class HabitsController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ (🔴 madde 1 - senkron ağır recalculation): Önceden
-    // RecalculateHabitAsync bu isteği bloklayarak habit'in TÜM completion
-    // geçmişini senkron olarak işliyordu; yıllarca geçmişi olan bir habit'te
-    // bu isteğin uzun sürmesine, hatta HTTP timeout'a yol açabiliyordu.
-    // HabitDto (dönen yanıt tipi) zaten XP delta'sını hiç içermiyordu —
-    // sadece habit alanlarını (Name, Category, DailyGoal vb.) taşıyor —
-    // bu yüzden bu işi arka plana almak API kontratını DEĞİŞTİRMİYOR:
-    // istemci XP güncellemesini zaten bu yanıttan okumuyordu, güncel
-    // TotalXp'yi bir sonraki /api/auth/me veya /api/dashboard çağrısında
-    // görecek. İş artık transaction commit edildikten SONRA
-    // RecalculationQueue'ya yazılıyor ve RecalculationBackgroundService
-    // tarafından arka planda işleniyor.
+   
     [HttpPut("{id:int}")]
     [SanitizeText]
     public async Task<ActionResult<HabitDto>> UpdateHabit(int id, CreateHabitDto dto)
@@ -359,21 +321,14 @@ public class HabitsController : ControllerBase
                 }
             }
 
-            // DÜZELTİLDİ (🔴 madde 1): Ağır RecalculateHabitAsync çağrısı
-            // kaldırıldı; sadece kuyruğa yazmak için gereken timezone bilgisi
-            // (varsa) commit'ten önce okunuyor.
-            string? userTimeZoneId = null;
-            if (goalOrScheduleChanged)
-            {
-                var user = await _userManager.FindByIdAsync(userId!);
-                userTimeZoneId = user?.TimeZoneId;
-            }
+            
 
             await transaction.CommitAsync();
 
             if (goalOrScheduleChanged)
             {
-                await _recalculationQueue.EnqueueHabitRecalculationAsync(habit.Id, userId!, userTimeZoneId, HttpContext.RequestAborted);
+                var user = await _userManager.FindByIdAsync(userId!);
+               await RecalculateHabitAndApplyAsync(habit, userId!, user?.TimeZoneId, HttpContext.RequestAborted);
             }
 
             return ToDto(habit);
@@ -534,6 +489,64 @@ public class HabitsController : ControllerBase
         var user = await _userManager.FindByIdAsync(userId!);
         var result = await _progressService.GetComparisonAsync(habits, user?.TimeZoneId, lookbackPeriods);
         return Ok(result);
+    }
+        // DÜZELTİLDİ: Eskiden RecalculationBackgroundService içinde arka planda
+    // yapılan iş artık burada senkron yapılıyor. Kişisel kullanımda bir
+    // habit'in tamamlama geçmişi binlerce kayıt olmayacağı için HTTP timeout
+    // riski yok.
+    private async Task RecalculateHabitAndApplyAsync(
+        Habit habit, string userId, string? timeZoneId, CancellationToken cancellationToken)
+    {
+        var recalc = await _progressService.RecalculateHabitAsync(habit, timeZoneId, cancellationToken);
+
+        if (recalc.XpDelta != 0)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.TotalXp = Math.Max(0, user.TotalXp + recalc.XpDelta);
+                var updateResult = await _userManager.UpdateAsync(user);
+                updateResult.EnsureSucceeded(_logger, "habit-recalc-xp", userId);
+            }
+        }
+
+        if (recalc.PetStreakBonusDelta > 0)
+        {
+            await _petGrowthService.AddStreakBonusXpAsync(userId, recalc.PetStreakBonusDelta, cancellationToken);
+        }
+        else if (recalc.PetStreakBonusDelta < 0)
+        {
+            await _petGrowthService.RemoveStreakBonusXpAsync(userId, -recalc.PetStreakBonusDelta, cancellationToken);
+        }
+
+        try
+        {
+            var progress = await _progressService.GetProgressAsync(habit, timeZoneId, cancellationToken);
+
+            Flower? flower = null;
+            if (HabitCategories.IsWater(habit.Category))
+            {
+                flower = await _flowerService.GetOrCreateAsync(userId, cancellationToken);
+            }
+
+            var snapshot = new CompletionSnapshot
+            {
+                TotalBeforeInPeriod = 0,
+                TotalAfterInPeriod = progress.TotalInPeriod,
+                GoalJustReached = progress.IsCompleted,
+                PreviousPeriodGoalMet = progress.IsCompleted,
+                StreakAfter = progress.CurrentStreak,
+                PeriodStartLocal = progress.PeriodStart
+            };
+
+            await _badgeService.EvaluateAfterCompletionAsync(userId, habit, snapshot, flower, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Recalculation sonrası rozet değerlendirmesi başarısız oldu. HabitId={HabitId} UserId={UserId}",
+                habit.Id, userId);
+        }
     }
 
     private static HabitDto ToDto(Habit habit) => new()

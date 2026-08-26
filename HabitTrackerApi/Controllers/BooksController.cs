@@ -36,7 +36,7 @@ public class BooksController : ControllerBase
     private readonly BookService _bookService;
     private readonly BadgeService _badgeService;
     private readonly NotificationService _notificationService;
-    private readonly IRecalculationQueue _recalculationQueue;
+    
     private readonly ILogger<BooksController> _logger;
     private readonly int _maxBooksPerUser;
 
@@ -46,7 +46,6 @@ public class BooksController : ControllerBase
         BookService bookService,
         BadgeService badgeService,
         NotificationService notificationService,
-        IRecalculationQueue recalculationQueue,
         IOptions<AppLimitsOptions> limits,
         IWebHostEnvironment environment,
         ILogger<BooksController> logger)
@@ -56,7 +55,6 @@ public class BooksController : ControllerBase
         _bookService = bookService;
         _badgeService = badgeService;
         _notificationService = notificationService;
-        _recalculationQueue = recalculationQueue;
         _maxBooksPerUser = limits.Value.MaxBooksPerUser;
         _environment = environment;
         _logger = logger;
@@ -134,7 +132,7 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-    [HttpPost]
+       [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<BookDto>> CreateBook(CreateBookDto dto)
     {
@@ -145,18 +143,6 @@ public class BooksController : ControllerBase
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-           
-
-            if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-            {
-                var existing = await _context.Books.AsNoTracking()
-                    .FirstOrDefaultAsync(b => b.UserId == userId && b.ClientRequestId == dto.ClientRequestId);
-                if (existing != null)
-                {
-                    return BookService.ToDto(existing);
-                }
-            }
 
             if (await _context.Books.CountAsync(b => b.UserId == userId) >= _maxBooksPerUser)
             {
@@ -180,39 +166,20 @@ public class BooksController : ControllerBase
                 TotalPages = dto.TotalPages,
                 DailyGoalAmount = dto.DailyGoalAmount,
                 Notes = dto.Notes,
-                ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
                 CoverImageUrl = dto.CoverImageUrl,
                 UserId = userId,
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Books.Add(book);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-            {
-                await transaction.RollbackAsync();
-                var raced = await _context.Books.AsNoTracking()
-                    .FirstOrDefaultAsync(b => b.UserId == userId && b.ClientRequestId == dto.ClientRequestId);
-                if (raced != null)
-                {
-                    return BookService.ToDto(raced);
-                }
-
-                throw;
-            }
+            await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
             return BookService.ToDto(book);
         });
     }
 
-    // DÜZELTİLDİ (🔴 madde 1): RecalculateBookAsync artık senkron çağrılmıyor.
-    // BookDto zaten XP delta'sını dönmüyor, bu yüzden işi arka plana almak
-    // kontratı bozmuyor (bkz. HabitsController.UpdateHabit üzerindeki
-    // açıklama).
+    
     [HttpPut("{id:int}")]
     [SanitizeText]
     public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
@@ -236,7 +203,7 @@ public class BooksController : ControllerBase
         await _context.SaveChangesAsync();
 
         var user = await _userManager.FindByIdAsync(userId);
-        await _recalculationQueue.EnqueueBookRecalculationAsync(book.Id, userId, user?.TimeZoneId, HttpContext.RequestAborted);
+        await RecalculateBookAndApplyAsync(book, userId, user?.TimeZoneId, HttpContext.RequestAborted);
 
         return BookService.ToDto(book);
     }
@@ -395,9 +362,7 @@ public class BooksController : ControllerBase
             return BadRequest("Sayfa bazlı ve toplam sayfa sayısı belirtilmiş kitaplar, hedef sayfaya ulaşıldığında otomatik olarak tamamlanır.");
         }
 
-        // NOT: CompleteManuallyAsync O(1) — bilinen sabit bir bonus XP
-        // ekliyor, geçmişi taramıyor. Bu yüzden senkron kalıyor (recalculation
-        // kuyruğuna alınmıyor).
+        
         var xpEarned = await _bookService.CompleteManuallyAsync(book);
         if (xpEarned != 0)
         {
@@ -442,7 +407,7 @@ public class BooksController : ControllerBase
         });
     }
 
-   [HttpPost("{id:int}/reading-logs")]
+     [HttpPost("{id:int}/reading-logs")]
     public async Task<ActionResult<BookReadingLogDto>> LogReading(int id, LogReadingDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -451,18 +416,6 @@ public class BooksController : ControllerBase
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-        
-
-        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-        {
-            var existingLog = await _context.BookReadingLogs.AsNoTracking()
-                .FirstOrDefaultAsync(l => l.BookId == id && l.ClientRequestId == dto.ClientRequestId);
-            if (existingLog != null)
-            {
-                return BookService.ToLogDto(existingLog);
-            }
-        }
 
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
@@ -476,29 +429,12 @@ public class BooksController : ControllerBase
             return BadRequest("Okuma tarihi, kitabın oluşturulma tarihinden önce olamaz.");
         }
 
-        _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
-
         var user = await _userManager.FindByIdAsync(userId);
 
-        // NOT: AddReadingLogAsync burada BİLİNÇLİ OLARAK senkron kalıyor —
-        // recalculation'ın aksine (tüm geçmişi yeniden işlemiyor), sadece
-        // TEK bir yeni log ekliyor ve o log için XP hesaplıyor. O(1)'e yakın
-        // bir işlem, arka plana alınmasına gerek yok.
-        BookLogResult result;
-        try
-        {
-            result = await _bookService.AddReadingLogAsync(book, dto, user?.TimeZoneId, clientRequestId: dto.ClientRequestId);
-        }
-        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-        {
-            var raced = await _context.BookReadingLogs.AsNoTracking()
-                .FirstOrDefaultAsync(l => l.BookId == id && l.ClientRequestId == dto.ClientRequestId);
-            if (raced != null)
-            {
-                return BookService.ToLogDto(raced);
-            }
-            throw;
-        }
+        // NOT: AddReadingLogAsync burada senkron kalıyor — sadece TEK bir
+        // yeni log ekliyor ve o log için XP hesaplıyor, O(1)'e yakın bir
+        // işlem.
+        var result = await _bookService.AddReadingLogAsync(book, dto, user?.TimeZoneId);
 
         if (user != null && result.XpEarned != 0)
         {
@@ -602,10 +538,7 @@ public class BooksController : ControllerBase
         return BookService.ToLogDto(log);
     }
 
-    // DÜZELTİLDİ (🔴 madde 1): RecalculateBookAsync artık senkron çağrılmıyor;
-    // sadece kuyruğa yazmak için gereken timezone bilgisi commit'ten önce
-    // okunuyor, gerçek recalculation transaction dışında arka planda
-    // işleniyor.
+    
     [HttpPut("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult<BookReadingLogDto>> UpdateReadingLog(int id, int logId, LogReadingDto dto)
     {
@@ -628,7 +561,7 @@ public class BooksController : ControllerBase
             return BadRequest("Okuma tarihi, kitabın oluşturulma tarihinden önce olamaz.");
         }
 
-        _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
+       
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
         if (log == null)
@@ -646,15 +579,14 @@ public class BooksController : ControllerBase
 
         await transaction.CommitAsync();
 
-        await _recalculationQueue.EnqueueBookRecalculationAsync(book.Id, userId, userTimeZoneId, HttpContext.RequestAborted);
+        await RecalculateBookAndApplyAsync(book, userId, userTimeZoneId, HttpContext.RequestAborted);
 
         return BookService.ToLogDto(log);
         });
     }
 
 
-    // DÜZELTİLDİ (🔴 madde 1): Silme sonrası da RecalculateBookAsync artık
-    // arka plana alınıyor.
+    
     [HttpDelete("{id:int}/reading-logs/{logId:int}")]
     public async Task<ActionResult> DeleteReadingLog(int id, int logId)
     {
@@ -671,7 +603,7 @@ public class BooksController : ControllerBase
             return NotFound();
         }
 
-        _context.Entry(book).Property(b => b.ConcurrencyToken).IsModified = true;
+        
 
         var log = await _context.BookReadingLogs.FirstOrDefaultAsync(l => l.Id == logId && l.BookId == id);
         if (log == null)
@@ -687,7 +619,7 @@ public class BooksController : ControllerBase
 
         await transaction.CommitAsync();
 
-        await _recalculationQueue.EnqueueBookRecalculationAsync(book.Id, userId, userTimeZoneId, HttpContext.RequestAborted);
+        await RecalculateBookAndApplyAsync(book, userId, userTimeZoneId, HttpContext.RequestAborted);
 
         return NoContent();
         });
@@ -775,5 +707,27 @@ public class BooksController : ControllerBase
         user.TotalXp = Math.Max(0, user.TotalXp + xpDelta);
         var updateResult = await _userManager.UpdateAsync(user);
         updateResult.EnsureSucceeded(_logger, "book-xp-delta", userId);
+    }
+        
+    private async Task RecalculateBookAndApplyAsync(
+        Book book, string userId, string? timeZoneId, CancellationToken cancellationToken)
+    {
+        var xpDelta = await _bookService.RecalculateBookAsync(book, timeZoneId, cancellationToken);
+        if (xpDelta != 0)
+        {
+            await ApplyXpDeltaAsync(userId, xpDelta);
+        }
+
+        try
+        {
+            var progress = await _bookService.GetProgressAsync(book, timeZoneId, cancellationToken);
+            await _badgeService.EvaluateAfterBookLogAsync(userId, progress.CurrentStreak, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Recalculation sonrası kitap rozet değerlendirmesi başarısız oldu. BookId={BookId} UserId={UserId}",
+                book.Id, userId);
+        }
     }
 }

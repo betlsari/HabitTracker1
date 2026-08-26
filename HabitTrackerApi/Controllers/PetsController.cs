@@ -82,7 +82,7 @@ public class PetsController : ControllerBase
     }
 
     
-    [HttpPost]
+       [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
     {
@@ -93,18 +93,6 @@ public class PetsController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-       
-
-        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-        {
-            var existing = await _context.Pets.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.UserId == userId && p.ClientRequestId == dto.ClientRequestId);
-            if (existing != null)
-            {
-                return ToDto(existing);
-            }
-        }
 
         if (!PetTypes.IsValid(dto.Type))
         {
@@ -134,7 +122,6 @@ public class PetsController : ControllerBase
         {
             Type = dto.Type,
             Nickname = string.IsNullOrWhiteSpace(dto.Nickname) ? null : dto.Nickname.Trim(),
-            ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId.Trim(),
             Level = 0,
             Xp = 0,
             Mood = "Egg",
@@ -143,28 +130,12 @@ public class PetsController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
         _context.Pets.Add(pet);
-        try
-        {
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-        {
-            await transaction.RollbackAsync();
-            var raced = await _context.Pets.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.UserId == userId && p.ClientRequestId == dto.ClientRequestId);
-            if (raced != null)
-            {
-                return ToDto(raced);
-            }
-
-            throw;
-        }
+        await _context.SaveChangesAsync();
 
         await transaction.CommitAsync();
         return ToDto(pet);
         });
     }
-
    
     [HttpPost("{id}/feed")]
     public async Task<ActionResult<PetDto>> FeedPet(int id)

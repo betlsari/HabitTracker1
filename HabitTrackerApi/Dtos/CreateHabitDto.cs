@@ -35,8 +35,7 @@ public class CreateHabitDto : IValidatableObject
     [MaxLength(MaxNotesLength)]
     public string? Notes { get; set; }
 
-    [MaxLength(100)]
-    public string? ClientRequestId { get; set; }
+   
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

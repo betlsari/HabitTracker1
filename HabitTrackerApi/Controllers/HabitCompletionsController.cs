@@ -49,7 +49,7 @@ public class HabitCompletionsController : ControllerBase
     }
 
     
-    [HttpPost]
+       [HttpPost]
     public async Task<ActionResult<HabitCompletionDto>> CompleteHabit(int habitId, CreateCompletionDto dto)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -57,18 +57,6 @@ public class HabitCompletionsController : ControllerBase
         {
         _context.ChangeTracker.Clear();
         await using var transaction = await _context.Database.BeginTransactionAsync();
-
-       
-
-        if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-        {
-            var existing = await _context.HabitCompletions.AsNoTracking()
-                .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
-            if (existing != null)
-            {
-                return ToDto(existing);
-            }
-        }
 
         var habit = await _context.Habits.FindAsync(habitId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -95,41 +83,24 @@ public class HabitCompletionsController : ControllerBase
 
         int petStreakBonus = streakKept ? _xpService.GetStreakKeepBonus() : 0;
 
-        HabitCompletion newHabitCompletion;
-        try
+        var newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
         {
-            newHabitCompletion = _context.HabitCompletions.Add(new HabitCompletion
-            {
-                HabitId = habitId,
-                CompletionDate = completionUtc,
-                Amount = dto.Amount,
-                XpEarned = xpEarned,
-                PetStreakBonusXp = petStreakBonus,
-                IsOnTime = isOnTime,
-                ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId
-            }).Entity;
+            HabitId = habitId,
+            CompletionDate = completionUtc,
+            Amount = dto.Amount,
+            XpEarned = xpEarned,
+            PetStreakBonusXp = petStreakBonus,
+            IsOnTime = isOnTime
+        }).Entity;
 
-            _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
-
-            if (user != null)
-            {
-                user.TotalXp += xpEarned;
-                var updateResult = await _userManager.UpdateAsync(user);
-                updateResult.EnsureSucceeded(_logger, "habit-completion-xp", userId!);
-            }
-
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
+        if (user != null)
         {
-            var raced = await _context.HabitCompletions.AsNoTracking()
-                .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
-            if (raced != null)
-            {
-                return ToDto(raced);
-            }
-            throw;
+            user.TotalXp += xpEarned;
+            var updateResult = await _userManager.UpdateAsync(user);
+            updateResult.EnsureSucceeded(_logger, "habit-completion-xp", userId!);
         }
+
+        await _context.SaveChangesAsync();
 
         Flower? flower = null;
         if (HabitCategories.IsWater(habit.Category) && dto.Amount > 0)
@@ -268,7 +239,7 @@ public class HabitCompletionsController : ControllerBase
         var oldXp = completion.XpEarned;
         var oldPetStreakBonus = completion.PetStreakBonusXp;
 
-        _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
+        
 
         if (HabitCategories.IsWater(habit.Category) && oldAmount != 0)
         {
@@ -392,7 +363,7 @@ public class HabitCompletionsController : ControllerBase
             return NotFound();
         }
 
-        _context.Entry(habit).Property(h => h.ConcurrencyToken).IsModified = true;
+        
 
         if (HabitCategories.IsWater(habit.Category) && completion.Amount != 0)
         {

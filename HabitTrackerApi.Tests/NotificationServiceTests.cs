@@ -1,5 +1,6 @@
 using Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Models;
 using Services;
 using Xunit;
@@ -8,18 +9,19 @@ namespace HabitTrackerApi.Tests;
 
 public class NotificationServiceTests
 {
-    // DÜZELTİLDİ: NotificationService artık IPushNotificationSender değil
-    // IPushQueue alıyor (push bildirimleri artık senkron gönderilmiyor,
-    // kalıcı outbox'a yazılıyor — bkz. Services/PushOutboxService.cs).
-    private sealed class RecordingPushQueue : IPushQueue
+    // DÜZELTİLDİ: NotificationService artık IPushQueue değil
+    // IPushNotificationSender alıyor (push bildirimleri artık kalıcı
+    // outbox'a yazılmıyor, doğrudan senkron gönderiliyor — bkz.
+    // Services/NotificationService.cs).
+    private sealed class RecordingPushSender : IPushNotificationSender
     {
-        public int EnqueueCount { get; private set; }
-        public List<(string UserId, string Title, string Body)> Enqueued { get; } = new();
+        public int SendCount { get; private set; }
+        public List<(string Title, string Body)> Sent { get; } = new();
 
-        public Task EnqueueAsync(string userId, string title, string body, CancellationToken cancellationToken = default)
+        public Task SendAsync(IReadOnlyList<string> deviceTokens, string title, string body, CancellationToken cancellationToken = default)
         {
-            EnqueueCount++;
-            Enqueued.Add((userId, title, body));
+            SendCount++;
+            Sent.Add((title, body));
             return Task.CompletedTask;
         }
     }
@@ -29,11 +31,27 @@ public class NotificationServiceTests
             .UseInMemoryDatabase(dbName)
             .Options);
 
+    // Push gönderimi artık cihaz token'ı olan kullanıcılar için tetiklendiği
+    // için, push'un gerçekten çağrıldığını doğrulayan testlerde önce bir
+    // DeviceToken eklememiz gerekiyor; aksi halde SendAsync hiç çağrılmaz.
+    private static async Task AddDeviceTokenAsync(AppDbContext context, string userId)
+    {
+        context.DeviceTokens.Add(new DeviceToken
+        {
+            UserId = userId,
+            Token = $"tok-{Guid.NewGuid():N}",
+            Platform = "ios",
+            CreatedAt = DateTime.UtcNow,
+            LastSeenAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task TryEnqueueAsync_DuplicateDedupKey_IsIgnored()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        var service = new NotificationService(context, new RecordingPushQueue());
+        var service = new NotificationService(context, new RecordingPushSender(), NullLogger<NotificationService>.Instance);
 
         var first = await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "Başlık", "Gövde", null, "dedup-1");
         var second = await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "Başlık", "Gövde", null, "dedup-1");
@@ -47,7 +65,7 @@ public class NotificationServiceTests
     public async Task TryEnqueueAsync_DisabledType_DoesNotCreateNotification()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        var service = new NotificationService(context, new RecordingPushQueue());
+        var service = new NotificationService(context, new RecordingPushSender(), NullLogger<NotificationService>.Instance);
 
         context.NotificationPreferences.Add(new NotificationPreference
         {
@@ -63,25 +81,42 @@ public class NotificationServiceTests
     }
 
     [Fact]
-    public async Task TryEnqueueAsync_ValidNotification_EnqueuesPushExactlyOnce()
+    public async Task TryEnqueueAsync_ValidNotification_SendsPushExactlyOnce()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        var pushQueue = new RecordingPushQueue();
-        var service = new NotificationService(context, pushQueue);
+        await AddDeviceTokenAsync(context, "user-1");
+
+        var pushSender = new RecordingPushSender();
+        var service = new NotificationService(context, pushSender, NullLogger<NotificationService>.Instance);
 
         var result = await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "Başlık", "Gövde", null, "dedup-push-1");
 
         Assert.True(result);
-        Assert.Equal(1, pushQueue.EnqueueCount);
-        Assert.Equal("user-1", pushQueue.Enqueued[0].UserId);
+        Assert.Equal(1, pushSender.SendCount);
+        Assert.Equal("Başlık", pushSender.Sent[0].Title);
     }
 
     [Fact]
-    public async Task TryEnqueueAsync_WithinQuietHours_CreatesNotificationButDoesNotEnqueuePush()
+    public async Task TryEnqueueAsync_NoDeviceTokens_DoesNotSendPush()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        var pushQueue = new RecordingPushQueue();
-        var service = new NotificationService(context, pushQueue);
+        var pushSender = new RecordingPushSender();
+        var service = new NotificationService(context, pushSender, NullLogger<NotificationService>.Instance);
+
+        var result = await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "Başlık", "Gövde", null, "dedup-nodevice-1");
+
+        Assert.True(result);
+        Assert.Equal(0, pushSender.SendCount);
+    }
+
+    [Fact]
+    public async Task TryEnqueueAsync_WithinQuietHours_CreatesNotificationButDoesNotSendPush()
+    {
+        await using var context = CreateContext(Guid.NewGuid().ToString("N"));
+        await AddDeviceTokenAsync(context, "user-1");
+
+        var pushSender = new RecordingPushSender();
+        var service = new NotificationService(context, pushSender, NullLogger<NotificationService>.Instance);
 
         // Gün boyu süren bir sessiz saat aralığı tanımla (00:00 - 23:59)
         // böylece test, gerçek saat ne olursa olsun içinde kalsın.
@@ -97,14 +132,14 @@ public class NotificationServiceTests
 
         Assert.True(result);
         Assert.Equal(1, await context.UserNotifications.CountAsync());
-        Assert.Equal(0, pushQueue.EnqueueCount);
+        Assert.Equal(0, pushSender.SendCount);
     }
 
     [Fact]
     public async Task MarkAllReadAsync_MarksOnlyUnreadForGivenUser()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        var service = new NotificationService(context, new RecordingPushQueue());
+        var service = new NotificationService(context, new RecordingPushSender(), NullLogger<NotificationService>.Instance);
 
         await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "A", "A", null, "k1");
         await service.TryEnqueueAsync("user-1", NotificationTypes.Missed, "B", "B", null, "k2");
@@ -123,7 +158,7 @@ public class NotificationServiceTests
     public async Task DeleteAllReadAsync_RemovesOnlyReadNotifications()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString("N"));
-        var service = new NotificationService(context, new RecordingPushQueue());
+        var service = new NotificationService(context, new RecordingPushSender(), NullLogger<NotificationService>.Instance);
 
         await service.TryEnqueueAsync("user-1", NotificationTypes.Reminder, "A", "A", null, "k1");
         await service.TryEnqueueAsync("user-1", NotificationTypes.Missed, "B", "B", null, "k2");

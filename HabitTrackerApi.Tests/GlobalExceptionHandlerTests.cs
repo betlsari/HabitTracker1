@@ -26,19 +26,7 @@ public class GlobalExceptionHandlerTests
         return JsonDocument.Parse(text);
     }
 
-    [Fact]
-    public async Task DbUpdateConcurrencyException_Returns409()
-    {
-        var (handler, context, body) = CreateContext();
-
-        var handled = await handler.TryHandleAsync(context, new DbUpdateConcurrencyException(), CancellationToken.None);
-
-        Assert.True(handled);
-        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
-
-        var doc = await ReadProblemDetailsAsync(body);
-        Assert.Equal(409, doc.RootElement.GetProperty("status").GetInt32());
-    }
+    
 
     [Fact]
     public async Task TimeoutException_Returns504()

@@ -1,6 +1,6 @@
 namespace Models;
 
-public class UserBackgroundUnlock : IHasConcurrencyToken
+public class UserBackgroundUnlock 
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -8,5 +8,5 @@ public class UserBackgroundUnlock : IHasConcurrencyToken
     public required string Background { get; set; }
     public DateTime UnlockedAt { get; set; }
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+    
 }

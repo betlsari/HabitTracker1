@@ -1,6 +1,6 @@
 namespace Models;
 
-public class NotificationPreference : IHasConcurrencyToken
+public class NotificationPreference 
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -17,5 +17,5 @@ public class NotificationPreference : IHasConcurrencyToken
 
     public DateTime UpdatedAt { get; set; }
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+   
 }

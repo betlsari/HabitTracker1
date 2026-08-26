@@ -47,7 +47,7 @@ public class BookService
         Book book,
         LogReadingDto dto,
         string? timeZoneId,
-        string? clientRequestId = null,
+       
         CancellationToken cancellationToken = default)
     {
         var tz = TimeZones.Resolve(timeZoneId);
@@ -63,8 +63,8 @@ public class BookService
             BookId = book.Id,
             ReadDate = readDateUtc,
             Amount = dto.Amount,
-            PageReachedAt = dto.PageReachedAt,
-            ClientRequestId = string.IsNullOrWhiteSpace(clientRequestId) ? null : clientRequestId
+            PageReachedAt = dto.PageReachedAt
+            
         };
 
         var wasCompleted = book.IsCompleted;

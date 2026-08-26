@@ -1,6 +1,6 @@
 namespace Models;
 
-public class RefreshToken : IHasConcurrencyToken
+public class RefreshToken 
 {
     public int Id { get; set; }
     public string Token { get; set; } = null!;
@@ -17,5 +17,5 @@ public class RefreshToken : IHasConcurrencyToken
    
     public string? ReplacedByTokenHash { get; set; }
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+    
 }

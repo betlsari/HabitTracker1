@@ -38,8 +38,7 @@ public class CreateBookDto : IValidatableObject
     [Url]
     public string? CoverImageUrl { get; set; }
 
-    [MaxLength(100)]
-    public string? ClientRequestId { get; set; }
+    
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

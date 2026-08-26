@@ -1,10 +1,10 @@
-// HabitTrackerApi/Models/DeviceToken.cs
+
 using System.ComponentModel.DataAnnotations;
 using Dtos;
 
 namespace Models;
 
-public class DeviceToken : IHasConcurrencyToken
+public class DeviceToken 
 {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
@@ -20,5 +20,5 @@ public class DeviceToken : IHasConcurrencyToken
     public DateTime CreatedAt { get; set; }
     public DateTime LastSeenAt { get; set; }
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+   
 }

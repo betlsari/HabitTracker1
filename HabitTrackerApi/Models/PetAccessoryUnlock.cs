@@ -1,6 +1,6 @@
 namespace Models;
 
-public class PetAccessoryUnlock : IHasConcurrencyToken
+public class PetAccessoryUnlock
 {
     public int Id { get; set; }
     public int PetId { get; set; }
@@ -8,5 +8,5 @@ public class PetAccessoryUnlock : IHasConcurrencyToken
     public required string Accessory { get; set; }
     public DateTime UnlockedAt { get; set; }
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+   
 }

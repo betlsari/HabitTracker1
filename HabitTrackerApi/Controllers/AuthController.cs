@@ -20,7 +20,7 @@ public class AuthController : ControllerBase
     private readonly SignInManager<User> _signInManager;
     private readonly TokenService _tokenService;
     private readonly AppDbContext _context;
-    private readonly IEmailQueue _emailQueue;
+    private readonly EmailService _emailService;
     private readonly SecurityStampCache _securityStampCache;
     private readonly ILogger<AuthController> _logger;
 
@@ -29,7 +29,7 @@ public class AuthController : ControllerBase
         SignInManager<User> signInManager,
         TokenService tokenService,
         AppDbContext context,
-        IEmailQueue emailQueue,
+        EmailService emailService,
         SecurityStampCache securityStampCache,
         ILogger<AuthController> logger)
     {
@@ -37,7 +37,7 @@ public class AuthController : ControllerBase
         _signInManager = signInManager;
         _tokenService = tokenService;
         _context = context;
-        _emailQueue = emailQueue;
+        _emailService = emailService;
         _securityStampCache = securityStampCache;
         _logger = logger;
     }
@@ -78,11 +78,10 @@ public class AuthController : ControllerBase
         var token =
             await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
-        await _emailQueue.EnqueueAsync(
-            new EmailMessage(
-                user.Email!,
-                "Email Doğrulama",
-                $"Doğrulama kodunuz: {token}"));
+        await SendEmailSafeAsync(
+           user.Email!,
+           "Email Doğrulama",
+          $"Doğrulama kodunuz: {token}");
 
         return Ok(
             "Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
@@ -326,11 +325,10 @@ public class AuthController : ControllerBase
                 await _userManager
                     .GenerateEmailConfirmationTokenAsync(user);
 
-            await _emailQueue.EnqueueAsync(
-                new EmailMessage(
-                    user.Email!,
-                    "Email Doğrulama",
-                    $"Doğrulama kodunuz: {token}"));
+            await SendEmailSafeAsync(
+               user.Email!,
+               "Email Doğrulama",
+              $"Doğrulama kodunuz: {token}");
         }
 
         // Kullanıcı enumeration saldırısını önlemek için
@@ -362,11 +360,10 @@ public class AuthController : ControllerBase
             await _userManager
                 .GeneratePasswordResetTokenAsync(user);
 
-        await _emailQueue.EnqueueAsync(
-            new EmailMessage(
-                user.Email!,
-                "Şifre Sıfırlama",
-                $"Şifre sıfırlama kodunuz: {token}"));
+       await SendEmailSafeAsync(
+           user.Email!,
+           "Şifre Sıfırlama",
+           $"Şifre sıfırlama kodunuz: {token}");
 
         return Ok(
             "Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
@@ -403,13 +400,12 @@ public class AuthController : ControllerBase
         await RevokeAllRefreshTokensAsync(user.Id);
         await _securityStampCache.InvalidateAsync(user.Id);
 
-        await _emailQueue.EnqueueAsync(
-            new EmailMessage(
-                user.Email!,
-                "Şifreniz değiştirildi",
-                "Hesabınızın şifresi değiştirildi. " +
-                "Bu işlemi siz yapmadıysanız derhal destek ekibiyle " +
-                "iletişime geçin."));
+        await SendEmailSafeAsync(
+           user.Email!,
+           "Şifreniz değiştirildi",
+           "Hesabınızın şifresi değiştirildi. " +
+           "Bu işlemi siz yapmadıysanız derhal destek ekibiyle " +
+           "iletişime geçin.");
 
         return Ok("Şifre başarıyla sıfırlandı.");
     }
@@ -473,13 +469,12 @@ public class AuthController : ControllerBase
         // Şifre değiştiği için mevcut oturumları kapat.
         await RevokeAllRefreshTokensAsync(user.Id);
 
-        await _emailQueue.EnqueueAsync(
-            new EmailMessage(
-                user.Email!,
-                "Şifreniz değiştirildi",
-                "Hesabınızın şifresi değiştirildi. " +
-                "Bu işlemi siz yapmadıysanız derhal destek ekibiyle " +
-                "iletişime geçin."));
+        await SendEmailSafeAsync(
+           user.Email!,
+           "Şifreniz değiştirildi",
+           "Hesabınızın şifresi değiştirildi. " +
+           "Bu işlemi siz yapmadıysanız derhal destek ekibiyle " +
+           "iletişime geçin.");
 
         return Ok("Şifre başarıyla değiştirildi.");
     }
@@ -745,5 +740,17 @@ public class AuthController : ControllerBase
         }
 
         return activeTokens.Count;
+    }
+        
+    private async Task SendEmailSafeAsync(string toEmail, string subject, string body)
+    {
+        try
+        {
+            await _emailService.SendEmailAsync(toEmail, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Email gönderilemedi. To={To} Subject={Subject}", toEmail, subject);
+        }
     }
 }

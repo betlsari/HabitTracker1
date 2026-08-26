@@ -1,6 +1,6 @@
 namespace Models;
 
-public class BookReadingLog : IHasConcurrencyToken
+public class BookReadingLog 
 {
     public int Id { get; set; }
 
@@ -16,7 +16,7 @@ public class BookReadingLog : IHasConcurrencyToken
     public int XpEarned { get; set; }
 
     
-    public string? ClientRequestId { get; set; }
+    
 
-    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
+   
 }
