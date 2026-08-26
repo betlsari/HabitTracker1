@@ -23,21 +23,25 @@ public class AuthController : ControllerBase
     private readonly EmailService _emailService;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(
-        UserManager<User> userManager,
-        SignInManager<User> signInManager,
-        TokenService tokenService,
-        AppDbContext context,
-        EmailService emailService,
-        ILogger<AuthController> logger)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _tokenService = tokenService;
-        _context = context;
-        _emailService = emailService;
-        _logger = logger;
-    }
+    private readonly BookCoverStorageService _coverStorage;
+
+public AuthController(
+    UserManager<User> userManager,
+    SignInManager<User> signInManager,
+    TokenService tokenService,
+    AppDbContext context,
+    EmailService emailService,
+    BookCoverStorageService coverStorage,
+    ILogger<AuthController> logger)
+{
+    _userManager = userManager;
+    _signInManager = signInManager;
+    _tokenService = tokenService;
+    _context = context;
+    _emailService = emailService;
+    _coverStorage = coverStorage;
+    _logger = logger;
+}
 
    
 
@@ -309,6 +313,7 @@ public class AuthController : ControllerBase
     // =========================================================
 
     [HttpPost("resend-confirmation")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResendConfirmation(
         ResendConfirmationDto dto)
     {
@@ -340,6 +345,7 @@ public class AuthController : ControllerBase
     // =========================================================
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ForgotPassword(
         ForgotPasswordDto dto)
     {
@@ -371,6 +377,7 @@ public class AuthController : ControllerBase
     // =========================================================
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> ResetPassword(
         ResetPasswordDto dto)
     {
@@ -603,6 +610,7 @@ public class AuthController : ControllerBase
             return BadRequest(
                 "Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
+        await _coverStorage.DeleteAllCoversForUserAsync(userId);
 
         var result =
             await _userManager.DeleteAsync(user);
@@ -749,4 +757,50 @@ public class AuthController : ControllerBase
             _logger.LogWarning(ex, "Email gönderilemedi. To={To} Subject={Subject}", toEmail, subject);
         }
     }
+   
+[HttpPut("me/timezone")]
+[Authorize]
+public async Task<IActionResult> UpdateTimezone(UpdateTimezoneDto dto)
+{
+    var userId =
+        User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+    if (string.IsNullOrWhiteSpace(userId))
+    {
+        return Unauthorized();
+    }
+
+    if (!TimeZones.IsValid(dto.TimeZoneId))
+    {
+        return BadRequest("Geçersiz saat dilimi kimliği (örn: 'Europe/Istanbul').");
+    }
+
+    var user =
+        await _userManager.FindByIdAsync(userId);
+
+    if (user == null)
+    {
+        return NotFound();
+    }
+
+    user.TimeZoneId = dto.TimeZoneId;
+
+    var result =
+        await _userManager.UpdateAsync(user);
+
+    if (!result.Succeeded)
+    {
+        return BadRequest(result.Errors);
+    }
+
+    return Ok(new
+    {
+        user.Email,
+        user.DisplayName,
+        user.AvatarUrl,
+        user.TotalXp,
+        user.TimeZoneId
+    });
+}
 }

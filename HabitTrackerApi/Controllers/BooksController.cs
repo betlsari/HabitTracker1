@@ -39,25 +39,29 @@ public class BooksController : ControllerBase
     private readonly ILogger<BooksController> _logger;
     private readonly int _maxBooksPerUser;
 
-    public BooksController(
-        AppDbContext context,
-        UserManager<User> userManager,
-        BookService bookService,
-        BadgeService badgeService,
-        NotificationService notificationService,
-        IOptions<AppLimitsOptions> limits,
-        IWebHostEnvironment environment,
-        ILogger<BooksController> logger)
-    {
-        _context = context;
-        _userManager = userManager;
-        _bookService = bookService;
-        _badgeService = badgeService;
-        _notificationService = notificationService;
-        _maxBooksPerUser = limits.Value.MaxBooksPerUser;
-        _environment = environment;
-        _logger = logger;
-    }
+    private readonly BookCoverStorageService _coverStorage;
+
+public BooksController(
+    AppDbContext context,
+    UserManager<User> userManager,
+    BookService bookService,
+    BadgeService badgeService,
+    NotificationService notificationService,
+    IOptions<AppLimitsOptions> limits,
+    IWebHostEnvironment environment,
+    BookCoverStorageService coverStorage,
+    ILogger<BooksController> logger)
+{
+    _context = context;
+    _userManager = userManager;
+    _bookService = bookService;
+    _badgeService = badgeService;
+    _notificationService = notificationService;
+    _maxBooksPerUser = limits.Value.MaxBooksPerUser;
+    _environment = environment;
+    _coverStorage = coverStorage;
+    _logger = logger;
+}
 
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<BookDto>>> GetBooks(
@@ -170,33 +174,40 @@ public class BooksController : ControllerBase
         return BookService.ToDto(book);
     }
 
-    [HttpPut("{id:int}")]
-    [SanitizeText]
-    public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
+   [HttpPut("{id:int}")]
+[SanitizeText]
+public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+    if (book == null)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
-        if (book == null)
-        {
-            return NotFound();
-        }
-
-        book.Title = dto.Title;
-        book.Author = dto.Author;
-        book.GoalType = dto.GoalType;
-        book.Period = dto.Period;
-        book.TotalPages = dto.TotalPages;
-        book.DailyGoalAmount = dto.DailyGoalAmount;
-        book.Notes = dto.Notes;
-        book.CoverImageUrl = dto.CoverImageUrl;
-
-        await _context.SaveChangesAsync();
-
-        var user = await _userManager.FindByIdAsync(userId);
-        await RecalculateBookAndApplyAsync(book, userId, user?.TimeZoneId, HttpContext.RequestAborted);
-
-        return BookService.ToDto(book);
+        return NotFound();
     }
+
+    var previousCoverUrl = book.CoverImageUrl;
+
+    book.Title = dto.Title;
+    book.Author = dto.Author;
+    book.GoalType = dto.GoalType;
+    book.Period = dto.Period;
+    book.TotalPages = dto.TotalPages;
+    book.DailyGoalAmount = dto.DailyGoalAmount;
+    book.Notes = dto.Notes;
+    book.CoverImageUrl = dto.CoverImageUrl;
+
+    await _context.SaveChangesAsync();
+
+    if (!string.Equals(previousCoverUrl, book.CoverImageUrl, StringComparison.Ordinal))
+    {
+        _coverStorage.DeleteCoverFile(previousCoverUrl);
+    }
+
+    var user = await _userManager.FindByIdAsync(userId);
+    await RecalculateBookAndApplyAsync(book, userId, user?.TimeZoneId, HttpContext.RequestAborted);
+
+    return BookService.ToDto(book);
+}
 
     [HttpPost("{id:int}/cover")]
     [RequestSizeLimit(MaxCoverSize)]
@@ -239,10 +250,10 @@ public class BooksController : ControllerBase
         }
 
         var previousCoverUrl = book.CoverImageUrl;
-        book.CoverImageUrl = $"/uploads/covers/{fileName}";
-        await _context.SaveChangesAsync();
-        DeleteLocalCover(previousCoverUrl);
-        return BookService.ToDto(book);
+book.CoverImageUrl = $"/uploads/covers/{fileName}";
+await _context.SaveChangesAsync();
+_coverStorage.DeleteCoverFile(previousCoverUrl);
+return BookService.ToDto(book);
     }
 
     private void DeleteLocalCover(string? coverUrl)

@@ -242,6 +242,9 @@ builder.Services.AddScoped<BookService>();
 builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddScoped<PetCosmeticsService>();
 
+builder.Services.AddScoped<BookCoverStorageService>();
+
+
 builder.Services.AddScoped<ReminderService>();
 
 // Hosted Services (Background Tasks)
@@ -278,9 +281,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// DÜZELTİLDİ: Serilog.Context.LogContext yerine built-in ILogger.BeginScope
-// kullanılıyor; correlation ID hâlâ tüm loglara ekleniyor, sadece Serilog'a
-// bağımlılık kalktı.
+
 app.Use(async (context, next) =>
 {
     var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N");

@@ -246,6 +246,11 @@ public class PetsController : ControllerBase
 
         return ToDto(pet);
     }
+    [HttpGet("types")]
+public ActionResult<IEnumerable<string>> GetAllowedTypes()
+{
+    return Ok(PetTypes.Allowed);
+}
 
     private static PetDto ToDto(Pet pet) => new()
     {
