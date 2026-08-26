@@ -13,7 +13,7 @@ public class BookProgressDto
 
     public double PercentageCompletedToday { get; set; }
 
-    // Ardışık gün sayısı: günlük hedefin üst üste kaç gündür tutturulduğu.
+   
     public int CurrentStreak { get; set; }
 
     public bool IsCompleted { get; set; }
@@ -23,7 +23,4 @@ public class BookProgressDto
     public DateTime PeriodStart { get; set; }
 
     public DateTime PeriodEnd { get; set; }
-
-    
-    public bool HistoryTruncated { get; set; }
 }

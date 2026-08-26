@@ -10,7 +10,4 @@ public class BookComparisonDto
     public double CompletionRatePercent { get; set; }
 
     public int Rank { get; set; }
-
-    
-    public bool HistoryTruncated { get; set; }
 }

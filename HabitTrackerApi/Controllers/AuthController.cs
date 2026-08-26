@@ -21,7 +21,6 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokenService;
     private readonly AppDbContext _context;
     private readonly EmailService _emailService;
-    private readonly SecurityStampCache _securityStampCache;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -30,7 +29,6 @@ public class AuthController : ControllerBase
         TokenService tokenService,
         AppDbContext context,
         EmailService emailService,
-        SecurityStampCache securityStampCache,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -38,7 +36,6 @@ public class AuthController : ControllerBase
         _tokenService = tokenService;
         _context = context;
         _emailService = emailService;
-        _securityStampCache = securityStampCache;
         _logger = logger;
     }
 
@@ -396,9 +393,7 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-       
         await RevokeAllRefreshTokensAsync(user.Id);
-        await _securityStampCache.InvalidateAsync(user.Id);
 
         await SendEmailSafeAsync(
            user.Email!,
@@ -464,9 +459,11 @@ public class AuthController : ControllerBase
         {
             return BadRequest(result.Errors);
         }
-        await _securityStampCache.InvalidateAsync(user.Id);
 
-        // Şifre değiştiği için mevcut oturumları kapat.
+        // Şifre değiştiği için mevcut refresh token'ları (dolayısıyla yeni
+        // access token alınmasını) kapat. Zaten verilmiş kısa ömürlü access
+        // token'lar doğal süresinde (AccessTokenLifetimeMinutes) geçerliliğini
+        // yitirir; anlık iptal için ayrı bir stamp mekanizmasına ihtiyaç yok.
         await RevokeAllRefreshTokensAsync(user.Id);
 
         await SendEmailSafeAsync(
@@ -607,7 +604,6 @@ public class AuthController : ControllerBase
                 "Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
 
-        await _securityStampCache.InvalidateAsync(userId);
         var result =
             await _userManager.DeleteAsync(user);
 

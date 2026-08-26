@@ -25,8 +25,7 @@ public class TokenServiceTests
     {
         Id = "user-1",
         Email = "test@example.test",
-        UserName = "test@example.test",
-        SecurityStamp = "stamp-1"
+        UserName = "test@example.test"
     };
 
     [Fact]
@@ -37,42 +36,6 @@ public class TokenServiceTests
 
         Assert.False(string.IsNullOrWhiteSpace(token));
         Assert.Contains('.', token);
-    }
-
-    [Fact]
-    public void ValidatePreAuthTokenAndGetUserId_ValidToken_ReturnsUserIdAndStamp()
-    {
-        var service = CreateService();
-        var user = CreateUser();
-        var preAuthToken = service.GeneratePreAuthToken(user);
-
-        var (userId, stamp) = service.ValidatePreAuthTokenAndGetUserId(preAuthToken);
-
-        Assert.Equal(user.Id, userId);
-        Assert.Equal(user.SecurityStamp, stamp);
-    }
-
-    [Fact]
-    public void ValidatePreAuthTokenAndGetUserId_NormalAccessToken_IsRejected()
-    {
-        var service = CreateService();
-        var user = CreateUser();
-        var accessToken = service.GenerateToken(user);
-
-        var (userId, _) = service.ValidatePreAuthTokenAndGetUserId(accessToken);
-
-        Assert.Null(userId);
-    }
-
-    [Fact]
-    public void ValidatePreAuthTokenAndGetUserId_GarbageToken_ReturnsNull()
-    {
-        var service = CreateService();
-
-        var (userId, stamp) = service.ValidatePreAuthTokenAndGetUserId("not-a-real-jwt");
-
-        Assert.Null(userId);
-        Assert.Null(stamp);
     }
 
     [Fact]

@@ -64,14 +64,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
-// DÜZELTİLDİ: Redis kaldırıldı. Dashboard cache artık her zaman process-local
-// in-memory cache kullanıyor (DashboardCacheService IDistributedCache
-// soyutlamasını kullanmaya devam ediyor, arkasındaki implementasyon değişti).
-// Çok sunuculu bir deployment'ta cache sunucular arasında paylaşılmaz; bu
-// kabul edilen bir trade-off (5 dakikalık TTL'i olan, sadece performans
-// amaçlı bir cache, tutarlılık için kritik değil).
-builder.Services.AddDistributedMemoryCache();
-
 var healthChecksBuilder = builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
     .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" });
@@ -86,19 +78,13 @@ builder.Services.AddOptions<JwtOptions>()
         "Jwt:AccessTokenLifetimeMinutes 1 ile 1440 (24 saat) arasında olmalıdır.")
     .Validate(options => options.RefreshTokenLifetimeDays is > 0 and <= 90,
         "Jwt:RefreshTokenLifetimeDays 1 ile 90 arasında olmalıdır.")
-    .Validate(options => options.PreAuthTokenLifetimeMinutes is > 0 and <= 30,
-        "Jwt:PreAuthTokenLifetimeMinutes 1 ile 30 arasında olmalıdır.")
     .ValidateOnStart();
 
 builder.Services.AddOptions<AppLimitsOptions>()
     .Bind(builder.Configuration.GetSection(AppLimitsOptions.SectionName))
-    .Validate(options => options.MaxHistoryLookbackDays is > 0 and <= 3650,
-        "AppLimits:MaxHistoryLookbackDays 1 ile 3650 (10 yıl) gün arasında olmalıdır.")
     .ValidateOnStart();
 
 // Production Validations
-// DÜZELTİLDİ: Redis zorunluluk kontrolü kaldırıldı (Redis artık hiç
-// kullanılmıyor).
 if (builder.Environment.IsProduction())
 {
     var allowedOriginsCheck = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
@@ -154,7 +140,6 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddDefaultTokenProviders();
 
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<SecurityStampCache>();
 
 // Authentication & JWT
 builder.Services.AddAuthentication(options =>
@@ -173,50 +158,6 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtConfiguration.Issuer,
         ValidAudience = jwtConfiguration.Audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfiguration.Key))
-    };
-
-    options.Events = new JwtBearerEvents
-    {
-        OnTokenValidated = async context =>
-        {
-            var principal = context.Principal;
-            if (principal == null)
-            {
-                context.Fail("Geçersiz token.");
-                return;
-            }
-
-            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
-            var tokenStamp = principal.FindFirstValue("sstamp");
-            if (string.IsNullOrEmpty(userId))
-            {
-                context.Fail("Geçersiz token.");
-                return;
-            }
-
-            var stampCache = context.HttpContext.RequestServices.GetRequiredService<SecurityStampCache>();
-            var (found, currentStamp) = await stampCache.TryGetAsync(userId);
-            if (!found)
-            {
-                var userManager = context.HttpContext.RequestServices
-                    .GetRequiredService<UserManager<Models.User>>();
-                var user = await userManager.FindByIdAsync(userId);
-
-                if (user == null)
-                {
-                    context.Fail("Oturum geçersiz kılınmış. Lütfen tekrar giriş yapın.");
-                    return;
-                }
-
-                currentStamp = user.SecurityStamp;
-                await stampCache.SetAsync(userId, currentStamp);
-            }
-
-            if (currentStamp != tokenStamp)
-            {
-                context.Fail("Oturumunuz güvenlik nedeniyle geçersiz kılındı. Lütfen tekrar giriş yapın.");
-            }
-        }
     };
 });
 
@@ -284,11 +225,6 @@ builder.Services.AddHttpClient(nameof(FcmAccessTokenProvider));
 
 // Dependency Injection (Services)
 builder.Services.AddSingleton<FcmAccessTokenProvider>();
-
-
-
-
-builder.Services.AddScoped<DashboardCacheService>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<EmailService>();
@@ -369,22 +305,6 @@ app.UseRateLimiter();
 app.UseCors("DefaultCorsPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
-
-app.Use(async (context, next) =>
-{
-    await next();
-
-    if (context.User.Identity?.IsAuthenticated == true &&
-        context.Request.Method is not "GET" and not "HEAD" and not "OPTIONS")
-    {
-        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!string.IsNullOrWhiteSpace(userId))
-        {
-            var dashboardCache = context.RequestServices.GetRequiredService<DashboardCacheService>();
-            await dashboardCache.InvalidateAsync(userId, context.RequestAborted);
-        }
-    }
-});
 
 app.MapControllers();
 

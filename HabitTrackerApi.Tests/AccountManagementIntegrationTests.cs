@@ -35,7 +35,7 @@ public sealed class AccountManagementIntegrationTests
     }
 
     [Fact]
-    public async Task ChangePassword_WithCorrectPassword_RevokesExistingSessions()
+    public async Task ChangePassword_WithCorrectPassword_AllowsLoginWithNewPasswordOnly()
     {
         using var client = _factory.CreateClient();
 
@@ -47,8 +47,10 @@ public sealed class AccountManagementIntegrationTests
             new { currentPassword = "Integration1A", newPassword = "NewIntegration1A" });
         changeResponse.EnsureSuccessStatusCode();
 
-        var oldTokenCheck = await client.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.Unauthorized, oldTokenCheck.StatusCode);
+        var oldPasswordLogin = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { email, password = "Integration1A" });
+        Assert.Equal(HttpStatusCode.Unauthorized, oldPasswordLogin.StatusCode);
 
         var loginResponse = await client.PostAsJsonAsync(
             "/api/auth/login",
@@ -95,9 +97,6 @@ public sealed class AccountManagementIntegrationTests
 
         var response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
-
-        var meResponse = await client.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.Unauthorized, meResponse.StatusCode);
     }
 
     private sealed class LoginResponse

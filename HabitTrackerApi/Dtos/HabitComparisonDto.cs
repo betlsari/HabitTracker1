@@ -1,4 +1,3 @@
-
 namespace Dtos;
 
 public class HabitComparisonDto
@@ -14,7 +13,4 @@ public class HabitComparisonDto
     public double PercentageCompletedThisPeriod { get; set; }
 
     public int Rank { get; set; }
-
-    
-    public bool HistoryTruncated { get; set; }
 }
