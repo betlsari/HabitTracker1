@@ -7,16 +7,13 @@ using Microsoft.EntityFrameworkCore;
 using Models;
 using Services;
 using System.Security.Claims;
-using Asp.Versioning;
+
 
 namespace Controllers;
 
-// YENİ: Ana ekran için Habits + Books + Pets + Flower + TotalXp + okunmamış
-// bildirim sayısını TEK istekte döner. Önceden istemci bu veriyi toplamak için
-// /api/habits/summary, /api/books, /api/pets, /api/flowers, /api/auth/me,
-// /api/notifications gibi 5-6 ayrı istek atmak zorundaydı.
+
 [ApiController]
-[ApiVersion("1.0")]
+
 [Route("api/[controller]")]
 [Authorize]
 public class DashboardController : ControllerBase

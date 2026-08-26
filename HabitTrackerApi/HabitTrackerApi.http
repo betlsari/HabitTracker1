@@ -18,43 +18,13 @@ Content-Type: application/json
 
 ###
 
-### Login (2FA kapalıysa doğrudan Token/RefreshToken döner;
-### açıksa RequiresTwoFactor=true + PreAuthToken döner, ardından
-### aşağıdaki "2FA ile giriş" isteğini kullanın)
+### Login
 POST {{HabitTrackerApi_HostAddress}}/api/auth/login
 Content-Type: application/json
 
 {
   "email": "test@example.com",
   "password": "test123"
-}
-
-###
-
-### 2FA ile giriş (Login'den dönen PreAuthToken + authenticator kodu)
-POST {{HabitTrackerApi_HostAddress}}/api/auth/2fa/login
-Content-Type: application/json
-
-{
-  "preAuthToken": "{{preAuthToken}}",
-  "code": "123456"
-}
-
-###
-
-### 2FA kurulumu (QR/paylaşılan anahtar üretir) — Bearer token gerektirir
-POST {{HabitTrackerApi_HostAddress}}/api/auth/2fa/setup
-Authorization: Bearer {{token}}
-
-###
-
-### 2FA'yı etkinleştir (authenticator uygulamasındaki kodla) — Bearer token gerektirir
-POST {{HabitTrackerApi_HostAddress}}/api/auth/2fa/enable
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{
-  "code": "123456"
 }
 
 ###

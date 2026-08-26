@@ -1,10 +1,8 @@
-
 using Data;
 using Microsoft.EntityFrameworkCore;
 using Models;
 
 namespace Services;
-
 
 public sealed class EmailOutboxService : IEmailQueue, IEmailOutboxProcessor
 {
@@ -34,7 +32,6 @@ public sealed class EmailOutboxService : IEmailQueue, IEmailOutboxProcessor
     {
         var now = DateTime.UtcNow;
 
-        
         var claimed = await _context.EmailOutboxItems.FromSqlInterpolated($@"
             UPDATE ""EmailOutboxItems""
             SET ""Status"" = {(int)EmailOutboxStatus.Processing},
@@ -69,6 +66,12 @@ public sealed class EmailOutboxService : IEmailQueue, IEmailOutboxProcessor
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    // DÜZELTİLDİ: Dead-letter sistemi kaldırıldı (admin paneli/onayı yoktu).
+    // Tüm denemelerden sonra kalıcı olarak başarısız kalan mailler artık
+    // ayrı bir tabloya taşınmıyor; sadece Status=Failed olarak işaretlenip
+    // outbox'ta kalıyor (retention temizliği MaintenanceCleanupService
+    // tarafından zaten CreatedAt bazlı siliyor). Kalıcı hata detayı
+    // LastError alanında görülebilir.
     public async Task MarkFailedAsync(
         long id, string error, DateTime? nextAttemptAtUtc, CancellationToken cancellationToken)
     {
@@ -91,30 +94,9 @@ public sealed class EmailOutboxService : IEmailQueue, IEmailOutboxProcessor
         else
         {
             item.Status = EmailOutboxStatus.Failed;
+            item.NextAttemptAt = null;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task MoveToDeadLetterAsync(long id, string error, CancellationToken cancellationToken)
-    {
-        var item = await _context.EmailOutboxItems.FindAsync(new object[] { id }, cancellationToken);
-        if (item == null)
-        {
-            return;
-        }
-
-        _context.EmailDeadLetters.Add(new EmailDeadLetter
-        {
-            OriginalOutboxId = item.Id,
-            ToEmail = item.ToEmail,
-            Subject = item.Subject,
-            Body = item.Body,
-            AttemptCount = item.AttemptCount + 1,
-            LastError = error.Length > 2000 ? error[..2000] : error,
-            FailedAt = DateTime.UtcNow
-        });
-        _context.EmailOutboxItems.Remove(item);
         await _context.SaveChangesAsync(cancellationToken);
     }
 

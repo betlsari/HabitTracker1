@@ -5,12 +5,11 @@ using Dtos;
 using Models;
 using Services;
 using System.Security.Claims;
-using Asp.Versioning;
 
 namespace Controllers;
 
 [ApiController]
-[ApiVersion("1.0")]
+
 [Route("api/[controller]")]
 [Authorize]
 public class BackgroundsController : ControllerBase

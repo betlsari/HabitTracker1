@@ -1,6 +1,5 @@
 namespace Services;
 
-
 public class EmailSenderBackgroundService : BackgroundService
 {
     private const int MaxAttempts = 5;
@@ -8,7 +7,6 @@ public class EmailSenderBackgroundService : BackgroundService
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
 
-    
     private static readonly TimeSpan[] RetryDelays =
     {
         TimeSpan.FromSeconds(30),
@@ -20,7 +18,6 @@ public class EmailSenderBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<EmailSenderBackgroundService> _logger;
 
-    
     private readonly string _workerId =
         $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
 
@@ -76,7 +73,6 @@ public class EmailSenderBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                
                 var nextAttemptNumber = item.AttemptCount + 1;
                 if (nextAttemptNumber < MaxAttempts)
                 {
@@ -88,10 +84,11 @@ public class EmailSenderBackgroundService : BackgroundService
                 }
                 else
                 {
+                    
                     _logger.LogError(ex,
                         "Email gönderimi tüm denemelerden sonra kalıcı olarak başarısız oldu. To={To} Subject={Subject} Id={Id}",
                         item.ToEmail, item.Subject, item.Id);
-                    await processor.MoveToDeadLetterAsync(item.Id, ex.Message, stoppingToken);
+                    await processor.MarkFailedAsync(item.Id, ex.Message, null, stoppingToken);
                 }
             }
         }

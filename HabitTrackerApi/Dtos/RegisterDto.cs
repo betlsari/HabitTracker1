@@ -1,4 +1,3 @@
-
 using System.ComponentModel.DataAnnotations;
 
 namespace Dtos;
@@ -16,6 +15,4 @@ public class RegisterDto
     [Required]
     [Compare(nameof(Password), ErrorMessage = "Şifreler eşleşmiyor.")]
     public required string ConfirmPassword { get; set; }
-
-    public string? CaptchaToken { get; set; }
 }

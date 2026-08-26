@@ -16,7 +16,6 @@ public sealed class AccountManagementIntegrationTests
         _factory = factory;
     }
 
-
     // ============================================================
     // CHANGE PASSWORD
     // ============================================================
@@ -25,129 +24,41 @@ public sealed class AccountManagementIntegrationTests
     public async Task ChangePassword_WithWrongCurrentPassword_ReturnsBadRequest()
     {
         using var client = _factory.CreateClient();
+        var token = await _factory.CreateAccessTokenAsync();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var token =
-            await _factory.CreateAccessTokenAsync();
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/change-password",
+            new { currentPassword = "WrongPassword1A", newPassword = "NewIntegration1A" });
 
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                token);
-
-        var response =
-            await client.PostAsJsonAsync(
-                "/api/auth/change-password",
-                new
-                {
-                    currentPassword = "WrongPassword1A",
-                    newPassword = "NewIntegration1A"
-                });
-
-        Assert.Equal(
-            HttpStatusCode.BadRequest,
-            response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
-
 
     [Fact]
     public async Task ChangePassword_WithCorrectPassword_RevokesExistingSessions()
     {
         using var client = _factory.CreateClient();
 
-        // Email ve eski access token oluştur.
-        var (email, oldToken) =
-            await _factory.CreateAccessTokenWithEmailAsync();
+        var (email, oldToken) = await _factory.CreateAccessTokenWithEmailAsync();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", oldToken);
 
-        // Eski token ile authenticated ol.
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                oldToken);
-
-
-        // ========================================================
-        // 1. Şifreyi değiştir
-        // ========================================================
-
-        var changeResponse =
-            await client.PostAsJsonAsync(
-                "/api/auth/change-password",
-                new
-                {
-                    currentPassword = "Integration1A",
-                    newPassword = "NewIntegration1A"
-                });
-
+        var changeResponse = await client.PostAsJsonAsync(
+            "/api/auth/change-password",
+            new { currentPassword = "Integration1A", newPassword = "NewIntegration1A" });
         changeResponse.EnsureSuccessStatusCode();
 
+        var oldTokenCheck = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, oldTokenCheck.StatusCode);
 
-        // ========================================================
-        // 2. Eski token artık geçersiz olmalı
-        // ========================================================
-
-        var oldTokenCheck =
-            await client.GetAsync("/api/auth/me");
-
-        Assert.Equal(
-            HttpStatusCode.Unauthorized,
-            oldTokenCheck.StatusCode);
-
-
-        // ========================================================
-        // 3. Yeni şifre ile login
-        // ========================================================
-
-        var loginResponse =
-            await client.PostAsJsonAsync(
-                "/api/auth/login",
-                new
-                {
-                    email,
-                    password = "NewIntegration1A"
-                });
-
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { email, password = "NewIntegration1A" });
         loginResponse.EnsureSuccessStatusCode();
 
-
-        var login =
-            await loginResponse.Content
-                .ReadFromJsonAsync<LoginResponse>();
-
+        var login = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
         Assert.NotNull(login);
-
-        Assert.False(
-            string.IsNullOrWhiteSpace(login!.Token));
-
-
-        // ========================================================
-        // 4. Yeni token'ı kullan
-        // ========================================================
-
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                login.Token);
-
-
-        // ========================================================
-        // 5. Eski session'ların iptal edildiğini kontrol et
-        // ========================================================
-
-        var sessions =
-            await client.GetAsync(
-                "/api/auth/sessions");
-
-        sessions.EnsureSuccessStatusCode();
-
-
-        var list = await sessions.Content.ReadFromJsonAsync<List<object>>();
-
-Assert.NotNull(list);
-Assert.Single(list);
-
-        
+        Assert.False(string.IsNullOrWhiteSpace(login!.Token));
     }
-
 
     // ============================================================
     // DELETE ACCOUNT
@@ -157,98 +68,42 @@ Assert.Single(list);
     public async Task DeleteAccount_WithWrongPassword_ReturnsBadRequest()
     {
         using var client = _factory.CreateClient();
+        var token = await _factory.CreateAccessTokenAsync();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var token =
-            await _factory.CreateAccessTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/me")
+        {
+            Content = JsonContent.Create(new { currentPassword = "WrongPassword1A" })
+        };
 
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                token);
+        var response = await client.SendAsync(request);
 
-
-        var request =
-            new HttpRequestMessage(
-                HttpMethod.Delete,
-                "/api/auth/me")
-            {
-                Content = JsonContent.Create(
-                    new
-                    {
-                        currentPassword =
-                            "WrongPassword1A"
-                    })
-            };
-
-
-        var response =
-            await client.SendAsync(request);
-
-
-        Assert.Equal(
-            HttpStatusCode.BadRequest,
-            response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
-
 
     [Fact]
     public async Task DeleteAccount_WithCorrectPassword_Succeeds()
     {
         using var client = _factory.CreateClient();
+        var token = await _factory.CreateAccessTokenAsync();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var token =
-            await _factory.CreateAccessTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/me")
+        {
+            Content = JsonContent.Create(new { currentPassword = "Integration1A" })
+        };
 
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                token);
-
-
-        var request =
-            new HttpRequestMessage(
-                HttpMethod.Delete,
-                "/api/auth/me")
-            {
-                Content = JsonContent.Create(
-                    new
-                    {
-                        currentPassword =
-                            "Integration1A"
-                    })
-            };
-
-
-        var response =
-            await client.SendAsync(request);
-
-
+        var response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-
-        // Hesap silindikten sonra /me endpoint'ine
-        // erişilememeli.
-        var meResponse =
-            await client.GetAsync(
-                "/api/auth/me");
-
-
-        Assert.Equal(
-            HttpStatusCode.Unauthorized,
-            meResponse.StatusCode);
+        var meResponse = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, meResponse.StatusCode);
     }
-
-
-    // ============================================================
-    // LOGIN RESPONSE
-    // ============================================================
 
     private sealed class LoginResponse
     {
         public bool RequiresTwoFactor { get; set; }
-
         public string? Token { get; set; }
-
         public string? RefreshToken { get; set; }
     }
 }

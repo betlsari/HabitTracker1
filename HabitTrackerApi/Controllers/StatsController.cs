@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Asp.Versioning;
+
 using Data;
 using Models;
 using Dtos;
@@ -12,7 +12,7 @@ using System.Security.Claims;
 namespace Controllers;
 
 [ApiController]
-[ApiVersion("1.0")]
+
 [Route("api/[controller]")]
 [Authorize]
 public class StatsController : ControllerBase

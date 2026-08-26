@@ -7,13 +7,12 @@ using Models;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Configuration;
-using Asp.Versioning;
+
 
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[ApiVersion("1.0")]
 [Authorize]
 public class DevicesController : ControllerBase
 {
@@ -52,15 +51,7 @@ public class DevicesController : ControllerBase
         };
     }
 
-    // DÜZELTİLDİ: Önceden "mevcut kayıt sayısını say -> limit aşılıyorsa
-    // en eskiyi sil -> yenisini ekle" adımları ayrı ayrı SaveChanges'lerdi
-    // ve hiçbir eşzamanlılık koruması yoktu. Aynı kullanıcıdan gelen iki
-    // eşzamanlı istek, ikisi de aynı anda "count < max" görüp limiti
-    // aşabiliyordu (klasik check-then-act race condition). Artık tüm akış
-    // tek bir transaction içinde ve bu kullanıcıya özel bir Postgres
-    // advisory lock (pg_advisory_xact_lock) ile korunuyor; kilit transaction
-    // sonunda (commit/rollback) otomatik serbest kalıyor, ayrı bir "unlock"
-    // çağrısına gerek yok.
+   
     [HttpPost]
     public async Task<IActionResult> Register(RegisterDeviceTokenDto dto)
     {
@@ -72,8 +63,7 @@ public class DevicesController : ControllerBase
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({userId}))");
+            
 
             var existing = await _context.DeviceTokens
                 .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == dto.Token);

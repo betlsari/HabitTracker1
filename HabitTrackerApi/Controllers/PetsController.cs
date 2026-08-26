@@ -10,14 +10,14 @@ using Microsoft.AspNetCore.Identity;
 using Services;
 using Microsoft.Extensions.Options;
 using Configuration;
-using Asp.Versioning;
+
 using Filters;
 
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[ApiVersion("1.0")]
+
 [Authorize]
 public class PetsController : ControllerBase
 {
@@ -28,8 +28,7 @@ public class PetsController : ControllerBase
     private readonly ILogger<PetsController> _logger;
     private readonly int _maxPetsPerUser;
 
-    // DÜZELTİLDİ (🟡 magic number): eggCost/feedCost/petXpGain artık
-    // AppLimitsOptions üzerinden konfigüre edilebiliyor.
+    
     private readonly int _eggCostXp;
     private readonly int _feedCostXp;
     private readonly int _feedXpGain;
@@ -82,15 +81,7 @@ public class PetsController : ControllerBase
         };
     }
 
-    // DÜZELTİLDİ (transaction eksikliği): yumurta maliyeti için kullanıcı
-    // XP'sinin düşülmesi ile yeni Pet oluşturulması ayrı SaveChanges'lerdi.
-    // Artık tek transaction.
-    //
-    // DÜZELTİLDİ (🔴 race condition): "mevcut pet sayısını say -> limiti
-    // aşıyorsa reddet -> yeni pet ekle" adımları arasında hiçbir eşzamanlılık
-    // koruması yoktu. Kullanıcıya özel bir Postgres advisory lock
-    // (pg_advisory_xact_lock) eklendi; kilit transaction sonunda otomatik
-    // serbest kalır.
+    
     [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
@@ -103,8 +94,7 @@ public class PetsController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
+       
 
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {
@@ -175,19 +165,7 @@ public class PetsController : ControllerBase
         });
     }
 
-    // DÜZELTİLDİ (🔴 race condition — YENİ): "kullanıcının yeterli XP'si var
-    // mı kontrol et -> XP düş -> pet'e XP ekle" adımları arasında hiçbir
-    // eşzamanlılık koruması YOKTU. Aynı kullanıcıdan gelen iki eşzamanlı
-    // "besle" isteği, ikisi de aynı anda "TotalXp >= feedCost" görüp
-    // kullanıcının XP'sini negatife düşürebiliyordu (klasik check-then-act).
-    // CreatePet/DevicesController.Register ile aynı desende kullanıcıya özel
-    // bir advisory lock eklendi; XP bakiyesiyle ilgili olduğu için CreatePet'in
-    // kullandığı "pet:" anahtarından KASITLI OLARAK farklı bir anahtar
-    // ("petfeed-xp:") kullanılmıyor — aslında ikisi de aynı kullanıcının
-    // XP'sini ilgilendirdiği için aynı "pet:" + userId anahtarı kullanılarak
-    // CreatePet ile de serileştiriliyor (yumurta maliyeti ile besleme
-    // maliyeti aynı kullanıcı için birbirini de bekler, bu güvenlik açısından
-    // sorun değildir, sadece ekstra bir serileşme).
+   
     [HttpPost("{id}/feed")]
     public async Task<ActionResult<PetDto>> FeedPet(int id)
     {
@@ -199,8 +177,7 @@ public class PetsController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtext({"pet:" + userId}))");
+        
 
         var pet = await _context.Pets.FindAsync(id);
         if (pet == null || pet.UserId != userId)

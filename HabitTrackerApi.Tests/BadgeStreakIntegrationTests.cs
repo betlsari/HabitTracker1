@@ -1,9 +1,9 @@
-using System.Net;
+
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Data;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace HabitTrackerApi.Tests;
@@ -70,6 +70,7 @@ public sealed class BadgeStreakIntegrationTests : IClassFixture<ApiFactory>
 
             // Habit'in oluşturulma tarihini 3 gün öncesine çekiyoruz.
             // Böylece geçmiş üç güne completion ekleyebiliriz.
+
             dbHabit.CreatedAt = DateTime.UtcNow.AddDays(-3);
 
             await db.SaveChangesAsync();
@@ -79,13 +80,18 @@ public sealed class BadgeStreakIntegrationTests : IClassFixture<ApiFactory>
         // 3. Art arda 3 gün completion oluştur
         // ---------------------------------------------------------
 
-        var baseDate = DateTime.UtcNow.Date.AddDays(-2);
+        var today = DateTime.UtcNow;
 
-        for (var i = 0; i < 3; i++)
+        var completionDates = new[]
         {
-            var completionDate = baseDate
-                .AddDays(i)
-                .AddHours(10);
+            today.Date.AddDays(-2).AddHours(10),
+            today.Date.AddDays(-1).AddHours(10),
+            today.AddMinutes(-5)
+        };
+
+        for (var i = 0; i < completionDates.Length; i++)
+        {
+            var completionDate = completionDates[i];
 
             var completionResponse = await client.PostAsJsonAsync(
                 $"/api/habits/{habit!.Id}/habitcompletions",
@@ -132,12 +138,14 @@ public sealed class BadgeStreakIntegrationTests : IClassFixture<ApiFactory>
         Assert.NotNull(badges);
 
         // STREAK_3 kazanılmış olmalı
+
         var streak3 =
             badges.Single(b => b.Code == "STREAK_3");
 
         Assert.True(streak3.Earned);
 
         // 7 günlük seri henüz oluşmadı
+
         var streak7 =
             badges.Single(b => b.Code == "STREAK_7");
 
@@ -156,3 +164,4 @@ public sealed class BadgeStreakIntegrationTests : IClassFixture<ApiFactory>
         public bool Earned { get; set; }
     }
 }
+

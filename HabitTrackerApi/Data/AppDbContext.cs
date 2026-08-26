@@ -11,38 +11,25 @@ public class AppDbContext : IdentityDbContext<User>
     }
 
     public DbSet<Habit> Habits { get; set; }
-
     public DbSet<HabitCompletion> HabitCompletions { get; set; }
-
     public DbSet<Pet> Pets { get; set; }
-
     public DbSet<RefreshToken> RefreshTokens { get; set; }
-
     public DbSet<Badge> Badges { get; set; }
-
     public DbSet<UserBadge> UserBadges { get; set; }
-
     public DbSet<Flower> Flowers { get; set; }
-
     public DbSet<UserNotification> UserNotifications { get; set; }
-
     public DbSet<DeviceToken> DeviceTokens { get; set; }
-
     public DbSet<Book> Books { get; set; }
-
     public DbSet<BookReadingLog> BookReadingLogs { get; set; }
     public DbSet<PetAccessoryUnlock> PetAccessoryUnlocks { get; set; }
     public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
-
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
 
     public DbSet<EmailOutboxItem> EmailOutboxItems { get; set; }
     public DbSet<RecalculationOutboxItem> RecalculationOutboxItems { get; set; }
-    public DbSet<EmailDeadLetter> EmailDeadLetters { get; set; }
-    public DbSet<NotificationDigestDelivery> NotificationDigestDeliveries { get; set; }
+    // DÜZELTİLDİ: EmailDeadLetters ve NotificationDigestDeliveries kaldırıldı
+    // (admin/dead-letter sistemi ve digest servisi artık yok).
 
-    // Kalıcı (DB-backed) push bildirim outbox tablosu. Bkz.
-    // Services/PushOutboxService.cs ve Services/PushSenderBackgroundService.cs
     public DbSet<PushOutboxItem> PushOutboxItems { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -64,10 +51,10 @@ public class AppDbContext : IdentityDbContext<User>
             entity.HasIndex(h => new { h.UserId, h.IsArchived });
         });
         builder.Entity<RefreshToken>(entity =>
-{
-    entity.HasIndex(rt => rt.Token).IsUnique();
-    entity.HasIndex(rt => rt.FamilyId); 
-});
+        {
+            entity.HasIndex(rt => rt.Token).IsUnique();
+            entity.HasIndex(rt => rt.FamilyId);
+        });
 
         builder.Entity<Badge>(entity =>
         {
@@ -122,16 +109,6 @@ public class AppDbContext : IdentityDbContext<User>
                 .WithMany()
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        builder.Entity<EmailDeadLetter>(entity =>
-        {
-            entity.HasIndex(e => new { e.ToEmail, e.FailedAt });
-        });
-
-        builder.Entity<NotificationDigestDelivery>(entity =>
-        {
-            entity.HasIndex(d => new { d.UserId, d.DigestDate }).IsUnique();
         });
 
         builder.Entity<DeviceToken>(entity =>
@@ -217,9 +194,6 @@ public class AppDbContext : IdentityDbContext<User>
                 .HasDatabaseName("IX_RecalculationOutboxItems_Status_NextAttemptAt_CreatedAt");
         });
 
-        // EmailOutboxItems/RecalculationOutboxItems ile aynı gerekçe —
-        // worker'ın "Pending & NextAttemptAt geçmiş" satırları hızlıca
-        // bulabilmesi için composite index.
         builder.Entity<PushOutboxItem>(entity =>
         {
             entity.HasIndex(p => new { p.Status, p.NextAttemptAt, p.CreatedAt })

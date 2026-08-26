@@ -21,6 +21,7 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokenService;
     private readonly AppDbContext _context;
     private readonly IEmailQueue _emailQueue;
+    private readonly SecurityStampCache _securityStampCache;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -29,6 +30,7 @@ public class AuthController : ControllerBase
         TokenService tokenService,
         AppDbContext context,
         IEmailQueue emailQueue,
+        SecurityStampCache securityStampCache,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -36,12 +38,11 @@ public class AuthController : ControllerBase
         _tokenService = tokenService;
         _context = context;
         _emailQueue = emailQueue;
+        _securityStampCache = securityStampCache;
         _logger = logger;
     }
 
-    // =========================================================
-    // REGISTER
-    // =========================================================
+   
 
     [HttpPost("register")]
     [EnableRateLimiting("AuthPolicy")]
@@ -87,9 +88,7 @@ public class AuthController : ControllerBase
             "Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
     }
 
-    // =========================================================
-    // LOGIN
-    // =========================================================
+    
 
     [HttpPost("login")]
     [EnableRateLimiting("AuthPolicy")]
@@ -124,9 +123,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    // =========================================================
-    // REFRESH TOKEN
-    // =========================================================
+    
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(
@@ -146,8 +143,7 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        // Daha önce revoke edilmiş refresh token tekrar
-        // kullanılmaya çalışılıyorsa tüm refresh tokenları kapat.
+        
         if (storedToken.RevokedAt != null)
         {
             await RevokeAllRefreshTokensAsync(
@@ -403,9 +399,9 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-        // Şifre değiştiğinde bütün refresh tokenları
-        // geçersiz hale getir.
+       
         await RevokeAllRefreshTokensAsync(user.Id);
+        await _securityStampCache.InvalidateAsync(user.Id);
 
         await _emailQueue.EnqueueAsync(
             new EmailMessage(
@@ -472,6 +468,7 @@ public class AuthController : ControllerBase
         {
             return BadRequest(result.Errors);
         }
+        await _securityStampCache.InvalidateAsync(user.Id);
 
         // Şifre değiştiği için mevcut oturumları kapat.
         await RevokeAllRefreshTokensAsync(user.Id);
@@ -615,8 +612,7 @@ public class AuthController : ControllerBase
                 "Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
 
-        // User silindiğinde ilişkili verilerin FK/Cascade
-        // ayarlarına göre temizlenmesi bekleniyor.
+        await _securityStampCache.InvalidateAsync(userId);
         var result =
             await _userManager.DeleteAsync(user);
 

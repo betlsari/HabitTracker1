@@ -9,13 +9,13 @@ using Microsoft.AspNetCore.Identity;
 using Services;
 using Microsoft.Extensions.Options;
 using Configuration;
-using Asp.Versioning;
+
 using Filters;
 
 namespace Controllers;
 
 [ApiController]
-[ApiVersion("1.0")]
+
 [Route("api/[controller]")]
 [Authorize]
 public class HabitsController : ControllerBase

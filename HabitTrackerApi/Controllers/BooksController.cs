@@ -10,13 +10,13 @@ using Services;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Configuration;
-using Asp.Versioning;
+
 using Filters;
 
 namespace Controllers;
 
 [ApiController]
-[ApiVersion("1.0")]
+
 [Route("api/[controller]")]
 [Authorize]
 public class BooksController : ControllerBase
@@ -146,8 +146,7 @@ public class BooksController : ControllerBase
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({"book:" + userId}))");
+           
 
             if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
             {
@@ -379,9 +378,7 @@ public class BooksController : ControllerBase
     {
         await using var transaction = await _context.Database.BeginTransactionAsync(HttpContext.RequestAborted);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtext({"book-complete:" + id}))",
-            HttpContext.RequestAborted);
+        
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
         if (book == null)
         {
@@ -455,9 +452,7 @@ public class BooksController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtext({"book-reading:" + id}))",
-            HttpContext.RequestAborted);
+        
 
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
         {

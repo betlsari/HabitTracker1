@@ -5,13 +5,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Models;
 using System.Security.Claims;
-using Asp.Versioning;
+
 
 namespace Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[ApiVersion("1.0")]
+
 
 [Authorize]
 public class NotificationPreferencesController : ControllerBase

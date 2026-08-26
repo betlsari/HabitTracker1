@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Services;
-using Services.Observability;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
@@ -13,38 +12,15 @@ using System.Text.Json.Serialization;
 using System.Security.Claims;
 using Configuration;
 using Microsoft.AspNetCore.HttpLogging;
-using Serilog;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using OpenTelemetry.Resources;
 using System.Security.Cryptography;
-using OpenTelemetry.Trace;
-using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddUserSecrets<Program>(optional: true);
 }
-
-// Sentry is optional; an empty DSN keeps local and test environments disabled.
-builder.WebHost.UseSentry();
-
-
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(
-        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {CorrelationId} {Message:lj}{NewLine}{Exception}")
-    .WriteTo.File(
-        "logs/habittracker-.log",
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 14,
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {CorrelationId} {Message:lj}{NewLine}{Exception}")
-    .CreateLogger();
-
-builder.Host.UseSerilog();
 
 // Swagger Configuration
 builder.Services.AddSwaggerGen(options =>
@@ -88,20 +64,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
-
-var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
-if (!string.IsNullOrWhiteSpace(redisConnectionString))
-{
-    builder.Services.AddStackExchangeRedisCache(options =>
-    {
-        options.Configuration = redisConnectionString;
-        options.InstanceName = "habittracker:";
-    });
-}
-else
-{
-    builder.Services.AddDistributedMemoryCache();
-}
+// DÜZELTİLDİ: Redis kaldırıldı. Dashboard cache artık her zaman process-local
+// in-memory cache kullanıyor (DashboardCacheService IDistributedCache
+// soyutlamasını kullanmaya devam ediyor, arkasındaki implementasyon değişti).
+// Çok sunuculu bir deployment'ta cache sunucular arasında paylaşılmaz; bu
+// kabul edilen bir trade-off (5 dakikalık TTL'i olan, sadece performans
+// amaçlı bir cache, tutarlılık için kritik değil).
+builder.Services.AddDistributedMemoryCache();
 
 var healthChecksBuilder = builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database", tags: new[] { "critical" })
@@ -109,12 +78,6 @@ var healthChecksBuilder = builder.Services.AddHealthChecks()
     .AddCheck<PushQueueHealthCheck>("push-queue", tags: new[] { "dependency" })
     .AddCheck<FcmHealthCheck>("fcm", tags: new[] { "dependency" })
     .AddCheck<RecalculationQueueHealthCheck>("recalculation-queue", tags: new[] { "dependency" });
-
-
-if (!string.IsNullOrWhiteSpace(redisConnectionString))
-{
-    healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "critical" });
-}
 
 // Options Configuration
 builder.Services.AddOptions<JwtOptions>()
@@ -136,6 +99,8 @@ builder.Services.AddOptions<AppLimitsOptions>()
     .ValidateOnStart();
 
 // Production Validations
+// DÜZELTİLDİ: Redis zorunluluk kontrolü kaldırıldı (Redis artık hiç
+// kullanılmıyor).
 if (builder.Environment.IsProduction())
 {
     var allowedOriginsCheck = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
@@ -143,12 +108,6 @@ if (builder.Environment.IsProduction())
     {
         throw new InvalidOperationException(
             "Production ortamında Cors:AllowedOrigins boş olamaz. appsettings.Production.json veya ortam değişkeni ile en az bir origin tanımlayın.");
-    }
-
-    if (string.IsNullOrWhiteSpace(redisConnectionString))
-    {
-        throw new InvalidOperationException(
-            "Production ortamında Redis:ConnectionString boş olamaz. DashboardCacheService için dağıtık bir cache gereklidir.");
     }
 
     var smtpHost = builder.Configuration["Email:SmtpHost"];
@@ -171,7 +130,7 @@ if (builder.Environment.IsProduction())
     }
 }
 
-// HTTP Logging
+// HTTP Logging (built-in ASP.NET Core, Serilog'a bağımlı değil)
 builder.Services.AddHttpLogging(options =>
 {
     options.LoggingFields = HttpLoggingFields.RequestProperties | HttpLoggingFields.ResponseStatusCode | HttpLoggingFields.Duration;
@@ -196,8 +155,6 @@ builder.Services.AddIdentity<Models.User, Microsoft.AspNetCore.Identity.Identity
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// Memory Cache (SecurityStampCache artık bunun üzerine kurulu; kısa ömürlü,
-// process-local bir cache olduğu için tek instance senaryosunda yeterlidir)
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SecurityStampCache>();
 
@@ -292,7 +249,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Rate Limiting
+// DÜZELTİLDİ (rate limiting sadeleştirmesi): Önceki global limiter
+// authenticated/anonymous ayrımı yaparak user:{id} veya ip:{ip} partition
+// key'i seçiyordu. Bu ayrım ekstra karmaşıklık katıyordu ama pratikte
+// çoğu isteğin zaten Authorize ile korunduğu, bu yüzden partition
+// mantığının asıl kazandırdığı şey sadece "login olmuş kullanıcı IP
+// değiştirse bile aynı limit sayacını paylaşır" idi — kritik değil.
+// Artık tek tip: her zaman IP bazlı sabit pencere limiti.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -311,9 +274,7 @@ builder.Services.AddRateLimiter(options =>
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
-        var partitionKey = httpContext.User.Identity?.IsAuthenticated == true
-            ? $"user:{httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value}"
-            : $"ip:{httpContext.Connection.RemoteIpAddress}";
+        var partitionKey = $"ip:{httpContext.Connection.RemoteIpAddress}";
 
         return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
         {
@@ -349,7 +310,6 @@ builder.Services.AddScoped<HabitProgressService>();
 builder.Services.AddScoped<FlowerService>();
 builder.Services.AddScoped<IPushNotificationSender, FcmPushNotificationSender>();
 
-
 builder.Services.AddScoped<PushOutboxService>();
 builder.Services.AddScoped<IPushQueue>(sp => sp.GetRequiredService<PushOutboxService>());
 builder.Services.AddScoped<IPushOutboxProcessor>(sp => sp.GetRequiredService<PushOutboxService>());
@@ -361,63 +321,15 @@ builder.Services.AddScoped<BookService>();
 builder.Services.AddScoped<PetGrowthService>();
 builder.Services.AddScoped<PetCosmeticsService>();
 
-
 builder.Services.AddScoped<ReminderService>();
 
 // Hosted Services (Background Tasks)
 builder.Services.AddHostedService<PetMoodBackgroundService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
-builder.Services.AddHostedService<RefreshTokenCleanupService>();
-
-builder.Services.AddHostedService<OutboxCleanupService>();
+builder.Services.AddHostedService<MaintenanceCleanupService>();
 builder.Services.AddHostedService<EmailSenderBackgroundService>();
 builder.Services.AddHostedService<PushSenderBackgroundService>();
 builder.Services.AddHostedService<RecalculationBackgroundService>();
-
-
-var otlpEndpoint = builder.Configuration["Otel:OtlpEndpoint"];
-
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource.AddService(
-        serviceName: AppDiagnostics.ServiceName,
-        serviceVersion: "1.0.0"))
-    .WithTracing(tracing =>
-    {
-        tracing
-            .AddSource(AppDiagnostics.ServiceName)
-            .AddAspNetCoreInstrumentation(options =>
-            {
-                options.Filter = httpContext =>
-                    !httpContext.Request.Path.StartsWithSegments("/health");
-            })
-            .AddHttpClientInstrumentation();
-
-        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-        {
-            tracing.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
-        }
-        else if (builder.Environment.IsDevelopment())
-        {
-            tracing.AddConsoleExporter();
-        }
-    })
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .AddMeter(AppDiagnostics.ServiceName)
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddRuntimeInstrumentation();
-
-        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-        {
-            metrics.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
-        }
-        else if (builder.Environment.IsDevelopment())
-        {
-            metrics.AddConsoleExporter();
-        }
-    });
 
 // Exception Handling
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -427,7 +339,6 @@ var app = builder.Build();
 
 // Middleware Pipeline
 app.UseExceptionHandler();
-
 
 if (!app.Environment.IsDevelopment())
 {
@@ -446,19 +357,18 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Correlation ID Middleware
+// DÜZELTİLDİ: Serilog.Context.LogContext yerine built-in ILogger.BeginScope
+// kullanılıyor; correlation ID hâlâ tüm loglara ekleniyor, sadece Serilog'a
+// bağımlılık kalktı.
 app.Use(async (context, next) =>
 {
     var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N");
     context.Response.Headers["X-Correlation-ID"] = correlationId;
-    using (Serilog.Context.LogContext.PushProperty("CorrelationId", correlationId))
     using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
     {
         await next();
     }
 });
-
-app.UseSerilogRequestLogging();
 
 app.UseHttpLogging();
 
@@ -492,7 +402,6 @@ app.Use(async (context, next) =>
 });
 
 app.MapControllers();
-
 
 async ValueTask<object?> HealthCheckApiKeyFilter(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
 {
@@ -535,18 +444,13 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 
 try
 {
-    Log.Information("HabitTrackerApi başlatılıyor...");
+    app.Logger.LogInformation("HabitTrackerApi başlatılıyor...");
     app.Run();
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "HabitTrackerApi beklenmedik şekilde durdu.");
+    app.Logger.LogCritical(ex, "HabitTrackerApi beklenmedik şekilde durdu.");
     throw;
-}
-finally
-{
-   
-    Log.CloseAndFlush();
 }
 
 public partial class Program { }
