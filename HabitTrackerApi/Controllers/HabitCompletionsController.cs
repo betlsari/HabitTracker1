@@ -12,7 +12,7 @@ namespace Controllers;
 
 [ApiController]
 [Route("api/habits/{habitId}/[controller]")]
-[Authorize] 
+[Authorize]
 public class HabitCompletionsController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -57,14 +57,14 @@ public class HabitCompletionsController : ControllerBase
             return NotFound();
         }
         if (!string.IsNullOrWhiteSpace(dto.ClientRequestId))
-    {
-        var existing = await _context.HabitCompletions.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
-        if (existing != null)
         {
-            return ToDto(existing); // aynı istek tekrar geldi, XP tekrar verilmez
+            var existing = await _context.HabitCompletions.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.HabitId == habitId && c.ClientRequestId == dto.ClientRequestId);
+            if (existing != null)
+            {
+                return ToDto(existing); // aynı istek tekrar geldi, XP tekrar verilmez
+            }
         }
-    }
 
         var user = await _userManager.FindByIdAsync(userId!);
         var completionUtc = DateTime.SpecifyKind(dto.CompletionDate, DateTimeKind.Utc);
@@ -98,6 +98,16 @@ public class HabitCompletionsController : ControllerBase
         if (user != null)
         {
             user.TotalXp += xpEarned;
+
+            // YENİ: Odaklanma kategorisindeki tamamlamalar artık doğrudan
+            // pet'lere gitmiyor; kullanıcının FocusXpPool bakiyesine ekleniyor.
+            // Kullanıcı bu bakiyeyi istediği zaman istediği pet'e harcayabilir
+            // (bkz. PetsController.GrowFromFocusPool).
+            if (HabitCategories.IsFocus(habit.Category) && dto.Amount > 0)
+            {
+                user.FocusXpPool = checked(user.FocusXpPool + dto.Amount * PetGrowthService.XpPerFocusMinute);
+            }
+
             var updateResult = await _userManager.UpdateAsync(user);
             updateResult.EnsureSucceeded(_logger, "habit-completion-xp", userId!);
         }
@@ -108,11 +118,6 @@ public class HabitCompletionsController : ControllerBase
         if (HabitCategories.IsWater(habit.Category) && dto.Amount > 0)
         {
             flower = await _flowerService.AddWaterAsync(userId!, dto.Amount);
-        }
-
-        if (HabitCategories.IsFocus(habit.Category) && dto.Amount > 0)
-        {
-            await _petGrowthService.AddFocusXpAsync(userId!, dto.Amount);
         }
 
         if (petStreakBonus > 0)
@@ -234,17 +239,24 @@ public class HabitCompletionsController : ControllerBase
         {
             await _flowerService.AddWaterAsync(userId!, -oldAmount);
         }
-        if (HabitCategories.IsFocus(habit.Category) && oldAmount != 0)
-        {
-            await _petGrowthService.RemoveFocusXpAsync(userId!, oldAmount);
-        }
         if (oldPetStreakBonus > 0)
         {
             await _petGrowthService.RemoveStreakBonusXpAsync(userId!, oldPetStreakBonus);
         }
-        if (user != null && oldXp != 0)
+        if (user != null)
         {
-            user.TotalXp = Math.Max(0, user.TotalXp - oldXp);
+            if (oldXp != 0)
+            {
+                user.TotalXp = Math.Max(0, user.TotalXp - oldXp);
+            }
+
+            // YENİ: Eski tamamlama Odaklanma kategorisindeyse, o zaman havuza
+            // eklenmiş olan XP de geri düşülür.
+            if (HabitCategories.IsFocus(habit.Category) && oldAmount != 0)
+            {
+                user.FocusXpPool = Math.Max(0, user.FocusXpPool - oldAmount * PetGrowthService.XpPerFocusMinute);
+            }
+
             var removeResult = await _userManager.UpdateAsync(user);
             removeResult.EnsureSucceeded(_logger, "habit-completion-update-xp-remove", userId!);
         }
@@ -281,10 +293,6 @@ public class HabitCompletionsController : ControllerBase
         {
             flower = await _flowerService.AddWaterAsync(userId!, completion.Amount);
         }
-        if (HabitCategories.IsFocus(habit.Category) && completion.Amount > 0)
-        {
-            await _petGrowthService.AddFocusXpAsync(userId!, completion.Amount);
-        }
         if (newPetStreakBonus > 0)
         {
             await _petGrowthService.AddStreakBonusXpAsync(userId!, newPetStreakBonus);
@@ -293,6 +301,13 @@ public class HabitCompletionsController : ControllerBase
         if (user != null)
         {
             user.TotalXp += newXp;
+
+            // YENİ: Yeni tamamlama Odaklanma kategorisindeyse havuza yeniden ekle.
+            if (HabitCategories.IsFocus(habit.Category) && completion.Amount > 0)
+            {
+                user.FocusXpPool = checked(user.FocusXpPool + completion.Amount * PetGrowthService.XpPerFocusMinute);
+            }
+
             var addResult = await _userManager.UpdateAsync(user);
             addResult.EnsureSucceeded(_logger, "habit-completion-update-xp-add", userId!);
         }
@@ -347,22 +362,28 @@ public class HabitCompletionsController : ControllerBase
             await _flowerService.AddWaterAsync(userId!, -completion.Amount);
         }
 
-        if (HabitCategories.IsFocus(habit.Category) && completion.Amount != 0)
-        {
-            await _petGrowthService.RemoveFocusXpAsync(userId!, completion.Amount);
-        }
-
         if (completion.PetStreakBonusXp > 0)
         {
             await _petGrowthService.RemoveStreakBonusXpAsync(userId!, completion.PetStreakBonusXp);
         }
 
-        if (completion.XpEarned != 0)
+        // YENİ: Silinen tamamlama Odaklanma kategorisindeyse, havuza daha
+        // önce eklenmiş olan XP de düşülmeli.
+        var isFocusWithAmount = HabitCategories.IsFocus(habit.Category) && completion.Amount != 0;
+
+        if (completion.XpEarned != 0 || isFocusWithAmount)
         {
             var user = await _userManager.FindByIdAsync(userId!);
             if (user != null)
             {
-                user.TotalXp = Math.Max(0, user.TotalXp - completion.XpEarned);
+                if (completion.XpEarned != 0)
+                {
+                    user.TotalXp = Math.Max(0, user.TotalXp - completion.XpEarned);
+                }
+                if (isFocusWithAmount)
+                {
+                    user.FocusXpPool = Math.Max(0, user.FocusXpPool - completion.Amount * PetGrowthService.XpPerFocusMinute);
+                }
                 var updateResult = await _userManager.UpdateAsync(user);
                 updateResult.EnsureSucceeded(_logger, "habit-completion-delete-xp", userId!);
             }

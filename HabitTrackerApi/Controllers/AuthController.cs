@@ -25,25 +25,25 @@ public class AuthController : ControllerBase
 
     private readonly BookCoverStorageService _coverStorage;
 
-public AuthController(
-    UserManager<User> userManager,
-    SignInManager<User> signInManager,
-    TokenService tokenService,
-    AppDbContext context,
-    EmailService emailService,
-    BookCoverStorageService coverStorage,
-    ILogger<AuthController> logger)
-{
-    _userManager = userManager;
-    _signInManager = signInManager;
-    _tokenService = tokenService;
-    _context = context;
-    _emailService = emailService;
-    _coverStorage = coverStorage;
-    _logger = logger;
-}
+    public AuthController(
+        UserManager<User> userManager,
+        SignInManager<User> signInManager,
+        TokenService tokenService,
+        AppDbContext context,
+        EmailService emailService,
+        BookCoverStorageService coverStorage,
+        ILogger<AuthController> logger)
+    {
+        _userManager = userManager;
+        _signInManager = signInManager;
+        _tokenService = tokenService;
+        _context = context;
+        _emailService = emailService;
+        _coverStorage = coverStorage;
+        _logger = logger;
+    }
 
-   
+
 
     [HttpPost("register")]
     [EnableRateLimiting("AuthPolicy")]
@@ -88,7 +88,7 @@ public AuthController(
             "Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
     }
 
-    
+
 
     [HttpPost("login")]
     [EnableRateLimiting("AuthPolicy")]
@@ -123,7 +123,7 @@ public AuthController(
         });
     }
 
-    
+
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(
@@ -143,7 +143,7 @@ public AuthController(
             return Unauthorized();
         }
 
-        
+
         if (storedToken.RevokedAt != null)
         {
             await RevokeAllRefreshTokensAsync(
@@ -514,6 +514,7 @@ public AuthController(
             user.DisplayName,
             user.AvatarUrl,
             user.TotalXp,
+            user.FocusXpPool,
             user.TimeZoneId
         });
     }
@@ -562,6 +563,7 @@ public AuthController(
             user.DisplayName,
             user.AvatarUrl,
             user.TotalXp,
+            user.FocusXpPool,
             user.TimeZoneId
         });
     }
@@ -745,7 +747,7 @@ public AuthController(
 
         return activeTokens.Count;
     }
-        
+
     private async Task SendEmailSafeAsync(string toEmail, string subject, string body)
     {
         try
@@ -757,50 +759,51 @@ public AuthController(
             _logger.LogWarning(ex, "Email gönderilemedi. To={To} Subject={Subject}", toEmail, subject);
         }
     }
-   
-[HttpPut("me/timezone")]
-[Authorize]
-public async Task<IActionResult> UpdateTimezone(UpdateTimezoneDto dto)
-{
-    var userId =
-        User.FindFirstValue(
-            ClaimTypes.NameIdentifier);
 
-    if (string.IsNullOrWhiteSpace(userId))
+    [HttpPut("me/timezone")]
+    [Authorize]
+    public async Task<IActionResult> UpdateTimezone(UpdateTimezoneDto dto)
     {
-        return Unauthorized();
+        var userId =
+            User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized();
+        }
+
+        if (!TimeZones.IsValid(dto.TimeZoneId))
+        {
+            return BadRequest("Geçersiz saat dilimi kimliği (örn: 'Europe/Istanbul').");
+        }
+
+        var user =
+            await _userManager.FindByIdAsync(userId);
+
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        user.TimeZoneId = dto.TimeZoneId;
+
+        var result =
+            await _userManager.UpdateAsync(user);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(result.Errors);
+        }
+
+        return Ok(new
+        {
+            user.Email,
+            user.DisplayName,
+            user.AvatarUrl,
+            user.TotalXp,
+            user.FocusXpPool,
+            user.TimeZoneId
+        });
     }
-
-    if (!TimeZones.IsValid(dto.TimeZoneId))
-    {
-        return BadRequest("Geçersiz saat dilimi kimliği (örn: 'Europe/Istanbul').");
-    }
-
-    var user =
-        await _userManager.FindByIdAsync(userId);
-
-    if (user == null)
-    {
-        return NotFound();
-    }
-
-    user.TimeZoneId = dto.TimeZoneId;
-
-    var result =
-        await _userManager.UpdateAsync(user);
-
-    if (!result.Succeeded)
-    {
-        return BadRequest(result.Errors);
-    }
-
-    return Ok(new
-    {
-        user.Email,
-        user.DisplayName,
-        user.AvatarUrl,
-        user.TotalXp,
-        user.TimeZoneId
-    });
-}
 }

@@ -34,4 +34,6 @@ public class User : IdentityUser
     public string EquippedBackground { get; set; } = PetBackgrounds.Home;
 
     public List<UserBackgroundUnlock> BackgroundUnlocks { get; set; } = new();
+
+    public int FocusXpPool { get; set; }
 }

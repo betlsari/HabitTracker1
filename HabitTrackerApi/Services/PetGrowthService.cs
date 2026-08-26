@@ -160,4 +160,53 @@ public class PetGrowthService
 
         await _context.SaveChangesAsync(cancellationToken);
     }
+    // KALDIRILDI: AddFocusXpAsync / RemoveFocusXpAsync — odaklanma XP'si artık
+// otomatik olarak tüm pet'lere dağıtılmıyor, kullanıcının FocusXpPool
+// bakiyesine ekleniyor (bkz. HabitCompletionsController, HabitsController).
+
+// YENİ: Kullanıcının havuzdan seçtiği TEK bir pet'e XP aktarması için.
+public async Task<Pet?> GrowSinglePetAsync(
+    string userId, int petId, int xpAmount, CancellationToken cancellationToken = default)
+{
+    if (xpAmount <= 0)
+    {
+        return null;
+    }
+
+    var pet = await _context.Pets
+        .FirstOrDefaultAsync(p => p.Id == petId && p.UserId == userId, cancellationToken);
+    if (pet == null)
+    {
+        return null;
+    }
+
+    pet.Xp += xpAmount;
+
+    var justHatched = PetHatching.TryHatch(pet);
+    if (pet.Stage == PetStage.Hatched)
+    {
+        PetLeveling.Apply(pet, _maxPetLevel);
+    }
+
+    await _context.SaveChangesAsync(cancellationToken);
+
+    if (pet.Stage == PetStage.Hatched)
+    {
+        await _cosmeticsService.EvaluateAccessoryUnlocksAsync(pet, cancellationToken);
+    }
+
+    if (justHatched)
+    {
+        await _notifications.TryEnqueueAsync(
+            userId,
+            NotificationTypes.PetHatched,
+            "Yumurta çatladı!",
+            $"{(pet.Nickname ?? pet.Type)} yumurtasından çıktı!",
+            habitId: null,
+            dedupKey: $"pethatch:{pet.Id}",
+            cancellationToken);
+    }
+
+    return pet;
+}
 }

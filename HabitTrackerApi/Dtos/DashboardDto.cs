@@ -13,4 +13,6 @@ public class DashboardDto
     public FlowerDto? Flower { get; set; }
 
     public int UnreadNotificationCount { get; set; }
+
+    public int FocusXpPool { get; set; }
 }

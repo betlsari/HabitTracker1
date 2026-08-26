@@ -67,6 +67,7 @@ public class HabitsController : ControllerBase
         string? search = null,
         string? category = null,
         [FromQuery] string[]? categories = null,
+        string? customCategoryName = null,
         bool includeArchived = false,
         string sortBy = "createdAt",
         bool sortDesc = true)
@@ -103,6 +104,18 @@ public class HabitsController : ControllerBase
             query = query.Where(h => categoryFilter.Contains(h.Category));
         }
 
+        // YENİ: "Diğer" kategorisi altında toplanan özel alışkanlıkları
+        // (Erken uyanma, Meditasyon, Kodlama pratiği vb.) kendi etiketine
+        // göre filtreleyebilmek için. Önceden sadece serbest metin arama
+        // (search) ile bulunabiliyordu.
+        if (!string.IsNullOrWhiteSpace(customCategoryName))
+        {
+            var customTerm = EscapeLikePattern(customCategoryName.Trim());
+            query = query.Where(h =>
+                h.CustomCategoryName != null &&
+                EF.Functions.ILike(h.CustomCategoryName, $"%{customTerm}%", "\\"));
+        }
+
         query = (sortBy.ToLowerInvariant(), sortDesc) switch
         {
             ("name", true) => query.OrderByDescending(h => h.Name),
@@ -137,6 +150,23 @@ public class HabitsController : ControllerBase
         return Ok(HabitCategories.Allowed);
     }
 
+    // YENİ: Kullanıcının "Diğer" kategorisi altında daha önce kullandığı
+    // özel etiketlerin (CustomCategoryName) listesi. Client bunu bir
+    // filtre/öneri listesi olarak kullanabilir.
+    [HttpGet("custom-categories")]
+    public async Task<ActionResult<IEnumerable<string>>> GetCustomCategoryNames()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var names = await _context.Habits.AsNoTracking()
+            .Where(h => h.UserId == userId && !h.IsArchived && h.CustomCategoryName != null)
+            .Select(h => h.CustomCategoryName!)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToListAsync();
+
+        return Ok(names);
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<HabitDto>> GetHabit(int id)
     {
@@ -152,13 +182,6 @@ public class HabitsController : ControllerBase
         return ToDto(habit);
     }
 
-    // DÜZELTİLDİ (madde 4 — sadeleştirme): CreateExecutionStrategy +
-    // BeginTransactionAsync + pg_advisory_xact_lock kaldırıldı. Advisory
-    // lock zaten yalnızca açık bir transaction süresince anlamlıydı; onsuz
-    // hiçbir koruma sağlamaz. Aynı isimde alışkanlık oluşturma yarışması
-    // artık, önceden de var olan IX_Habits_UserId_NormalizedName unique
-    // index'i + GlobalExceptionHandler'daki unique-constraint → 409 Conflict
-    // dönüşümü ile karşılanıyor; pratikte aynı koruma seviyesi.
     [HttpPost]
     [SanitizeText]
     public async Task<ActionResult<HabitDto>> CreateHabit(CreateHabitDto dto)
@@ -295,13 +318,31 @@ public class HabitsController : ControllerBase
                     await _badgeService.EvaluateFlowerBadgesAsync(userId!, flower.Level);
                 }
 
+                // YENİ: Kategori Odaklanma'dan çıktığında/Odaklanma'ya
+                // girdiğinde artık pet'lere değil, kullanıcının
+                // FocusXpPool bakiyesine dokunuluyor.
                 if (wasFocus && !isFocus)
                 {
-                    await _petGrowthService.RemoveFocusXpAsync(userId!, totalAmount);
+                    var focusUser = await _userManager.FindByIdAsync(userId!);
+                    if (focusUser != null)
+                    {
+                        focusUser.FocusXpPool = Math.Max(
+                            0,
+                            focusUser.FocusXpPool - totalAmount * PetGrowthService.XpPerFocusMinute);
+                        var r = await _userManager.UpdateAsync(focusUser);
+                        r.EnsureSucceeded(_logger, "habit-category-change-focus-pool-remove", userId!);
+                    }
                 }
                 else if (!wasFocus && isFocus)
                 {
-                    await _petGrowthService.AddFocusXpAsync(userId!, totalAmount);
+                    var focusUser = await _userManager.FindByIdAsync(userId!);
+                    if (focusUser != null)
+                    {
+                        focusUser.FocusXpPool = checked(
+                            focusUser.FocusXpPool + totalAmount * PetGrowthService.XpPerFocusMinute);
+                        var r = await _userManager.UpdateAsync(focusUser);
+                        r.EnsureSucceeded(_logger, "habit-category-change-focus-pool-add", userId!);
+                    }
                 }
             }
         }

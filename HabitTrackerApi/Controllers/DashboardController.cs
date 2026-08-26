@@ -72,6 +72,7 @@ public class DashboardController : ControllerBase
         var dashboard = new DashboardDto
         {
             TotalXp = user.TotalXp,
+            FocusXpPool = user.FocusXpPool,
             Habits = habitProgress,
             Books = books.Select(BookService.ToDto).ToList(),
             Pets = pets.Select(ToPetDto).ToList(),

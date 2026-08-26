@@ -23,6 +23,7 @@ public class PetsController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly NotificationService _notificationService;
     private readonly PetCosmeticsService _petCosmeticsService;
+    private readonly PetGrowthService _petGrowthService;
     private readonly ILogger<PetsController> _logger;
     private readonly int _maxPetsPerUser;
 
@@ -36,6 +37,7 @@ public class PetsController : ControllerBase
         UserManager<User> userManager,
         NotificationService notificationService,
         PetCosmeticsService petCosmeticsService,
+        PetGrowthService petGrowthService,
         IOptions<AppLimitsOptions> limits,
         ILogger<PetsController> logger)
     {
@@ -43,6 +45,7 @@ public class PetsController : ControllerBase
         _userManager = userManager;
         _notificationService = notificationService;
         _petCosmeticsService = petCosmeticsService;
+        _petGrowthService = petGrowthService;
         _maxPetsPerUser = limits.Value.MaxPetsPerUser;
         _eggCostXp = limits.Value.PetEggCostXp;
         _feedCostXp = limits.Value.PetFeedCostXp;
@@ -171,6 +174,50 @@ public class PetsController : ControllerBase
         return ToDto(pet);
     }
 
+    // YENİ: Odaklanma alışkanlıklarından biriken FocusXpPool bakiyesinden
+    // kullanıcının seçtiği XP kadarını, kullanıcının seçtiği TEK bir pet'e
+    // aktarır. Odaklanma XP'si artık otomatik olarak tüm pet'lere dağılmıyor;
+    // kullanıcı hangi pet'i büyütmek istediğine kendisi karar veriyor.
+    [HttpPost("{id}/grow-from-focus")]
+    public async Task<ActionResult<PetDto>> GrowFromFocusPool(int id, GrowPetFromFocusDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        var pet = await _context.Pets.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        if (pet == null)
+        {
+            return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        if (user.FocusXpPool < dto.Amount)
+        {
+            return BadRequest($"Yetersiz odaklanma XP'si. Mevcut bakiye: {user.FocusXpPool}");
+        }
+
+        user.FocusXpPool -= dto.Amount;
+        var updateResult = await _userManager.UpdateAsync(user);
+        updateResult.EnsureSucceeded(_logger, "pet-grow-from-focus-pool", userId);
+
+        var grown = await _petGrowthService.GrowSinglePetAsync(userId, id, dto.Amount);
+        if (grown == null)
+        {
+            // Teorik olarak yukarıda pet bulunduğu için buraya düşülmemeli,
+            // ama savunmacı olarak XP'yi geri ver.
+            user.FocusXpPool += dto.Amount;
+            var revertResult = await _userManager.UpdateAsync(user);
+            revertResult.EnsureSucceeded(_logger, "pet-grow-from-focus-pool-revert", userId);
+            return NotFound("Evcil hayvan bulunamadı veya bu evcil hayvana erişim yetkiniz yok.");
+        }
+
+        return ToDto(grown);
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<PetDto>> GetPet(int id)
     {
@@ -195,7 +242,7 @@ public class PetsController : ControllerBase
         }
 
         pet.Nickname = string.IsNullOrWhiteSpace(dto.Nickname) ? null : dto.Nickname.Trim();
-await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
 
         return ToDto(pet);
     }
@@ -247,10 +294,10 @@ await _context.SaveChangesAsync();
         return ToDto(pet);
     }
     [HttpGet("types")]
-public ActionResult<IEnumerable<string>> GetAllowedTypes()
-{
-    return Ok(PetTypes.Allowed);
-}
+    public ActionResult<IEnumerable<string>> GetAllowedTypes()
+    {
+        return Ok(PetTypes.Allowed);
+    }
 
     private static PetDto ToDto(Pet pet) => new()
     {
