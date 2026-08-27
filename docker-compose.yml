@@ -34,17 +34,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # DÜZELTİLDİ (madde 11): Varsayılan artık "Production". Önceden
-      # varsayılan "Development" idi; biri .env dosyasında bu değişkeni
-      # tanımlamayı unutursa uygulama sessizce Development modunda ayağa
-      # kalkıyordu (Swagger açık, HSTS yok, Program.cs'deki production
-      # validasyonları [Cors:AllowedOrigins, Email ayarları, HealthCheck
-      # ApiKey zorunluluğu] tamamen atlanıyordu). Artık .env'de
-      # ASPNETCORE_ENVIRONMENT=Development açıkça YAZILMADIKÇA uygulama
-      # Production modunda başlar; eksik/yanlış yapılandırılmış prod
-      # secret'ları varsa Program.cs zaten fail-fast ile başlangıçta hata
-      # fırlatır (bu istenen davranıştır — "sessizce güvensiz mod" yerine
-      # "gürültülü hata").
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=habittracker;Username=habittracker;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
       Jwt__Key: ${JWT_KEY:?JWT_KEY must be set in .env - use at least 32 random bytes}
@@ -62,17 +51,8 @@ services:
       HealthCheck__ApiKey: "${HEALTH_CHECK_API_KEY:-}"
     volumes:
       - ./secrets:/app/secrets:ro
-
     healthcheck:
-      test:
-        [
-          "CMD",
-          "curl",
-          "-f",
-          "-H",
-          "X-Health-Key: ${HEALTH_CHECK_API_KEY:-}",
-          "http://localhost:8080/health/live",
-        ]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
       interval: 15s
       timeout: 5s
       retries: 5

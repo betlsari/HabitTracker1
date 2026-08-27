@@ -21,9 +21,9 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokenService;
     private readonly AppDbContext _context;
     private readonly EmailService _emailService;
-    private readonly ILogger<AuthController> _logger;
-
     private readonly BookCoverStorageService _coverStorage;
+    private readonly AuthAuditService _auditService;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         UserManager<User> userManager,
@@ -32,6 +32,7 @@ public class AuthController : ControllerBase
         AppDbContext context,
         EmailService emailService,
         BookCoverStorageService coverStorage,
+        AuthAuditService auditService,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
@@ -40,10 +41,13 @@ public class AuthController : ControllerBase
         _context = context;
         _emailService = emailService;
         _coverStorage = coverStorage;
+        _auditService = auditService;
         _logger = logger;
     }
 
-
+    // =========================================================
+    // REGISTER
+    // =========================================================
 
     [HttpPost("register")]
     [EnableRateLimiting("AuthPolicy")]
@@ -56,9 +60,7 @@ public class AuthController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
 
-        var result = await _userManager.CreateAsync(
-            user,
-            registerDto.Password);
+        var result = await _userManager.CreateAsync(user, registerDto.Password);
 
         if (!result.Succeeded)
         {
@@ -66,92 +68,97 @@ public class AuthController : ControllerBase
                 e.Code == nameof(IdentityErrorDescriber.DuplicateUserName) ||
                 e.Code == nameof(IdentityErrorDescriber.DuplicateEmail));
 
+            await _auditService.LogAsync(
+                AuthAuditEventTypes.Register,
+                registerDto.Email,
+                succeeded: false,
+                detail: onlyDuplicateEmailErrors ? "Duplicate email" : "Validation failed");
+
             if (onlyDuplicateEmailErrors)
             {
-                return Ok(
-                    "Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
+                return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
             }
 
             return BadRequest(result.Errors);
         }
 
-        // Email confirmation korunuyor.
-        var token =
-            await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        await _auditService.LogAsync(AuthAuditEventTypes.Register, registerDto.Email, succeeded: true, userId: user.Id);
 
-        await SendEmailSafeAsync(
-           user.Email!,
-           "Email Doğrulama",
-          $"Doğrulama kodunuz: {token}");
+        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        await SendEmailSafeAsync(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}");
 
-        return Ok(
-            "Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
+        return Ok("Eğer bu email adresi kullanılabiliyorsa, kayıt oluşturuldu ve doğrulama emaili gönderildi.");
     }
 
-
+    // =========================================================
+    // LOGIN
+    // =========================================================
 
     [HttpPost("login")]
     [EnableRateLimiting("AuthPolicy")]
     public async Task<IActionResult> Login(LoginDto loginDto)
     {
-        var user =
-            await _userManager.FindByEmailAsync(loginDto.Email);
+        var user = await _userManager.FindByEmailAsync(loginDto.Email);
 
         if (user == null)
         {
+            await _auditService.LogAsync(
+                AuthAuditEventTypes.LoginFailed, loginDto.Email, succeeded: false, detail: "Unknown email");
             return Unauthorized();
         }
 
-        var result =
-            await _signInManager.CheckPasswordSignInAsync(
-                user,
-                loginDto.Password,
-                lockoutOnFailure: true);
+        var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
 
         if (!result.Succeeded)
         {
+            var eventType = result.IsLockedOut
+                ? AuthAuditEventTypes.LoginLockedOut
+                : AuthAuditEventTypes.LoginFailed;
+
+            await _auditService.LogAsync(
+                eventType, loginDto.Email, succeeded: false, userId: user.Id,
+                detail: result.IsLockedOut ? "Account locked out" : "Invalid password");
+
             return Unauthorized();
         }
 
-        var (accessToken, refreshTokenValue) =
-            await IssueTokensAsync(user);
+        await _auditService.LogAsync(AuthAuditEventTypes.LoginSucceeded, loginDto.Email, succeeded: true, userId: user.Id);
 
-        return Ok(new
-        {
-            Token = accessToken,
-            RefreshToken = refreshTokenValue
-        });
+        var (accessToken, refreshTokenValue) = await IssueTokensAsync(user);
+
+        return Ok(new { Token = accessToken, RefreshToken = refreshTokenValue });
     }
 
-
+    // =========================================================
+    // REFRESH
+    // =========================================================
 
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh(
-        RefreshTokenDto refreshTokenDto)
+    public async Task<IActionResult> Refresh(RefreshTokenDto refreshTokenDto)
     {
-        var hashedIncoming =
-            TokenService.HashToken(refreshTokenDto.RefreshToken);
+        var hashedIncoming = TokenService.HashToken(refreshTokenDto.RefreshToken);
 
-        var storedToken =
-            await _context.RefreshTokens
-                .Include(rt => rt.User)
-                .FirstOrDefaultAsync(
-                    rt => rt.Token == hashedIncoming);
+        var storedToken = await _context.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == hashedIncoming);
 
         if (storedToken == null)
         {
             return Unauthorized();
         }
 
-
         if (storedToken.RevokedAt != null)
         {
-            await RevokeAllRefreshTokensAsync(
-                storedToken.UserId);
+            await _auditService.LogAsync(
+                AuthAuditEventTypes.RefreshTokenReused,
+                storedToken.User?.Email ?? "unknown",
+                succeeded: false,
+                userId: storedToken.UserId,
+                detail: "Revoked refresh token was reused — all sessions revoked");
 
-            return Unauthorized(
-                "Oturumunuz güvenlik nedeniyle sonlandırıldı. " +
-                "Lütfen tekrar giriş yapın.");
+            await RevokeAllRefreshTokensAsync(storedToken.UserId);
+
+            return Unauthorized("Oturumunuz güvenlik nedeniyle sonlandırıldı. Lütfen tekrar giriş yapın.");
         }
 
         if (storedToken.ExpiresAt < DateTime.UtcNow)
@@ -159,50 +166,26 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var newAccessToken =
-            _tokenService.GenerateToken(storedToken.User!);
-
-        var newRefreshToken =
-            _tokenService.GenerateRefreshToken();
+        var newAccessToken = _tokenService.GenerateToken(storedToken.User!);
+        var newRefreshToken = _tokenService.GenerateRefreshToken();
 
         // Eski refresh token artık kullanılamaz.
         storedToken.RevokedAt = DateTime.UtcNow;
 
-        _context.RefreshTokens.Add(
-            new RefreshToken
-            {
-                Token =
-                    TokenService.HashToken(newRefreshToken),
-
-                UserId = storedToken.UserId,
-
-                CreatedAt = DateTime.UtcNow,
-
-                ExpiresAt =
-                    DateTime.UtcNow.Add(
-                        _tokenService.RefreshTokenLifetime),
-
-                RevokedAt = null,
-
-                IpAddress =
-                    HttpContext.Connection
-                        .RemoteIpAddress?
-                        .ToString(),
-
-                UserAgent =
-                    HttpContext.Request
-                        .Headers
-                        .UserAgent
-                        .ToString()
-            });
+        _context.RefreshTokens.Add(new RefreshToken
+        {
+            Token = TokenService.HashToken(newRefreshToken),
+            UserId = storedToken.UserId,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime),
+            RevokedAt = null,
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
+        });
 
         await _context.SaveChangesAsync();
 
-        return Ok(new
-        {
-            Token = newAccessToken,
-            RefreshToken = newRefreshToken
-        });
+        return Ok(new { Token = newAccessToken, RefreshToken = newRefreshToken });
     }
 
     // =========================================================
@@ -211,27 +194,19 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [Authorize]
-    public async Task<IActionResult> Logout(
-        RefreshTokenDto dto)
+    public async Task<IActionResult> Logout(RefreshTokenDto dto)
     {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
             return Unauthorized();
         }
 
-        var hashedIncoming =
-            TokenService.HashToken(dto.RefreshToken);
+        var hashedIncoming = TokenService.HashToken(dto.RefreshToken);
 
-        var storedToken =
-            await _context.RefreshTokens
-                .FirstOrDefaultAsync(
-                    rt =>
-                        rt.Token == hashedIncoming &&
-                        rt.UserId == userId);
+        var storedToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == hashedIncoming && rt.UserId == userId);
 
         if (storedToken == null)
         {
@@ -241,14 +216,16 @@ public class AuthController : ControllerBase
         if (storedToken.RevokedAt == null)
         {
             storedToken.RevokedAt = DateTime.UtcNow;
-
             await _context.SaveChangesAsync();
         }
 
-        return Ok(new
-        {
-            message = "Çıkış yapıldı."
-        });
+        await _auditService.LogAsync(
+            AuthAuditEventTypes.Logout,
+            User.FindFirstValue(ClaimTypes.Email) ?? "unknown",
+            succeeded: true,
+            userId: userId);
+
+        return Ok(new { message = "Çıkış yapıldı." });
     }
 
     // =========================================================
@@ -259,85 +236,75 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> LogoutAll()
     {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
             return Unauthorized();
         }
 
-        var revokedCount =
-            await RevokeAllRefreshTokensAsync(userId);
+        var revokedCount = await RevokeAllRefreshTokensAsync(userId);
 
-        return Ok(new
-        {
-            message = "Tüm oturumlar kapatıldı.",
-            revokedCount
-        });
+        await _auditService.LogAsync(
+            AuthAuditEventTypes.LogoutAll,
+            User.FindFirstValue(ClaimTypes.Email) ?? "unknown",
+            succeeded: true,
+            userId: userId,
+            detail: $"Revoked {revokedCount} sessions");
+
+        return Ok(new { message = "Tüm oturumlar kapatıldı.", revokedCount });
     }
 
     // =========================================================
-    // CONFIRM EMAIL
-    // =========================================================
+// CONFIRM EMAIL
+// =========================================================
+// DÜZELTİLDİ: GET + query string yerine POST + body kullanılıyor.
+// Sebep: (1) token artık URL'de taşınmıyor, proxy/server access log'larına
+// sızma riski ortadan kalkıyor. (2) GET endpoint'lere rate limit filtresi
+// (AuthPolicy) eklemek anlamlıydı ama token zaten URL'de göründüğü için asıl
+// sorunu çözmüyordu; POST'a geçince ikisi birlikte çözülüyor.
+[HttpPost("confirm-email")]
+[EnableRateLimiting("AuthPolicy")]
+public async Task<IActionResult> ConfirmEmail(ConfirmEmailDto dto)
+{
+    var user = await _userManager.FindByEmailAsync(dto.Email);
 
-    [HttpGet("confirm-email")]
-    public async Task<IActionResult> ConfirmEmail(
-        string email,
-        string token)
+    if (user == null)
     {
-        var user =
-            await _userManager.FindByEmailAsync(email);
-
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        var result =
-            await _userManager.ConfirmEmailAsync(
-                user,
-                token);
-
-        if (!result.Succeeded)
-        {
-            return BadRequest(result.Errors);
-        }
-
-        return Ok("Email doğrulandı.");
+        return NotFound();
     }
 
+    var result = await _userManager.ConfirmEmailAsync(user, dto.Token);
+
+    if (!result.Succeeded)
+    {
+        await _auditService.LogAsync(AuthAuditEventTypes.EmailConfirmationFailed, dto.Email, succeeded: false, userId: user.Id);
+        return BadRequest(result.Errors);
+    }
+
+    await _auditService.LogAsync(AuthAuditEventTypes.EmailConfirmed, dto.Email, succeeded: true, userId: user.Id);
+
+    return Ok("Email doğrulandı.");
+}
     // =========================================================
     // RESEND CONFIRMATION
     // =========================================================
 
     [HttpPost("resend-confirmation")]
     [EnableRateLimiting("AuthPolicy")]
-    public async Task<IActionResult> ResendConfirmation(
-        ResendConfirmationDto dto)
+    public async Task<IActionResult> ResendConfirmation(ResendConfirmationDto dto)
     {
-        var user =
-            await _userManager.FindByEmailAsync(dto.Email);
+        var user = await _userManager.FindByEmailAsync(dto.Email);
 
-        if (user != null &&
-            !await _userManager.IsEmailConfirmedAsync(user))
+        if (user != null && !await _userManager.IsEmailConfirmedAsync(user))
         {
-            var token =
-                await _userManager
-                    .GenerateEmailConfirmationTokenAsync(user);
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
-            await SendEmailSafeAsync(
-               user.Email!,
-               "Email Doğrulama",
-              $"Doğrulama kodunuz: {token}");
+            await SendEmailSafeAsync(user.Email!, "Email Doğrulama", $"Doğrulama kodunuz: {token}");
         }
 
-        // Kullanıcı enumeration saldırısını önlemek için
-        // her durumda aynı cevap dönüyor.
-        return Ok(
-            "Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, " +
-            "yeni bir doğrulama kodu gönderildi.");
+        // Kullanıcı enumeration saldırısını önlemek için her durumda aynı cevap dönüyor.
+        return Ok("Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, yeni bir doğrulama kodu gönderildi.");
     }
 
     // =========================================================
@@ -346,30 +313,22 @@ public class AuthController : ControllerBase
 
     [HttpPost("forgot-password")]
     [EnableRateLimiting("AuthPolicy")]
-    public async Task<IActionResult> ForgotPassword(
-        ForgotPasswordDto dto)
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
     {
-        var user =
-            await _userManager.FindByEmailAsync(dto.Email);
+        var user = await _userManager.FindByEmailAsync(dto.Email);
 
         if (user == null)
         {
-            return Ok(
-                "Eğer bu email adresi kayıtlıysa, " +
-                "şifre sıfırlama linki gönderilecektir.");
+            return Ok("Eğer bu email adresi kayıtlıysa, şifre sıfırlama linki gönderilecektir.");
         }
 
-        var token =
-            await _userManager
-                .GeneratePasswordResetTokenAsync(user);
+        await _auditService.LogAsync(AuthAuditEventTypes.ForgotPasswordRequested, dto.Email, succeeded: true, userId: user.Id);
 
-       await SendEmailSafeAsync(
-           user.Email!,
-           "Şifre Sıfırlama",
-           $"Şifre sıfırlama kodunuz: {token}");
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
 
-        return Ok(
-            "Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
+        await SendEmailSafeAsync(user.Email!, "Şifre Sıfırlama", $"Şifre sıfırlama kodunuz: {token}");
+
+        return Ok("Eğer bu email kayıtlıysa, sıfırlama linki gönderildi.");
     }
 
     // =========================================================
@@ -378,36 +337,31 @@ public class AuthController : ControllerBase
 
     [HttpPost("reset-password")]
     [EnableRateLimiting("AuthPolicy")]
-    public async Task<IActionResult> ResetPassword(
-        ResetPasswordDto dto)
+    public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
     {
-        var user =
-            await _userManager.FindByEmailAsync(dto.Email);
+        var user = await _userManager.FindByEmailAsync(dto.Email);
 
         if (user == null)
         {
             return BadRequest("Kullanıcı bulunamadı.");
         }
 
-        var result =
-            await _userManager.ResetPasswordAsync(
-                user,
-                dto.Token,
-                dto.NewPassword);
+        var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
 
         if (!result.Succeeded)
         {
+            await _auditService.LogAsync(AuthAuditEventTypes.PasswordResetFailed, dto.Email, succeeded: false, userId: user.Id);
             return BadRequest(result.Errors);
         }
+
+        await _auditService.LogAsync(AuthAuditEventTypes.PasswordReset, dto.Email, succeeded: true, userId: user.Id);
 
         await RevokeAllRefreshTokensAsync(user.Id);
 
         await SendEmailSafeAsync(
-           user.Email!,
-           "Şifreniz değiştirildi",
-           "Hesabınızın şifresi değiştirildi. " +
-           "Bu işlemi siz yapmadıysanız derhal destek ekibiyle " +
-           "iletişime geçin.");
+            user.Email!,
+            "Şifreniz değiştirildi",
+            "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız derhal destek ekibiyle iletişime geçin.");
 
         return Ok("Şifre başarıyla sıfırlandı.");
     }
@@ -418,67 +372,54 @@ public class AuthController : ControllerBase
 
     [HttpPost("change-password")]
     [Authorize]
-    public async Task<IActionResult> ChangePassword(
-        ChangePasswordDto dto)
+    public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
     {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
             return Unauthorized();
         }
 
-        var user =
-            await _userManager.FindByIdAsync(userId);
+        var user = await _userManager.FindByIdAsync(userId);
 
         if (user == null)
         {
             return NotFound();
         }
 
-        var passwordResult =
-            await _signInManager.CheckPasswordSignInAsync(
-                user,
-                dto.CurrentPassword,
-                lockoutOnFailure: true);
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
 
         if (!passwordResult.Succeeded)
         {
+            await _auditService.LogAsync(
+                AuthAuditEventTypes.PasswordChangeFailed, user.Email!, succeeded: false, userId: user.Id,
+                detail: passwordResult.IsLockedOut ? "Locked out" : "Wrong current password");
+
             if (passwordResult.IsLockedOut)
             {
-                return BadRequest(
-                    "Çok fazla başarısız deneme. " +
-                    "Lütfen daha sonra tekrar deneyin.");
+                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
             }
 
             return BadRequest("Mevcut şifre hatalı.");
         }
 
-        var result =
-            await _userManager.ChangePasswordAsync(
-                user,
-                dto.CurrentPassword,
-                dto.NewPassword);
+        var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
 
         if (!result.Succeeded)
         {
+            await _auditService.LogAsync(AuthAuditEventTypes.PasswordChangeFailed, user.Email!, succeeded: false, userId: user.Id);
             return BadRequest(result.Errors);
         }
 
-        // Şifre değiştiği için mevcut refresh token'ları (dolayısıyla yeni
-        // access token alınmasını) kapat. Zaten verilmiş kısa ömürlü access
-        // token'lar doğal süresinde (AccessTokenLifetimeMinutes) geçerliliğini
-        // yitirir; anlık iptal için ayrı bir stamp mekanizmasına ihtiyaç yok.
+        await _auditService.LogAsync(AuthAuditEventTypes.PasswordChanged, user.Email!, succeeded: true, userId: user.Id);
+
         await RevokeAllRefreshTokensAsync(user.Id);
 
         await SendEmailSafeAsync(
-           user.Email!,
-           "Şifreniz değiştirildi",
-           "Hesabınızın şifresi değiştirildi. " +
-           "Bu işlemi siz yapmadıysanız derhal destek ekibiyle " +
-           "iletişime geçin.");
+            user.Email!,
+            "Şifreniz değiştirildi",
+            "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız derhal destek ekibiyle iletişime geçin.");
 
         return Ok("Şifre başarıyla değiştirildi.");
     }
@@ -491,17 +432,14 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Me()
     {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
             return Unauthorized();
         }
 
-        var user =
-            await _userManager.FindByIdAsync(userId);
+        var user = await _userManager.FindByIdAsync(userId);
 
         if (user == null)
         {
@@ -526,31 +464,19 @@ public class AuthController : ControllerBase
     [HttpPut("me/profile")]
     [Authorize]
     [SanitizeText]
-    public async Task<IActionResult> UpdateProfile(
-        UpdateProfileDto dto)
+    public async Task<IActionResult> UpdateProfile(UpdateProfileDto dto)
     {
-        var user =
-            await _userManager.FindByIdAsync(
-                User.FindFirstValue(
-                    ClaimTypes.NameIdentifier)!);
+        var user = await _userManager.FindByIdAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         if (user == null)
         {
             return NotFound();
         }
 
-        user.DisplayName =
-            string.IsNullOrWhiteSpace(dto.DisplayName)
-                ? null
-                : dto.DisplayName.Trim();
+        user.DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? null : dto.DisplayName.Trim();
+        user.AvatarUrl = string.IsNullOrWhiteSpace(dto.AvatarUrl) ? null : dto.AvatarUrl.Trim();
 
-        user.AvatarUrl =
-            string.IsNullOrWhiteSpace(dto.AvatarUrl)
-                ? null
-                : dto.AvatarUrl.Trim();
-
-        var result =
-            await _userManager.UpdateAsync(user);
+        var result = await _userManager.UpdateAsync(user);
 
         if (!result.Succeeded)
         {
@@ -574,60 +500,49 @@ public class AuthController : ControllerBase
 
     [HttpDelete("me")]
     [Authorize]
-    public async Task<IActionResult> DeleteAccount(
-        DeleteAccountDto dto)
+    public async Task<IActionResult> DeleteAccount(DeleteAccountDto dto)
     {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
             return Unauthorized();
         }
 
-        var user =
-            await _userManager.FindByIdAsync(userId);
+        var user = await _userManager.FindByIdAsync(userId);
 
         if (user == null)
         {
             return NotFound();
         }
 
-        var passwordResult =
-            await _signInManager.CheckPasswordSignInAsync(
-                user,
-                dto.CurrentPassword,
-                lockoutOnFailure: true);
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(user, dto.CurrentPassword, lockoutOnFailure: true);
 
         if (!passwordResult.Succeeded)
         {
+            await _auditService.LogAsync(AuthAuditEventTypes.AccountDeleteFailed, user.Email!, succeeded: false, userId: user.Id);
+
             if (passwordResult.IsLockedOut)
             {
-                return BadRequest(
-                    "Çok fazla başarısız deneme. " +
-                    "Lütfen daha sonra tekrar deneyin.");
+                return BadRequest("Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.");
             }
 
-            return BadRequest(
-                "Şifre hatalı. Hesap silme işlemi iptal edildi.");
+            return BadRequest("Şifre hatalı. Hesap silme işlemi iptal edildi.");
         }
+
         await _coverStorage.DeleteAllCoversForUserAsync(userId);
 
-        var result =
-            await _userManager.DeleteAsync(user);
+        var result = await _userManager.DeleteAsync(user);
 
         if (!result.Succeeded)
         {
+            await _auditService.LogAsync(AuthAuditEventTypes.AccountDeleteFailed, user.Email!, succeeded: false, userId: userId);
             return BadRequest(result.Errors);
         }
 
-        return Ok(new
-        {
-            message =
-                "Hesabınız ve tüm ilişkili verileriniz " +
-                "kalıcı olarak silindi."
-        });
+        await _auditService.LogAsync(AuthAuditEventTypes.AccountDeleted, user.Email!, succeeded: true, userId: userId);
+
+        return Ok(new { message = "Hesabınız ve tüm ilişkili verileriniz kalıcı olarak silindi." });
     }
 
     // =========================================================
@@ -638,30 +553,21 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<ActionResult<UserLevelDto>> GetMyLevel()
     {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
             return Unauthorized();
         }
 
-        var user =
-            await _userManager.FindByIdAsync(userId);
+        var user = await _userManager.FindByIdAsync(userId);
 
         if (user == null)
         {
             return NotFound();
         }
 
-        var (
-            level,
-            currentLevelXp,
-            xpForNextLevel,
-            progress
-        ) = UserLevelService.GetLevelProgress(
-            user.TotalXp);
+        var (level, currentLevelXp, xpForNextLevel, progress) = UserLevelService.GetLevelProgress(user.TotalXp);
 
         return Ok(new UserLevelDto
         {
@@ -674,66 +580,121 @@ public class AuthController : ControllerBase
     }
 
     // =========================================================
-    // ISSUE TOKENS
+    // MY AUDIT LOG
     // =========================================================
 
-    private async Task<(
-        string AccessToken,
-        string RefreshToken)> IssueTokensAsync(
-            User user)
+    [HttpGet("me/audit-log")]
+    [Authorize]
+    public async Task<IActionResult> GetMyAuditLog(int page = 1, int pageSize = 50)
     {
-        var accessToken =
-            _tokenService.GenerateToken(user);
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
 
-        var refreshToken =
-            _tokenService.GenerateRefreshToken();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        _context.RefreshTokens.Add(
-            new RefreshToken
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized();
+        }
+
+        var query = _context.AuthAuditEvents
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new
             {
-                Token =
-                    TokenService.HashToken(refreshToken),
+                a.EventType,
+                a.Succeeded,
+                a.IpAddress,
+                a.Detail,
+                a.CreatedAt
+            })
+            .ToListAsync();
 
-                UserId = user.Id,
+        return Ok(new { items, page, pageSize, totalCount });
+    }
 
-                CreatedAt = DateTime.UtcNow,
+    // =========================================================
+    // UPDATE TIMEZONE
+    // =========================================================
 
-                ExpiresAt =
-                    DateTime.UtcNow.Add(
-                        _tokenService.RefreshTokenLifetime),
+    [HttpPut("me/timezone")]
+    [Authorize]
+    public async Task<IActionResult> UpdateTimezone(UpdateTimezoneDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-                RevokedAt = null,
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized();
+        }
 
-                IpAddress =
-                    HttpContext.Connection
-                        .RemoteIpAddress?
-                        .ToString(),
+        if (!TimeZones.IsValid(dto.TimeZoneId))
+        {
+            return BadRequest("Geçersiz saat dilimi kimliği (örn: 'Europe/Istanbul').");
+        }
 
-                UserAgent =
-                    HttpContext.Request
-                        .Headers
-                        .UserAgent
-                        .ToString()
-            });
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        user.TimeZoneId = dto.TimeZoneId;
+
+        var result = await _userManager.UpdateAsync(user);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(result.Errors);
+        }
+
+        return Ok(new
+        {
+            user.Email,
+            user.DisplayName,
+            user.AvatarUrl,
+            user.TotalXp,
+            user.FocusXpPool,
+            user.TimeZoneId
+        });
+    }
+
+    // =========================================================
+    // PRIVATE HELPERS
+    // =========================================================
+
+    private async Task<(string AccessToken, string RefreshToken)> IssueTokensAsync(User user)
+    {
+        var accessToken = _tokenService.GenerateToken(user);
+        var refreshToken = _tokenService.GenerateRefreshToken();
+
+        _context.RefreshTokens.Add(new RefreshToken
+        {
+            Token = TokenService.HashToken(refreshToken),
+            UserId = user.Id,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.Add(_tokenService.RefreshTokenLifetime),
+            RevokedAt = null,
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
+        });
 
         await _context.SaveChangesAsync();
 
         return (accessToken, refreshToken);
     }
 
-    // =========================================================
-    // REVOKE ALL REFRESH TOKENS
-    // =========================================================
-
-    private async Task<int> RevokeAllRefreshTokensAsync(
-        string userId)
+    private async Task<int> RevokeAllRefreshTokensAsync(string userId)
     {
-        var activeTokens =
-            await _context.RefreshTokens
-                .Where(rt =>
-                    rt.UserId == userId &&
-                    rt.RevokedAt == null)
-                .ToListAsync();
+        var activeTokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync();
 
         foreach (var token in activeTokens)
         {
@@ -758,52 +719,5 @@ public class AuthController : ControllerBase
         {
             _logger.LogWarning(ex, "Email gönderilemedi. To={To} Subject={Subject}", toEmail, subject);
         }
-    }
-
-    [HttpPut("me/timezone")]
-    [Authorize]
-    public async Task<IActionResult> UpdateTimezone(UpdateTimezoneDto dto)
-    {
-        var userId =
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
-
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return Unauthorized();
-        }
-
-        if (!TimeZones.IsValid(dto.TimeZoneId))
-        {
-            return BadRequest("Geçersiz saat dilimi kimliği (örn: 'Europe/Istanbul').");
-        }
-
-        var user =
-            await _userManager.FindByIdAsync(userId);
-
-        if (user == null)
-        {
-            return NotFound();
-        }
-
-        user.TimeZoneId = dto.TimeZoneId;
-
-        var result =
-            await _userManager.UpdateAsync(user);
-
-        if (!result.Succeeded)
-        {
-            return BadRequest(result.Errors);
-        }
-
-        return Ok(new
-        {
-            user.Email,
-            user.DisplayName,
-            user.AvatarUrl,
-            user.TotalXp,
-            user.FocusXpPool,
-            user.TimeZoneId
-        });
     }
 }

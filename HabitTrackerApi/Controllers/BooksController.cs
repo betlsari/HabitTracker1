@@ -21,6 +21,9 @@ namespace Controllers;
 public class BooksController : ControllerBase
 {
     private const long MaxCoverSize = 5 * 1024 * 1024;
+    
+private const int MaxImageDimensionPixels = 8000;      // her bir kenar en fazla 8000px
+private const long MaxImageTotalPixels = 40_000_000;   // toplam ~40 megapiksel
     private readonly IWebHostEnvironment _environment;
     private const int MaxStatsPeriods = 366;
     private const int MaxComparisonPeriods = 366;
@@ -211,52 +214,73 @@ public async Task<ActionResult<BookDto>> UpdateBook(int id, CreateBookDto dto)
     return BookService.ToDto(book);
 }
 
-    [HttpPost("{id:int}/cover")]
-    [RequestSizeLimit(MaxCoverSize)]
-    [Consumes("multipart/form-data")]
-    public async Task<ActionResult<BookDto>> UploadCover(int id, IFormFile file)
+   [HttpPost("{id:int}/cover")]
+[RequestSizeLimit(MaxCoverSize)]
+[Consumes("multipart/form-data")]
+public async Task<ActionResult<BookDto>> UploadCover(int id, IFormFile file)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+    if (book == null)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
-        if (book == null)
-        {
-            return NotFound();
-        }
-
-        if (file.Length == 0 || file.Length > MaxCoverSize ||
-            file.ContentType is not ("image/jpeg" or "image/png" or "image/webp"))
-        {
-            return BadRequest("Kapak görseli JPEG, PNG veya WebP formatında ve en fazla 5 MB olmalıdır.");
-        }
-
-        var detectedContentType = await DetectImageContentTypeAsync(file, HttpContext.RequestAborted);
-        if (!string.Equals(detectedContentType, file.ContentType, StringComparison.OrdinalIgnoreCase))
-        {
-            return BadRequest("Kapak görselinin gerçek içeriği Content-Type ile eşleşmiyor.");
-        }
-
-        var extension = detectedContentType switch
-        {
-            "image/jpeg" => ".jpg",
-            "image/png" => ".png",
-            _ => ".webp"
-        };
-        var relativeDirectory = Path.Combine("uploads", "covers");
-        var directory = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), relativeDirectory);
-        Directory.CreateDirectory(directory);
-        var fileName = $"{Guid.NewGuid():N}{extension}";
-        var path = Path.Combine(directory, fileName);
-        await using (var stream = System.IO.File.Create(path))
-        {
-            await file.CopyToAsync(stream);
-        }
-
-        var previousCoverUrl = book.CoverImageUrl;
-book.CoverImageUrl = $"/uploads/covers/{fileName}";
-await _context.SaveChangesAsync();
-_coverStorage.DeleteCoverFile(previousCoverUrl);
-return BookService.ToDto(book);
+        return NotFound();
     }
+
+    if (file.Length == 0 || file.Length > MaxCoverSize ||
+        file.ContentType is not ("image/jpeg" or "image/png" or "image/webp"))
+    {
+        return BadRequest("Kapak görseli JPEG, PNG veya WebP formatında ve en fazla 5 MB olmalıdır.");
+    }
+
+    var detectedContentType = await DetectImageContentTypeAsync(file, HttpContext.RequestAborted);
+    if (!string.Equals(detectedContentType, file.ContentType, StringComparison.OrdinalIgnoreCase))
+    {
+        return BadRequest("Kapak görselinin gerçek içeriği Content-Type ile eşleşmiyor.");
+    }
+
+    // YENİ: Piksel boyutu kontrolü — görsel tam decode edilmeden, sadece
+    // format header'ından genişlik/yükseklik okunuyor.
+    await using (var dimensionStream = file.OpenReadStream())
+    {
+        var dimensions = await ImageDimensionReader.TryReadAsync(
+            dimensionStream, detectedContentType!, HttpContext.RequestAborted);
+
+        if (dimensions == null)
+        {
+            return BadRequest("Kapak görselinin boyutları okunamadı.");
+        }
+
+        var (width, height) = dimensions.Value;
+        if (width <= 0 || height <= 0 ||
+            width > MaxImageDimensionPixels || height > MaxImageDimensionPixels ||
+            (long)width * height > MaxImageTotalPixels)
+        {
+            return BadRequest($"Kapak görseli en fazla {MaxImageDimensionPixels}x{MaxImageDimensionPixels} piksel olabilir.");
+        }
+    }
+
+    var extension = detectedContentType switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        _ => ".webp"
+    };
+    var relativeDirectory = Path.Combine("uploads", "covers");
+    var directory = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), relativeDirectory);
+    Directory.CreateDirectory(directory);
+    var fileName = $"{Guid.NewGuid():N}{extension}";
+    var path = Path.Combine(directory, fileName);
+    await using (var stream = System.IO.File.Create(path))
+    {
+        await file.CopyToAsync(stream);
+    }
+
+    var previousCoverUrl = book.CoverImageUrl;
+    book.CoverImageUrl = $"/uploads/covers/{fileName}";
+    await _context.SaveChangesAsync();
+    _coverStorage.DeleteCoverFile(previousCoverUrl);
+    return BookService.ToDto(book);
+}
 
     
 

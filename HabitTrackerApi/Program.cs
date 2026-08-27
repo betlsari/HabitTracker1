@@ -244,8 +244,9 @@ builder.Services.AddScoped<PetCosmeticsService>();
 
 builder.Services.AddScoped<BookCoverStorageService>();
 
-
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ReminderService>();
+builder.Services.AddScoped<AuthAuditService>();
 
 // Hosted Services (Background Tasks)
 builder.Services.AddHostedService<PetMoodBackgroundService>();
@@ -316,6 +317,9 @@ async ValueTask<object?> HealthCheckApiKeyFilter(EndpointFilterInvocationContext
         var expectedKey = app.Configuration["HealthCheck:ApiKey"];
         var providedKey = context.HttpContext.Request.Headers["X-Health-Key"].FirstOrDefault();
 
+        // Production validasyonu (Program.cs başında) HealthCheck:ApiKey'in
+        // boş olmasını zaten engelliyor; buraya düşülmesi normalde
+        // beklenmez ama savunmacı olarak korunuyor.
         if (string.IsNullOrEmpty(expectedKey))
         {
             return Results.NotFound();
@@ -327,17 +331,32 @@ async ValueTask<object?> HealthCheckApiKeyFilter(EndpointFilterInvocationContext
         if (expectedBytes.Length != providedBytes.Length ||
             !CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes))
         {
-            return Results.NotFound();
+            // DÜZELTİLDİ: Önceden burada da 404 dönülüyordu; bu da
+            // key eksik/yanlış olduğunda "endpoint yok" ile karışıyor,
+            // monitoring/deployment sırasında yanlış teşhise yol açıyordu.
+            // /health/ready ve /health zaten hassas bağımlılık bilgisi
+            // içerdiği için burada endpoint'in varlığını gizlemenin pratik
+            // faydası yok; 401 döndürmek hem daha doğru hem daha az kafa
+            // karıştırıcı.
+            return Results.Unauthorized();
         }
     }
     return await next(context);
 }
 
+// DÜZELTİLDİ: /health/live artık key gerektirmiyor. Liveness probe'un amacı
+// sadece "süreç ayakta mı, istek işleyebiliyor mu" sorusuna cevap vermek;
+// Predicate = _ => false olduğu için hiçbir bağımlılık (DB, FCM) kontrol
+// edilmiyor, dolayısıyla hassas bir bilgi sızdırmıyor. Kubernetes/Load
+// Balancer gibi araçlar genelde header eklemeden bu endpoint'i çağırır;
+// eskiden bu durumda 404 dönüyordu ve "endpoint bulunamadı" sanılıyordu.
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = _ => false
-}).AddEndpointFilter(HealthCheckApiKeyFilter);
+});
 
+// /health/ready ve /health, bağımlılıkların (DB, FCM) durumunu açığa
+// çıkardığı için key korumasına devam ediyor.
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = _ => true

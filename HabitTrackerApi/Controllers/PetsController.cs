@@ -82,51 +82,60 @@ public class PetsController : ControllerBase
     }
 
     [HttpPost]
-    [SanitizeText]
-    public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
+[SanitizeText]
+public async Task<ActionResult<PetDto>> CreatePet(CreatePetDto dto)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+    if (!PetTypes.IsValid(dto.Type))
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-
-        if (!PetTypes.IsValid(dto.Type))
-        {
-            return BadRequest($"Geçersiz evcil hayvan türü. İzin verilen türler: {string.Join(", ", PetTypes.Allowed)}");
-        }
-
-        var existingPetCount = await _context.Pets.CountAsync(p => p.UserId == userId);
-
-        if (existingPetCount >= _maxPetsPerUser)
-        {
-            return BadRequest($"En fazla {_maxPetsPerUser} evcil hayvana sahip olabilirsiniz.");
-        }
-
-        if (existingPetCount > 0)
-        {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null || user.TotalXp < _eggCostXp)
-            {
-                return BadRequest($"Yeterli XP'niz yok. Yeni bir yumurta {_eggCostXp} XP gerektirir.");
-            }
-            user.TotalXp -= _eggCostXp;
-            var updateResult = await _userManager.UpdateAsync(user);
-            updateResult.EnsureSucceeded(_logger, "pet-egg-cost", userId);
-        }
-
-        var pet = new Pet
-        {
-            Type = dto.Type,
-            Nickname = string.IsNullOrWhiteSpace(dto.Nickname) ? null : dto.Nickname.Trim(),
-            Level = 0,
-            Xp = 0,
-            Mood = "Egg",
-            Stage = PetStage.Egg,
-            UserId = userId,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.Pets.Add(pet);
-        await _context.SaveChangesAsync();
-
-        return ToDto(pet);
+        return BadRequest($"Geçersiz evcil hayvan türü. İzin verilen türler: {string.Join(", ", PetTypes.Allowed)}");
     }
+
+    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+    // YENİ: Aynı kullanıcı için eşzamanlı "pet oluştur" isteklerini sıraya
+    // sokar. Aksi halde iki istek aynı anda existingPetCount'u okuyup
+    // ikisi de limitin (MaxPetsPerUser) altında görebilir ve limit aşılabilirdi.
+    await _context.Database.ExecuteSqlInterpolatedAsync(
+        $"SELECT pg_advisory_xact_lock(hashtext({userId}))");
+
+    var existingPetCount = await _context.Pets.CountAsync(p => p.UserId == userId);
+
+    if (existingPetCount >= _maxPetsPerUser)
+    {
+        return BadRequest($"En fazla {_maxPetsPerUser} evcil hayvana sahip olabilirsiniz.");
+    }
+
+    if (existingPetCount > 0)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || user.TotalXp < _eggCostXp)
+        {
+            return BadRequest($"Yeterli XP'niz yok. Yeni bir yumurta {_eggCostXp} XP gerektirir.");
+        }
+        user.TotalXp -= _eggCostXp;
+        var updateResult = await _userManager.UpdateAsync(user);
+        updateResult.EnsureSucceeded(_logger, "pet-egg-cost", userId);
+    }
+
+    var pet = new Pet
+    {
+        Type = dto.Type,
+        Nickname = string.IsNullOrWhiteSpace(dto.Nickname) ? null : dto.Nickname.Trim(),
+        Level = 0,
+        Xp = 0,
+        Mood = "Egg",
+        Stage = PetStage.Egg,
+        UserId = userId,
+        CreatedAt = DateTime.UtcNow
+    };
+    _context.Pets.Add(pet);
+    await _context.SaveChangesAsync();
+    await transaction.CommitAsync();
+
+    return ToDto(pet);
+}
 
     [HttpPost("{id}/feed")]
     public async Task<ActionResult<PetDto>> FeedPet(int id)

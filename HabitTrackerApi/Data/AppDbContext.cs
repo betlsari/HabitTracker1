@@ -24,6 +24,7 @@ public class AppDbContext : IdentityDbContext<User>
     public DbSet<PetAccessoryUnlock> PetAccessoryUnlocks { get; set; }
     public DbSet<UserBackgroundUnlock> UserBackgroundUnlocks { get; set; }
     public DbSet<NotificationPreference> NotificationPreferences { get; set; }
+    public DbSet<AuthAuditEvent> AuthAuditEvents { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -48,6 +49,13 @@ public class AppDbContext : IdentityDbContext<User>
             entity.HasIndex(rt => rt.Token).IsUnique();
             
         });
+        builder.Entity<AuthAuditEvent>(entity =>
+{
+    entity.Property(a => a.Email).IsRequired();
+    entity.Property(a => a.EventType).IsRequired();
+    entity.HasIndex(a => new { a.Email, a.CreatedAt });
+    entity.HasIndex(a => new { a.UserId, a.CreatedAt });
+});
 
         builder.Entity<Badge>(entity =>
         {
