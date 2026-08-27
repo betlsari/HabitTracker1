@@ -53,7 +53,14 @@ public class BookService
             BookId = book.Id,
             ReadDate = readDateUtc,
             Amount = dto.Amount,
-            PageReachedAt = dto.PageReachedAt
+            PageReachedAt = dto.PageReachedAt,
+            // DÜZELTİLDİ: ClientRequestId önceden hiç set edilmiyordu. Bu
+            // yüzden BooksController.LogReading içindeki idempotency kontrolü
+            // (aynı ClientRequestId ile gelen tekrar istekleri) hiçbir zaman
+            // eşleşme bulamıyordu; her tekrar istekte yeni bir okuma kaydı ve
+            // tekrar XP oluşuyordu. HabitCompletionsController'daki doğru
+            // desenle aynı hizaya getirildi.
+            ClientRequestId = string.IsNullOrWhiteSpace(dto.ClientRequestId) ? null : dto.ClientRequestId
         };
 
         var wasCompleted = book.IsCompleted;

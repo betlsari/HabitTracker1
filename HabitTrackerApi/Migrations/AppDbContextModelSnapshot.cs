@@ -194,7 +194,7 @@ namespace HabitTrackerApi.Migrations
 
                     b.HasIndex("UserId", "CreatedAt");
 
-                    b.ToTable("AuthAuditEvents", (string)null);
+                    b.ToTable("AuthAuditEvents");
                 });
 
             modelBuilder.Entity("Models.Badge", b =>
@@ -222,7 +222,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Badges", (string)null);
+                    b.ToTable("Badges");
 
                     b.HasData(
                         new
@@ -359,7 +359,7 @@ namespace HabitTrackerApi.Migrations
                         .IsUnique()
                         .HasFilter("\"IsArchived\" = FALSE");
 
-                    b.ToTable("Books", (string)null);
+                    b.ToTable("Books");
                 });
 
             modelBuilder.Entity("Models.BookReadingLog", b =>
@@ -398,7 +398,7 @@ namespace HabitTrackerApi.Migrations
 
                     b.HasIndex("BookId", "ReadDate");
 
-                    b.ToTable("BookReadingLogs", (string)null);
+                    b.ToTable("BookReadingLogs");
                 });
 
             modelBuilder.Entity("Models.DeviceToken", b =>
@@ -434,7 +434,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("UserId", "Token")
                         .IsUnique();
 
-                    b.ToTable("DeviceTokens", (string)null);
+                    b.ToTable("DeviceTokens");
                 });
 
             modelBuilder.Entity("Models.Flower", b =>
@@ -466,7 +466,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("Flowers", (string)null);
+                    b.ToTable("Flowers");
                 });
 
             modelBuilder.Entity("Models.Habit", b =>
@@ -540,7 +540,7 @@ namespace HabitTrackerApi.Migrations
                         .IsUnique()
                         .HasFilter("\"IsArchived\" = FALSE");
 
-                    b.ToTable("Habits", (string)null);
+                    b.ToTable("Habits");
                 });
 
             modelBuilder.Entity("Models.HabitCompletion", b =>
@@ -582,7 +582,7 @@ namespace HabitTrackerApi.Migrations
 
                     b.HasIndex("HabitId", "CompletionDate");
 
-                    b.ToTable("HabitCompletions", (string)null);
+                    b.ToTable("HabitCompletions");
                 });
 
             modelBuilder.Entity("Models.NotificationPreference", b =>
@@ -609,7 +609,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("NotificationPreferences", (string)null);
+                    b.ToTable("NotificationPreferences");
                 });
 
             modelBuilder.Entity("Models.Pet", b =>
@@ -659,7 +659,7 @@ namespace HabitTrackerApi.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Pets", (string)null);
+                    b.ToTable("Pets");
                 });
 
             modelBuilder.Entity("Models.PetAccessoryUnlock", b =>
@@ -685,7 +685,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("PetId", "Accessory")
                         .IsUnique();
 
-                    b.ToTable("PetAccessoryUnlocks", (string)null);
+                    b.ToTable("PetAccessoryUnlocks");
                 });
 
             modelBuilder.Entity("Models.RefreshToken", b =>
@@ -726,7 +726,7 @@ namespace HabitTrackerApi.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens", (string)null);
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Models.User", b =>
@@ -845,7 +845,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("UserId", "Background")
                         .IsUnique();
 
-                    b.ToTable("UserBackgroundUnlocks", (string)null);
+                    b.ToTable("UserBackgroundUnlocks");
                 });
 
             modelBuilder.Entity("Models.UserBadge", b =>
@@ -873,7 +873,7 @@ namespace HabitTrackerApi.Migrations
                     b.HasIndex("UserId", "BadgeId")
                         .IsUnique();
 
-                    b.ToTable("UserBadges", (string)null);
+                    b.ToTable("UserBadges");
                 });
 
             modelBuilder.Entity("Models.UserNotification", b =>
@@ -920,7 +920,7 @@ namespace HabitTrackerApi.Migrations
 
                     b.HasIndex("UserId", "CreatedAt");
 
-                    b.ToTable("UserNotifications", (string)null);
+                    b.ToTable("UserNotifications");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
